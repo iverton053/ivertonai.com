@@ -26,7 +26,9 @@ import {
   Play,
   Edit,
   Copy,
-  Trash2
+  Trash2,
+  RefreshCw,
+  Server
 } from 'lucide-react';
 import { useEmailMarketingStore } from '../../stores/emailMarketingStore';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, PieChart as RechartsPieChart, Cell } from 'recharts';
@@ -35,6 +37,10 @@ import CampaignManager from './CampaignManager';
 import CampaignCreationModal from './CampaignCreationModal';
 import SubscriberManager from './SubscriberManager';
 import EmailPlatformSync from './EmailPlatformSync';
+import ABTestingManager from './ABTestingManager';
+import AutomationRulesBuilder from './AutomationRulesBuilder';
+import AdvancedAnalyticsDashboard from './AdvancedAnalyticsDashboard';
+import ESPConfigurationPanel from './ESPConfigurationPanel';
 
 const EmailMarketingDashboard: React.FC = () => {
   const {
@@ -64,6 +70,8 @@ const EmailMarketingDashboard: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState('all');
   const [dateRange, setDateRange] = useState('30d');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Mock agency data - replace with actual user context
   const agencyId = 'mock-agency-id';
@@ -83,6 +91,67 @@ const EmailMarketingDashboard: React.FC = () => {
   const avgClickRate = getAverageClickRate();
   const totalRevenue = getTotalRevenue();
   const topCampaigns = getTopPerformingCampaigns(5);
+
+  // Handler functions
+  const handleExportData = async () => {
+    setIsExporting(true);
+
+    try {
+      // Prepare export data
+      const exportData = {
+        campaigns: campaigns,
+        subscribers: subscribers,
+        lists: lists,
+        analytics: {
+          totalSubscribers,
+          activeSubscribers,
+          avgOpenRate,
+          avgClickRate,
+          totalRevenue
+        },
+        summary: {
+          totalCampaigns: campaigns.length,
+          activeCampaigns: campaigns.filter(c => c.status === 'active').length,
+          draftCampaigns: campaigns.filter(c => c.status === 'draft').length,
+          completedCampaigns: campaigns.filter(c => c.status === 'sent').length
+        },
+        exportDate: new Date().toISOString(),
+        dateRange: dateRange
+      };
+
+      // Download as JSON
+      const dataStr = JSON.stringify(exportData, null, 2);
+      const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+      const exportFileDefaultName = `email-marketing-export-${new Date().toISOString().split('T')[0]}.json`;
+      const linkElement = document.createElement('a');
+      linkElement.setAttribute('href', dataUri);
+      linkElement.setAttribute('download', exportFileDefaultName);
+      linkElement.click();
+
+    } catch (error) {
+      console.error('Export failed:', error);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleRefreshData = async () => {
+    setIsRefreshing(true);
+
+    try {
+      // Refresh all data
+      await Promise.all([
+        loadCampaigns(agencyId, clientId),
+        loadSubscribers(agencyId, clientId),
+        loadLists(agencyId, clientId)
+      ]);
+
+    } catch (error) {
+      console.error('Refresh failed:', error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   // Mock data for charts
   const performanceData = [
@@ -156,9 +225,21 @@ const EmailMarketingDashboard: React.FC = () => {
           <p className="text-gray-400 mt-1">Manage campaigns, subscribers, and automation workflows</p>
         </div>
         <div className="flex items-center space-x-3">
-          <button className="flex items-center space-x-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors">
-            <Download className="w-4 h-4" />
-            <span>Export</span>
+          <button
+            onClick={handleExportData}
+            disabled={isExporting}
+            className="flex items-center space-x-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Download className={`w-4 h-4 ${isExporting ? 'animate-pulse' : ''}`} />
+            <span>{isExporting ? 'Exporting...' : 'Export'}</span>
+          </button>
+          <button
+            onClick={handleRefreshData}
+            disabled={isRefreshing}
+            className="flex items-center space-x-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
           </button>
           <button
             onClick={() => setShowCreateModal(true)}
@@ -260,7 +341,9 @@ const EmailMarketingDashboard: React.FC = () => {
             { id: 'subscribers', label: 'Subscribers', icon: Users },
             { id: 'sync', label: 'Platform Sync', icon: Settings },
             { id: 'automation', label: 'Automation', icon: Zap },
-            { id: 'analytics', label: 'Analytics', icon: TrendingUp }
+            { id: 'abtesting', label: 'A/B Testing', icon: Target },
+            { id: 'analytics', label: 'Analytics', icon: TrendingUp },
+            { id: 'esp', label: 'ESP Config', icon: Server }
           ].map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -515,24 +598,51 @@ const EmailMarketingDashboard: React.FC = () => {
           </motion.div>
         )}
 
-        {/* Other tabs would be implemented here */}
-        {(activeTab === 'automation' || activeTab === 'analytics') && (
+        {activeTab === 'automation' && (
           <motion.div
-            key={activeTab}
+            key="automation"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="glass-effect rounded-xl p-12 text-center"
+            className="space-y-6"
           >
-            <div className="w-16 h-16 bg-purple-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Settings className="w-8 h-8 text-purple-400" />
-            </div>
-            <h3 className="text-xl font-semibold text-white mb-2">
-              {activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} Coming Soon
-            </h3>
-            <p className="text-gray-400">
-              The {activeTab} section is being built. Check back soon for updates!
-            </p>
+            <AutomationRulesBuilder />
+          </motion.div>
+        )}
+
+        {activeTab === 'abtesting' && (
+          <motion.div
+            key="abtesting"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="space-y-6"
+          >
+            <ABTestingManager />
+          </motion.div>
+        )}
+
+        {activeTab === 'analytics' && (
+          <motion.div
+            key="analytics"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="space-y-6"
+          >
+            <AdvancedAnalyticsDashboard />
+          </motion.div>
+        )}
+
+        {activeTab === 'esp' && (
+          <motion.div
+            key="esp"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="space-y-6"
+          >
+            <ESPConfigurationPanel />
           </motion.div>
         )}
       </AnimatePresence>

@@ -14,7 +14,7 @@ import TeamManagement from './agency/TeamManagement';
 import PortalManagement from './client-portal/PortalManagement';
 import FinancialDashboard from './financial/FinancialDashboard';
 import PredictiveAnalytics from './PredictiveAnalytics';
-import AdCampaignManager from './AdCampaignManager';
+import EnhancedAdCampaignManager from './ad-campaign/EnhancedAdCampaignManager';
 import EnhancedCRMManager from './crm/EnhancedCRMManager';
 import IntegrationsMarketplace from './integrations/IntegrationsMarketplace';
 import WidgetGrid from './widgets/WidgetGrid';
@@ -512,7 +512,7 @@ const EnhancedDashboard = ({ clientData: propClientData }: EnhancedDashboardProp
 
             {/* Ad Campaign Manager Section */}
             {activeSection === 'campaigns' && (
-              <AdCampaignManager />
+              <EnhancedAdCampaignManager />
             )}
 
             {/* CRM Management Section */}
