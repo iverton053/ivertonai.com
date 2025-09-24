@@ -1,0 +1,363 @@
+{
+  "name": "Landing Page copy generator",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "cd740a48-e479-49e5-abe6-7f4cc30cbcd2",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -448,
+        0
+      ],
+      "id": "f44e0130-69ee-492a-96b9-43c531fbce6a",
+      "name": "Webhook",
+      "webhookId": "cd740a48-e479-49e5-abe6-7f4cc30cbcd2"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Landing Page Copy Generator - Input Validation Code\n// For N8N Code Node\n\n// Get input data from webhook\nconst inputData = $input.all()[0].json;\n\n// Define validation rules\nconst requiredFields = [\n  'productName',\n  'productDescription', \n  'landingPageObjective',\n  'callToAction',\n  'audienceType'\n];\n\nconst optionalFields = [\n  'pricing',\n  'toneStyle',\n  'seoKeywords',\n  'abTestingRequired',\n  'pageLength'\n];\n\n// Predefined valid values (used for warning, not strict rejection)\nconst validObjectives = [\n  'lead generation',\n  'sign-ups', \n  'downloads',\n  'purchases',\n  'consultations',\n  'subscriptions',\n  'bookings',\n  'trials'\n];\n\nconst validAudienceTypes = [\n  'small business owners',\n  'tech enthusiasts', \n  'health-conscious users',\n  'students',\n  'entrepreneurs',\n  'professionals',\n  'parents',\n  'seniors',\n  'millennials',\n  'gen-z'\n];\n\nconst validPageLengths = ['short-form', 'medium', 'long-form'];\nconst validAbTestingOptions = ['yes', 'no'];\n\n// Initialize validation result\nlet validationResult = {\n  isValid: true,\n  error: false,\n  errorMessage: '',\n  errorDetails: [],\n  validatedData: {}\n};\n\n// Helper function to check if value exists and is not empty\nfunction isValidValue(value) {\n  return value !== null && \n         value !== undefined && \n         value !== '' && \n         (Array.isArray(value) ? value.length > 0 : true);\n}\n\n// Helper function to normalize string values\nfunction normalizeString(value) {\n  return typeof value === 'string' ? value.trim().toLowerCase() : value;\n}\n\n// Helper function to ensure value is a string\nfunction asString(value) {\n  if (typeof value === 'string') {\n    return value.trim();\n  } else if (typeof value === 'number' || typeof value === 'boolean') {\n    return value.toString();\n  }\n  return '';\n}\n\ntry {\n  // Check for required fields\n  for (const field of requiredFields) {\n    if (!isValidValue(inputData[field])) {\n      validationResult.errorDetails.push(`Missing required field: ${field}`);\n    }\n  }\n\n  // Validate productName\n  if (isValidValue(inputData.productName)) {\n    const name = asString(inputData.productName);\n    if (name.length < 2 || name.length > 100) {\n      validationResult.errorDetails.push('Product name must be between 2-100 characters');\n    } else {\n      validationResult.validatedData.productName = name;\n    }\n  }\n\n  // Validate productDescription\n  if (isValidValue(inputData.productDescription)) {\n    const desc = asString(inputData.productDescription);\n    if (desc.length < 10 || desc.length > 500) {\n      validationResult.errorDetails.push('Product description must be between 10-500 characters');\n    } else {\n      validationResult.validatedData.productDescription = desc;\n    }\n  }\n\n  // Validate landingPageObjective\n  if (isValidValue(inputData.landingPageObjective)) {\n    const objective = normalizeString(asString(inputData.landingPageObjective));\n    validationResult.validatedData.landingPageObjective = objective;\n    if (!validObjectives.includes(objective)) {\n      validationResult.errorDetails.push(`Warning: Unknown landing page objective \"${objective}\".`);\n    }\n  }\n\n  // Validate callToAction\n  if (isValidValue(inputData.callToAction)) {\n    const cta = asString(inputData.callToAction);\n    if (cta.length < 2 || cta.length > 50) {\n      validationResult.errorDetails.push('Call to action must be between 2-50 characters');\n    } else {\n      validationResult.validatedData.callToAction = cta;\n    }\n  }\n\n  // Validate audienceType\n  if (isValidValue(inputData.audienceType)) {\n    const audience = normalizeString(asString(inputData.audienceType));\n    validationResult.validatedData.audienceType = audience;\n    if (!validAudienceTypes.includes(audience)) {\n      validationResult.errorDetails.push(`Warning: Unknown audience type \"${audience}\".`);\n    }\n  }\n\n  // Validate pricing\n  if (isValidValue(inputData.pricing)) {\n    const pricing = asString(inputData.pricing);\n    const pricingRegex = /^(\\$?\\d+(\\.\\d{2})?|free|contact|custom)$/i;\n    if (!pricingRegex.test(pricing)) {\n      validationResult.errorDetails.push('Invalid pricing format. Use formats like: $99.99, 199, Free, Contact, Custom');\n    } else {\n      validationResult.validatedData.pricing = pricing;\n    }\n  }\n\n  // Validate toneStyle\n  if (isValidValue(inputData.toneStyle)) {\n    const tone = asString(inputData.toneStyle);\n    if (tone.length > 100) {\n      validationResult.errorDetails.push('Tone/style must be under 100 characters');\n    } else {\n      validationResult.validatedData.toneStyle = tone;\n    }\n  }\n\n  // Validate seoKeywords\n  if (isValidValue(inputData.seoKeywords)) {\n    let keywords = [];\n    if (Array.isArray(inputData.seoKeywords)) {\n      keywords = inputData.seoKeywords.filter(k => typeof k === 'string' && k.trim().length > 0)\n                                     .map(k => k.trim());\n    } else if (typeof inputData.seoKeywords === 'string') {\n      keywords = inputData.seoKeywords.split(',')\n                 .map(k => k.trim())\n                 .filter(k => k.length > 0);\n    }\n    if (keywords.length > 20) {\n      validationResult.errorDetails.push('Maximum 20 SEO keywords allowed');\n    } else if (keywords.some(k => k.length > 50)) {\n      validationResult.errorDetails.push('Each SEO keyword must be under 50 characters');\n    } else {\n      validationResult.validatedData.seoKeywords = keywords;\n    }\n  }\n\n  // Validate abTestingRequired\n  if (isValidValue(inputData.abTestingRequired)) {\n    const abTest = normalizeString(asString(inputData.abTestingRequired));\n    if (!validAbTestingOptions.includes(abTest)) {\n      validationResult.errorDetails.push('A/B testing field must be \"yes\" or \"no\"');\n    }\n    validationResult.validatedData.abTestingRequired = abTest;\n  }\n\n  // Validate pageLength\n  if (isValidValue(inputData.pageLength)) {\n    const length = normalizeString(asString(inputData.pageLength));\n    if (!validPageLengths.includes(length)) {\n      validationResult.errorDetails.push(`Warning: Unknown page length \"${length}\".`);\n    }\n    validationResult.validatedData.pageLength = length;\n  }\n\n  // Set default values for optional fields if not provided\n  if (!validationResult.validatedData.toneStyle) {\n    validationResult.validatedData.toneStyle = 'professional and engaging';\n  }\n\n  if (!validationResult.validatedData.seoKeywords) {\n    validationResult.validatedData.seoKeywords = [];\n  }\n\n  if (!validationResult.validatedData.abTestingRequired) {\n    validationResult.validatedData.abTestingRequired = 'no';\n  }\n\n  if (!validationResult.validatedData.pageLength) {\n    validationResult.validatedData.pageLength = 'medium';\n  }\n\n  // Final validation check\n  if (validationResult.errorDetails.length > 0) {\n    validationResult.isValid = false;\n    validationResult.error = true;\n    validationResult.errorMessage = `Validation issues: ${validationResult.errorDetails.join('; ')}`;\n  }\n\n} catch (e) {\n  validationResult.isValid = false;\n  validationResult.error = true;\n  validationResult.errorMessage = `Validation error: ${e.message}`;\n  validationResult.errorDetails = [e.message];\n}\n\n// Return the validation result\nreturn [{\n  json: {\n    ...validationResult,\n    originalInput: inputData,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        0
+      ],
+      "id": "ca8efc19-c9f9-4277-92c2-7d3ce4cfc085",
+      "name": "Input validation"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        176,
+        96
+      ],
+      "id": "879d8fe8-2402-4713-b351-b89f6f3c9739",
+      "name": "Error"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "3e71ce50-b8d7-404a-bf7d-6bfd299643e1",
+              "leftValue": "={{ $('Input validation').item.json.originalInput.abTestingRequired }}",
+              "rightValue": "yes",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        512,
+        0
+      ],
+      "id": "18dea6d1-804e-4dc3-b74f-b1f10dbdd7fb",
+      "name": "check A/B testing"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "4468cf98-b849-43d9-b9d2-5bb58588e53f",
+              "leftValue": "={{ $json.error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -32,
+        0
+      ],
+      "id": "951a2536-dabf-4e17-a1b5-e37404cac046",
+      "name": "check Error"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1104,
+        -16
+      ],
+      "id": "3779a2e7-02ef-4088-bcbb-de700a94618e",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Landing Page Copy Generator - Format Final Response Node\n// Handles dynamic merging of main content and optional A/B testing variants\n\n// Get input data from previous nodes\nconst inputData = $input.all();\n\n// Initialize the response structure\nlet finalResponse = {\n  success: true,\n  timestamp: new Date().toISOString(),\n  generatedContent: {}\n};\n\n// Helper function to safely parse JSON strings from OpenAI response\nfunction safeJsonParse(jsonString) {\n  try {\n    if (typeof jsonString === 'string') {\n      // Remove markdown code blocks if present\n      const cleanedString = jsonString.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n      return JSON.parse(cleanedString);\n    }\n    return jsonString;\n  } catch (error) {\n    console.error('JSON Parse Error:', error);\n    return null;\n  }\n}\n\n// Helper function to clean and validate content\nfunction cleanContent(content) {\n  if (!content) return null;\n  const cleanedContent = typeof content === 'string' ? content.trim() : content;\n  return cleanedContent;\n}\n\n// Helper function to structure content properly\nfunction structureContent(content) {\n  const structuredContent = {\n    headlines: {\n      primary: cleanContent(content.headlines?.primary),\n      subheadline: cleanContent(content.headlines?.subheadline)\n    },\n    valueProposition: cleanContent(content.valueProposition),\n    keyBenefits: content.keyBenefits || [],\n    features: content.features || [],\n    socialProof: {\n      testimonials: content.socialProof?.testimonialPlaceholders || [],\n      stats: content.socialProof?.statsOrClaims || []\n    },\n    objectionHandling: content.objectionHandling || [],\n    callToActions: {\n      primary: cleanContent(content.callToActions?.primary),\n      supportingText: cleanContent(content.callToActions?.supportingText)\n    },\n    urgencyElements: content.urgencyElements || [],\n    faq: content.faq || [],\n    seo: {\n      metaDescription: cleanContent(content.metaDescription),\n      pageTitle: cleanContent(content.pageTitle)\n    }\n  };\n\n  // Only include alternatives if they exist and have content\n  if (content.headlines?.alternatives && content.headlines.alternatives.length > 0) {\n    structuredContent.headlines.alternatives = content.headlines.alternatives;\n  }\n\n  if (content.callToActions?.alternatives && content.callToActions.alternatives.length > 0) {\n    structuredContent.callToActions.alternatives = content.callToActions.alternatives;\n  }\n\n  return structuredContent;\n}\n\n// Get original input parameters from check Error node (validatedData)\nlet originalInputs = {};\nconst checkErrorData = $('check Error').item.json;\nif (checkErrorData && checkErrorData.validatedData) {\n  originalInputs = checkErrorData.validatedData;\n}\n\nconsole.log('Processing input data...', inputData.length, 'items');\n\n// Process input data dynamically from merge node\nfor (let i = 0; i < inputData.length; i++) {\n  const nodeData = inputData[i];\n  \n  console.log(`Processing item ${i}:`, Object.keys(nodeData));\n  \n  // Check if this is from the main content generator (single message object)\n  if (nodeData.json && nodeData.json.message && nodeData.json.message.content && !Array.isArray(nodeData.json.message.content)) {\n    console.log('Processing main content generator data...');\n    \n    const mainContent = safeJsonParse(nodeData.json.message.content);\n    \n    if (mainContent) {\n      finalResponse.generatedContent.mainVariant = structureContent(mainContent);\n      console.log('Main variant processed successfully');\n    } else {\n      console.error('Failed to parse main content');\n    }\n  }\n  \n  // Check if this is A/B testing variant data (message.content contains the variants as text)\n  if (nodeData.json && nodeData.json.message && typeof nodeData.json.message.content === 'string' && \n      nodeData.json.message.content.includes('Variant A') && nodeData.json.message.content.includes('Variant B')) {\n    console.log('Processing A/B testing variants from text content...');\n    \n    const content = nodeData.json.message.content;\n    \n    // Extract JSON blocks from the response\n    const jsonBlocks = content.match(/```json\\n([\\s\\S]*?)\\n```/g);\n    \n    if (jsonBlocks && jsonBlocks.length >= 2) {\n      finalResponse.generatedContent.abTestingVariants = {};\n      \n      jsonBlocks.forEach((block, index) => {\n        if (index < 2) { // Only process first 2 variants\n          const jsonContent = block.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n          try {\n            const variantContent = JSON.parse(jsonContent);\n            \n            const variantKey = index === 0 ? 'variantA' : 'variantB';\n            finalResponse.generatedContent.abTestingVariants[variantKey] = {\n              ...structureContent(variantContent),\n              testingFocus: index === 0 ? 'Emotional/Transformation' : 'Rational/Authority'\n            };\n            \n            console.log(`${variantKey} processed successfully`);\n          } catch (error) {\n            console.error(`Error processing variant ${index}:`, error);\n          }\n        }\n      });\n    }\n  }\n  \n  // Alternative check for direct array format (fallback)\n  if (nodeData.json && Array.isArray(nodeData.json) && nodeData.json.length === 2) {\n    console.log('Processing A/B testing variants (direct array format)...');\n    \n    const variants = nodeData.json;\n    finalResponse.generatedContent.abTestingVariants = {};\n    \n    variants.forEach((variant, index) => {\n      if (variant.message && variant.message.content) {\n        try {\n          const variantContent = safeJsonParse(variant.message.content);\n          \n          if (variantContent) {\n            const variantKey = index === 0 ? 'variantA' : 'variantB';\n            finalResponse.generatedContent.abTestingVariants[variantKey] = {\n              ...structureContent(variantContent),\n              testingFocus: index === 0 ? 'Emotional/Transformation' : 'Rational/Authority'\n            };\n            console.log(`${variantKey} processed successfully`);\n          }\n        } catch (error) {\n          console.error(`Error processing variant ${index}:`, error);\n        }\n      }\n    });\n  }\n}\n\n// Add generation metadata\nfinalResponse.metadata = {\n  productName: originalInputs.productName || 'Unknown Product',\n  objective: originalInputs.landingPageObjective || 'conversion',\n  audienceType: originalInputs.audienceType || 'general',\n  toneStyle: originalInputs.toneStyle || 'professional',\n  pageLength: originalInputs.pageLength || 'medium',\n  abTestingEnabled: originalInputs.abTestingRequired === 'yes',\n  seoKeywords: originalInputs.seoKeywords || [],\n  pricing: originalInputs.pricing || null\n};\n\n// Add usage instructions for the frontend\nfinalResponse.usage = {\n  instructions: \"Use 'mainVariant' for standard landing page. If A/B testing is enabled, use 'abTestingVariants.variantA' and 'abTestingVariants.variantB' for split testing.\",\n  recommendedImplementation: finalResponse.metadata.abTestingEnabled ? \n    \"Implement A/B split testing with 50/50 traffic distribution\" : \n    \"Deploy single variant landing page\",\n  conversionOptimization: [\n    \"Test different headlines with your audience\",\n    \"Monitor CTA button performance\", \n    \"Track FAQ section engagement\",\n    \"Analyze social proof impact on conversions\"\n  ]\n};\n\n// Validate that we have content to return\nif (!finalResponse.generatedContent.mainVariant && \n    (!finalResponse.generatedContent.abTestingVariants || \n     Object.keys(finalResponse.generatedContent.abTestingVariants).length === 0)) {\n  \n  finalResponse.success = false;\n  finalResponse.error = \"No valid landing page content was generated. Please check your input parameters.\";\n  finalResponse.debugInfo = {\n    inputDataLength: inputData.length,\n    inputSample: inputData.map(item => ({\n      hasJson: !!item.json,\n      hasMessage: !!(item.json && item.json.message),\n      contentType: item.json?.message ? typeof item.json.message.content : 'none',\n      keys: item.json ? Object.keys(item.json) : []\n    }))\n  };\n}\n\nconsole.log('Final response structure:', {\n  hasMainVariant: !!finalResponse.generatedContent.mainVariant,\n  hasAbVariants: !!(finalResponse.generatedContent.abTestingVariants && Object.keys(finalResponse.generatedContent.abTestingVariants).length > 0),\n  abTestingEnabled: finalResponse.metadata.abTestingEnabled\n});\n\n// Return the formatted response\nreturn finalResponse;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1312,
+        -16
+      ],
+      "id": "6a5aaeb5-78fc-4787-a786-e0bc7b165921",
+      "name": "Format final response"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1520,
+        -16
+      ],
+      "id": "21a63e3c-9024-4403-a674-380ea3ee4faf",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-5-chat-latest",
+          "mode": "list",
+          "cachedResultName": "GPT-5-CHAT-LATEST"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Create high-converting landing page copy for the following product:\n\n**Product Details:**\n- Product Name: {{$json.validatedData.productName}}\n- Description: {{$json.validatedData.productDescription}}\n- Pricing: {{$json.validatedData.pricing || \"Contact for pricing\"}}\n\n**Landing Page Objective:** {{$json.validatedData.landingPageObjective}}\n**Call-to-Action:** {{$json.validatedData.callToAction}}\n**Target Audience:** {{$json.validatedData.audienceType}}\n**Tone/Style:** {{$json.validatedData.toneStyle}}\n**Page Length:** {{$json.validatedData.pageLength}}\n**A/B Testing Required:** {{$json.validatedData.abTestingRequired}}\n\n**SEO Keywords to Include:** {{$json.validatedData.seoKeywords.join(\", \") || \"None specified\"}}\n\n**SPECIFIC REQUIREMENTS:**\n\n1. **Audience-Specific Copy:** Tailor all messaging specifically for {{$json.validatedData.audienceType}} - understand their pain points, desires, and language patterns.\n\n2. **Objective Optimization:** Every element should drive toward {{$json.validatedData.landingPageObjective}} - structure the entire page flow to maximize this specific conversion goal.\n\n3. **Page Length Adaptation:** \n   - Short-form: Focus on headline, key benefits, and CTA\n   - Medium: Add social proof, features, and objection handling  \n   - Long-form: Include detailed features, testimonials, FAQ, and multiple CTA placements\n\n4. **A/B Testing Elements:** {{$json.validatedData.abTestingRequired === \"yes\" ? \"Provide 2-3 variations for headlines, value propositions, and CTAs for testing\" : \"Provide single optimized version of all elements\"}}\n\n5. **SEO Integration:** Naturally incorporate the provided keywords while maintaining readability and conversion focus.\n\n**OUTPUT FORMAT:**\nReturn the copy in this JSON structure:\n\n```json\n{\n  \"headlines\": {\n    \"primary\": \"Main headline here\",\n    \"subheadline\": \"Supporting subheadline\",\n    \"alternatives\": [\"Alternative 1\", \"Alternative 2\"] // Only if A/B testing required\n  },\n  \"valueProposition\": \"Core value proposition paragraph\",\n  \"keyBenefits\": [\n    \"Benefit 1 with emotional trigger\",\n    \"Benefit 2 with specific outcome\",\n    \"Benefit 3 with unique advantage\"\n  ],\n  \"features\": [\n    {\n      \"title\": \"Feature name\",\n      \"description\": \"Benefit-focused description\"\n    }\n  ],\n  \"socialProof\": {\n    \"testimonialPlaceholders\": [\n      \"Sample testimonial format 1\",\n      \"Sample testimonial format 2\"\n    ],\n    \"statsOrClaims\": [\n      \"Impressive stat or claim 1\",\n      \"Social proof element 2\"\n    ]\n  },\n  \"objectionHandling\": [\n    {\n      \"objection\": \"Common objection\",\n      \"response\": \"Compelling response\"\n    }\n  ],\n  \"callToActions\": {\n    \"primary\": \"{{$json.validatedData.callToAction}}\",\n    \"alternatives\": [\"CTA variation 1\", \"CTA variation 2\"], // Only if A/B testing\n    \"supportingText\": \"Text that appears near CTA button\"\n  },\n  \"urgencyElements\": [\n    \"Urgency element 1\",\n    \"Scarcity element 2\"\n  ],\n  \"faq\": [ // Only for medium/long-form pages\n    {\n      \"question\": \"Common question\",\n      \"answer\": \"Comprehensive answer\"\n    }\n  ],\n  \"metaDescription\": \"SEO-optimized meta description (150-160 chars)\",\n  \"pageTitle\": \"SEO-optimized page title with primary keyword\"\n}\n```\n\nFocus on psychological triggers that resonate with {{$json.validatedData.audienceType}} and drive {{$json.validatedData.landingPageObjective}}. Make every word count for maximum conversion impact."
+            },
+            {
+              "content": "You are an expert copywriter and conversion rate optimization (CRO) specialist with 10+ years of experience creating high-converting landing pages. Your expertise includes:\n\n- Psychology-driven copywriting that triggers emotional responses\n- A/B testing principles and conversion optimization\n- SEO-friendly content creation\n- Persuasive writing techniques (AIDA, PAS, Before-After-Bridge)\n- Understanding of different audience segments and their pain points\n- Modern landing page best practices and design principles\n\nCORE RESPONSIBILITIES:\n1. Generate compelling, conversion-focused landing page copy\n2. Incorporate psychological triggers and urgency elements\n3. Optimize for the specific landing page objective provided\n4. Match the requested tone and audience type perfectly\n5. Include SEO keywords naturally without keyword stuffing\n6. Create multiple variations when A/B testing is requested\n7. Structure content for optimal readability and conversion flow\n\nCONTENT STRUCTURE TO GENERATE:\n- Headline (primary + subheadline if needed)\n- Value proposition\n- Key benefits (3-5 bullet points)\n- Social proof elements\n- Feature descriptions\n- Objection handling section\n- Call-to-action copy\n- Urgency/scarcity elements (when appropriate)\n- FAQ section (for longer pages)\n\nFORMATTING REQUIREMENTS:\n- Use JSON format for easy parsing\n- Include multiple headline variations\n- Provide A/B test versions when requested\n- Ensure mobile-friendly copy length\n- Include meta descriptions for SEO\n\nPSYCHOLOGY PRINCIPLES TO APPLY:\n- Social proof and authority\n- Scarcity and urgency\n- Loss aversion\n- Reciprocity\n- Commitment and consistency\n- Emotional triggers specific to target audience\n\nAlways prioritize conversion optimization over creative flair. Every word should serve the purpose of moving the visitor closer to the desired action.",
+              "role": "system"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        176,
+        -96
+      ],
+      "id": "bea4e1c7-b090-40c1-bc54-8e2530ff7ec6",
+      "name": "Main content generator",
+      "credentials": {
+        "openAiApi": {
+          "id": "MwFlNFNMl63MGCly",
+          "name": "OpenAi account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-5-chat-latest",
+          "mode": "list",
+          "cachedResultName": "GPT-5-CHAT-LATEST"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are a conversion rate optimization (CRO) expert and A/B testing specialist with deep expertise in creating statistically significant test variations. Your core competencies include:\n\nCreating meaningful A/B test variations that test different psychological approaches\nUnderstanding which elements have the highest impact on conversion rates\nDesigning tests that provide actionable insights, not just cosmetic changes\nApplying different persuasion frameworks (AIDA vs PAS vs BAB)\nTesting various emotional triggers and value propositions\nCreating variations that appeal to different customer motivations and decision-making styles\n\nTESTING PHILOSOPHY:\n\nTest big ideas, not small tweaks\nEach variant should represent a fundamentally different approach to persuasion\nFocus on elements that statistically impact conversion: headlines, value props, CTAs, social proof\nCreate variations that would appeal to different segments of the same audience\nEnsure variations are different enough to produce meaningful insights\n\nVARIANT APPROACHES TO TEST:\n\nEmotional vs Rational appeals\nBenefit-focused vs Feature-focused messaging\nUrgency vs Trust-building approaches\nPersonal transformation vs Practical utility\nSocial proof vs Authority positioning\nRisk-reversal vs Value emphasis\nProblem-focused vs Solution-focused angles\n\nOUTPUT REQUIREMENTS:\n\nGenerate exactly 2 distinct variants (Variant A and Variant B)\nEach variant should be a complete landing page copy set\nMaintain the same JSON structure as the original\nInclude clear rationale for what each variant tests\nEnsure both variants are high-quality and conversion-optimized\nKeep the same product facts but change the positioning and messaging approach",
+              "role": "system"
+            },
+            {
+              "content": "=Based on the original landing page copy provided, create 2 distinct A/B testing variants that test fundamentally different persuasion approaches.\nOriginal Landing Page Copy:\n{{ $('Main content generator').item.json.message.content }}\nProduct Context:\n\nProduct Name: {{$('check Error').item.json.validatedData.productName}}\nProduct Description: {{$('check Error').item.json.validatedData.productDescription}}\nLanding Page Objective: {{$('check Error').item.json.validatedData.landingPageObjective}}\nCall-to-Action: {{$('check Error').item.json.validatedData.callToAction}}\nTarget Audience: {{$('check Error').item.json.validatedData.audienceType}}\nPricing: {{$('check Error').item.json.validatedData.pricing || \"Contact for pricing\"}}\nTone/Style: {{$('check Error').item.json.validatedData.toneStyle || \"professional and engaging\"}}\nPage Length: {{$('check Error').item.json.validatedData.pageLength || \"medium\"}}\nSEO Keywords: {{$('check Error').item.json.validatedData.seoKeywords.join(\", \") || \"None specified\"}}\n\nA/B Testing Strategy:\nCreate two variants that test different psychological approaches to the same audience. Consider testing:\n\nVariant A Focus: Choose one approach (e.g., emotional transformation, social proof heavy, problem-agitation-solution)\nVariant B Focus: Choose contrasting approach (e.g., rational benefits, authority-based, feature-advantage-benefit)\n\nRequirements for Each Variant:\n\nDifferent Headlines: Test completely different value propositions or emotional triggers\nVaried Value Propositions: Same product benefits but positioned differently\nDifferent Social Proof Angles: Test various types of credibility and trust signals\nAlternative CTA Approaches: Test different motivational triggers in call-to-action copy\nDistinct Urgency Elements: Test different scarcity/urgency psychological triggers\nVaried Objection Handling: Address the same concerns but with different strategies"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        752,
+        0
+      ],
+      "id": "e5786706-f742-42b1-a56e-942cfde0b401",
+      "name": "A/B testing variants",
+      "credentials": {
+        "openAiApi": {
+          "id": "MwFlNFNMl63MGCly",
+          "name": "OpenAi account 2"
+        }
+      }
+    }
+  ],
+  "pinData": {
+    "Webhook": [
+      {
+        "json": {
+          "productName": "EcoClean Pro Kitchen System",
+          "productDescription": "Revolutionary eco-friendly kitchen cleaning system that eliminates 99.9% of bacteria using only natural ingredients and UV-C technology. Includes smart dispenser, concentrated cleaning pods, and UV sanitizing wand.",
+          "pricing": "$149.99",
+          "landingPageObjective": "purchases",
+          "callToAction": "Order Your EcoClean Pro Today",
+          "audienceType": "parents",
+          "toneStyle": "trustworthy and family-focused",
+          "seoKeywords": [
+            "eco-friendly cleaning",
+            "natural kitchen cleaner",
+            "UV sanitizer",
+            "chemical-free cleaning",
+            "safe for kids",
+            "antibacterial cleaner",
+            "green cleaning products",
+            "smart cleaning system"
+          ],
+          "abTestingRequired": "no",
+          "pageLength": "long-form"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Input validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Input validation": {
+      "main": [
+        [
+          {
+            "node": "check Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check Error": {
+      "main": [
+        [
+          {
+            "node": "Error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Main content generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check A/B testing": {
+      "main": [
+        [
+          {
+            "node": "A/B testing variants",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Format final response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format final response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Main content generator": {
+      "main": [
+        [
+          {
+            "node": "check A/B testing",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A/B testing variants": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "85db5894-29c4-4598-b520-7e898a7ab7c6",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "4449303a74121eea16a562b13bf56d7bf84f057d9cd2ad64d6c2afc9ccfe82ac"
+  },
+  "id": "PKPotuHBZueoJynM",
+  "tags": []
+}

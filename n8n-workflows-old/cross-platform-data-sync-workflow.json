@@ -1,0 +1,880 @@
+{
+  "name": "Cross-Platform Data Sync Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "cross-platform-sync",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "cross-platform-sync-webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "sync-type-condition",
+              "leftValue": "={{ $json.syncType }}",
+              "rightValue": "scheduled",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "sync-type-router",
+      "name": "Sync Type Router",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/analytics/aggregate-data",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $json.apiKey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "platforms",
+              "value": "={{ $json.platforms || ['google_analytics', 'facebook_ads', 'google_ads', 'linkedin_ads'] }}"
+            },
+            {
+              "name": "dateRange",
+              "value": "={{ $json.dateRange || 'last_30_days' }}"
+            },
+            {
+              "name": "clientId",
+              "value": "={{ $json.clientId }}"
+            },
+            {
+              "name": "syncType",
+              "value": "={{ $json.syncType }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxAttempts": 3,
+            "waitBetween": 1000
+          }
+        }
+      },
+      "id": "fetch-analytics-data",
+      "name": "Fetch Analytics Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 180]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/social-media/sync-metrics",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $json.apiKey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "platforms",
+              "value": "={{ $json.platforms || ['facebook', 'instagram', 'twitter', 'linkedin'] }}"
+            },
+            {
+              "name": "clientId",
+              "value": "={{ $json.clientId }}"
+            },
+            {
+              "name": "syncMetrics",
+              "value": "=['followers', 'engagement', 'reach', 'impressions', 'clicks']"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 25000,
+          "retry": {
+            "enabled": true,
+            "maxAttempts": 3,
+            "waitBetween": 1000
+          }
+        }
+      },
+      "id": "sync-social-media",
+      "name": "Sync Social Media Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/ads/sync-campaigns",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $json.apiKey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "platforms",
+              "value": "={{ $json.platforms || ['google_ads', 'facebook_ads', 'linkedin_ads'] }}"
+            },
+            {
+              "name": "clientId",
+              "value": "={{ $json.clientId }}"
+            },
+            {
+              "name": "campaignData",
+              "value": "=['spend', 'impressions', 'clicks', 'conversions', 'ctr', 'cpc', 'cpm']"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxAttempts": 3,
+            "waitBetween": 1000
+          }
+        }
+      },
+      "id": "sync-ad-campaigns",
+      "name": "Sync Ad Campaign Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 420]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/email-marketing/sync-campaigns",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $json.apiKey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "clientId",
+              "value": "={{ $json.clientId }}"
+            },
+            {
+              "name": "platforms",
+              "value": "={{ $json.emailPlatforms || ['mailchimp', 'sendgrid', 'constant_contact'] }}"
+            },
+            {
+              "name": "metrics",
+              "value": "=['sent', 'delivered', 'opened', 'clicked', 'bounced', 'unsubscribed']"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 20000,
+          "retry": {
+            "enabled": true,
+            "maxAttempts": 3,
+            "waitBetween": 1000
+          }
+        }
+      },
+      "id": "sync-email-campaigns",
+      "name": "Sync Email Campaign Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 540]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "merge-all-data",
+      "name": "Merge All Platform Data",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2.1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process and normalize data from all platforms\nconst items = $input.all();\nconst clientId = items[0].json.clientId || $json.clientId;\nconst syncTimestamp = new Date().toISOString();\n\n// Initialize consolidated data structure\nlet consolidatedData = {\n  clientId: clientId,\n  syncTimestamp: syncTimestamp,\n  syncType: $json.syncType || 'manual',\n  analytics: {\n    totalSessions: 0,\n    totalUsers: 0,\n    totalPageviews: 0,\n    bounceRate: 0,\n    avgSessionDuration: 0,\n    conversions: 0,\n    conversionRate: 0\n  },\n  socialMedia: {\n    totalFollowers: 0,\n    totalEngagement: 0,\n    totalReach: 0,\n    totalImpressions: 0,\n    engagementRate: 0,\n    platformBreakdown: {}\n  },\n  advertising: {\n    totalSpend: 0,\n    totalImpressions: 0,\n    totalClicks: 0,\n    totalConversions: 0,\n    averageCTR: 0,\n    averageCPC: 0,\n    averageCPM: 0,\n    ROAS: 0,\n    platformBreakdown: {}\n  },\n  emailMarketing: {\n    totalSent: 0,\n    totalDelivered: 0,\n    totalOpened: 0,\n    totalClicked: 0,\n    totalBounced: 0,\n    totalUnsubscribed: 0,\n    deliveryRate: 0,\n    openRate: 0,\n    clickRate: 0,\n    bounceRate: 0\n  },\n  crossPlatformMetrics: {\n    totalROI: 0,\n    customerAcquisitionCost: 0,\n    lifetimeValue: 0,\n    attributionAnalysis: {},\n    channelPerformance: {}\n  },\n  dataQuality: {\n    completeness: 0,\n    accuracy: 0,\n    freshness: 0,\n    issues: []\n  }\n};\n\n// Process each platform's data\nitems.forEach(item => {\n  const data = item.json;\n  \n  // Process Analytics Data\n  if (data.analyticsData) {\n    const analytics = data.analyticsData;\n    consolidatedData.analytics.totalSessions += analytics.sessions || 0;\n    consolidatedData.analytics.totalUsers += analytics.users || 0;\n    consolidatedData.analytics.totalPageviews += analytics.pageviews || 0;\n    consolidatedData.analytics.conversions += analytics.conversions || 0;\n    \n    // Calculate weighted averages\n    if (analytics.bounceRate) {\n      consolidatedData.analytics.bounceRate = (consolidatedData.analytics.bounceRate + analytics.bounceRate) / 2;\n    }\n    if (analytics.avgSessionDuration) {\n      consolidatedData.analytics.avgSessionDuration = (consolidatedData.analytics.avgSessionDuration + analytics.avgSessionDuration) / 2;\n    }\n  }\n  \n  // Process Social Media Data\n  if (data.socialMediaData) {\n    const social = data.socialMediaData;\n    Object.keys(social).forEach(platform => {\n      const platformData = social[platform];\n      consolidatedData.socialMedia.totalFollowers += platformData.followers || 0;\n      consolidatedData.socialMedia.totalEngagement += platformData.engagement || 0;\n      consolidatedData.socialMedia.totalReach += platformData.reach || 0;\n      consolidatedData.socialMedia.totalImpressions += platformData.impressions || 0;\n      \n      consolidatedData.socialMedia.platformBreakdown[platform] = platformData;\n    });\n  }\n  \n  // Process Advertising Data\n  if (data.advertisingData) {\n    const ads = data.advertisingData;\n    Object.keys(ads).forEach(platform => {\n      const platformData = ads[platform];\n      consolidatedData.advertising.totalSpend += platformData.spend || 0;\n      consolidatedData.advertising.totalImpressions += platformData.impressions || 0;\n      consolidatedData.advertising.totalClicks += platformData.clicks || 0;\n      consolidatedData.advertising.totalConversions += platformData.conversions || 0;\n      \n      consolidatedData.advertising.platformBreakdown[platform] = platformData;\n    });\n  }\n  \n  // Process Email Marketing Data\n  if (data.emailData) {\n    const email = data.emailData;\n    Object.keys(email).forEach(platform => {\n      const platformData = email[platform];\n      consolidatedData.emailMarketing.totalSent += platformData.sent || 0;\n      consolidatedData.emailMarketing.totalDelivered += platformData.delivered || 0;\n      consolidatedData.emailMarketing.totalOpened += platformData.opened || 0;\n      consolidatedData.emailMarketing.totalClicked += platformData.clicked || 0;\n      consolidatedData.emailMarketing.totalBounced += platformData.bounced || 0;\n      consolidatedData.emailMarketing.totalUnsubscribed += platformData.unsubscribed || 0;\n    });\n  }\n});\n\n// Calculate derived metrics\nif (consolidatedData.analytics.totalUsers > 0) {\n  consolidatedData.analytics.conversionRate = (consolidatedData.analytics.conversions / consolidatedData.analytics.totalUsers) * 100;\n}\n\nif (consolidatedData.socialMedia.totalFollowers > 0) {\n  consolidatedData.socialMedia.engagementRate = (consolidatedData.socialMedia.totalEngagement / consolidatedData.socialMedia.totalFollowers) * 100;\n}\n\nif (consolidatedData.advertising.totalImpressions > 0) {\n  consolidatedData.advertising.averageCTR = (consolidatedData.advertising.totalClicks / consolidatedData.advertising.totalImpressions) * 100;\n}\n\nif (consolidatedData.advertising.totalClicks > 0) {\n  consolidatedData.advertising.averageCPC = consolidatedData.advertising.totalSpend / consolidatedData.advertising.totalClicks;\n}\n\nif (consolidatedData.advertising.totalImpressions > 0) {\n  consolidatedData.advertising.averageCPM = (consolidatedData.advertising.totalSpend / consolidatedData.advertising.totalImpressions) * 1000;\n}\n\nif (consolidatedData.emailMarketing.totalSent > 0) {\n  consolidatedData.emailMarketing.deliveryRate = (consolidatedData.emailMarketing.totalDelivered / consolidatedData.emailMarketing.totalSent) * 100;\n  consolidatedData.emailMarketing.openRate = (consolidatedData.emailMarketing.totalOpened / consolidatedData.emailMarketing.totalSent) * 100;\n  consolidatedData.emailMarketing.clickRate = (consolidatedData.emailMarketing.totalClicked / consolidatedData.emailMarketing.totalSent) * 100;\n  consolidatedData.emailMarketing.bounceRate = (consolidatedData.emailMarketing.totalBounced / consolidatedData.emailMarketing.totalSent) * 100;\n}\n\n// Calculate cross-platform metrics\nconst totalRevenue = consolidatedData.analytics.conversions * 50; // Assuming average conversion value\nconst totalCost = consolidatedData.advertising.totalSpend;\nif (totalCost > 0) {\n  consolidatedData.advertising.ROAS = totalRevenue / totalCost;\n  consolidatedData.crossPlatformMetrics.totalROI = ((totalRevenue - totalCost) / totalCost) * 100;\n}\n\nif (consolidatedData.analytics.totalUsers > 0) {\n  consolidatedData.crossPlatformMetrics.customerAcquisitionCost = totalCost / consolidatedData.analytics.totalUsers;\n}\n\n// Calculate data quality scores\nlet completenessScore = 0;\nlet totalFields = 0;\n\n// Check completeness of key metrics\nconst keyMetrics = [\n  consolidatedData.analytics.totalSessions,\n  consolidatedData.socialMedia.totalFollowers,\n  consolidatedData.advertising.totalSpend,\n  consolidatedData.emailMarketing.totalSent\n];\n\nkeyMetrics.forEach(metric => {\n  totalFields++;\n  if (metric && metric > 0) completenessScore++;\n});\n\nconsolidatedData.dataQuality.completeness = totalFields > 0 ? (completenessScore / totalFields) * 100 : 0;\nconsolidatedData.dataQuality.accuracy = 95; // Placeholder - would be calculated based on data validation\nconsolidatedData.dataQuality.freshness = 100; // Data is fresh since just synced\n\n// Add performance insights\nconsolidatedData.insights = {\n  topPerformingChannel: '',\n  improvementOpportunities: [],\n  alertsGenerated: [],\n  recommendations: []\n};\n\n// Determine top performing channel\nconst channelROI = {\n  social: consolidatedData.socialMedia.engagementRate,\n  advertising: consolidatedData.advertising.ROAS,\n  email: consolidatedData.emailMarketing.clickRate\n};\n\nconsolidatedData.insights.topPerformingChannel = Object.keys(channelROI).reduce((a, b) => \n  channelROI[a] > channelROI[b] ? a : b\n);\n\n// Generate alerts\nif (consolidatedData.advertising.averageCPC > 5) {\n  consolidatedData.insights.alertsGenerated.push({\n    type: 'cost_alert',\n    message: 'High cost per click detected',\n    value: consolidatedData.advertising.averageCPC,\n    threshold: 5\n  });\n}\n\nif (consolidatedData.emailMarketing.bounceRate > 5) {\n  consolidatedData.insights.alertsGenerated.push({\n    type: 'email_quality_alert',\n    message: 'High email bounce rate detected',\n    value: consolidatedData.emailMarketing.bounceRate,\n    threshold: 5\n  });\n}\n\n// Generate recommendations\nif (consolidatedData.socialMedia.engagementRate < 2) {\n  consolidatedData.insights.recommendations.push({\n    type: 'social_media',\n    priority: 'medium',\n    message: 'Consider increasing social media content frequency to improve engagement'\n  });\n}\n\nif (consolidatedData.advertising.ROAS < 2) {\n  consolidatedData.insights.recommendations.push({\n    type: 'advertising',\n    priority: 'high',\n    message: 'Advertising ROAS is below recommended threshold. Review targeting and ad creative.'\n  });\n}\n\nreturn [{ json: consolidatedData }];"
+      },
+      "id": "data-processor",
+      "name": "Data Processor & Analytics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/analytics/update-consolidated-data",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $json.apiKey }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "clientId",
+              "value": "={{ $json.clientId }}"
+            },
+            {
+              "name": "consolidatedData",
+              "value": "={{ $json }}"
+            },
+            {
+              "name": "syncTimestamp",
+              "value": "={{ $json.syncTimestamp }}"
+            },
+            {
+              "name": "dataQuality",
+              "value": "={{ $json.dataQuality }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000,
+          "retry": {
+            "enabled": true,
+            "maxAttempts": 3,
+            "waitBetween": 1000
+          }
+        }
+      },
+      "id": "update-database",
+      "name": "Update Consolidated Database",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "alert-condition",
+              "leftValue": "={{ $json.insights.alertsGenerated.length }}",
+              "rightValue": "0",
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "alert-checker",
+      "name": "Check for Alerts",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/communication/send-notification",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $json.apiKey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "clientId",
+              "value": "={{ $json.clientId }}"
+            },
+            {
+              "name": "notificationType",
+              "value": "data_sync_alerts"
+            },
+            {
+              "name": "alerts",
+              "value": "={{ $json.insights.alertsGenerated }}"
+            },
+            {
+              "name": "channel",
+              "value": "=['email', 'slack']"
+            },
+            {
+              "name": "priority",
+              "value": "high"
+            },
+            {
+              "name": "message",
+              "value": "Data sync completed with {{ $json.insights.alertsGenerated.length }} alerts requiring attention."
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-alerts",
+      "name": "Send Alert Notifications",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1780, 200]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/analytics/generate-sync-report",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $json.apiKey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "clientId",
+              "value": "={{ $json.clientId }}"
+            },
+            {
+              "name": "syncData",
+              "value": "={{ $json }}"
+            },
+            {
+              "name": "reportType",
+              "value": "data_sync_summary"
+            },
+            {
+              "name": "includeInsights",
+              "value": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "generate-report",
+      "name": "Generate Sync Report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1780, 400]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "final-merge",
+      "name": "Final Response Merge",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2.1,
+      "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"success\": true,\n  \"message\": \"Cross-platform data sync completed successfully\",\n  \"clientId\": \"{{ $json.clientId }}\",\n  \"syncTimestamp\": \"{{ $json.syncTimestamp }}\",\n  \"dataQuality\": {\n    \"completeness\": \"{{ $json.dataQuality.completeness }}%\",\n    \"accuracy\": \"{{ $json.dataQuality.accuracy }}%\",\n    \"freshness\": \"{{ $json.dataQuality.freshness }}%\"\n  },\n  \"insights\": {\n    \"topPerformingChannel\": \"{{ $json.insights.topPerformingChannel }}\",\n    \"alertsGenerated\": {{ $json.insights.alertsGenerated.length }},\n    \"recommendationsCount\": {{ $json.insights.recommendations.length }}\n  },\n  \"summary\": {\n    \"totalUsers\": {{ $json.analytics.totalUsers }},\n    \"totalRevenue\": {{ $json.advertising.totalSpend * $json.advertising.ROAS }},\n    \"totalROI\": \"{{ $json.crossPlatformMetrics.totalROI }}%\",\n    \"engagementRate\": \"{{ $json.socialMedia.engagementRate }}%\"\n  },\n  \"nextSyncScheduled\": \"{{ $now.plus({hours: 1}).toISO() }}\"\n}",
+        "options": {}
+      },
+      "id": "webhook-response",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2220, 300]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Scheduled Sync (Every 6 Hours)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Auto-generate sync request for scheduled runs\nconst scheduledSyncData = {\n  syncType: 'scheduled',\n  clientId: 'all', // Will sync all active clients\n  platforms: ['google_analytics', 'facebook_ads', 'google_ads', 'linkedin_ads', 'facebook', 'instagram', 'twitter'],\n  emailPlatforms: ['mailchimp', 'sendgrid', 'constant_contact'],\n  dateRange: 'last_24_hours',\n  apiKey: process.env.INTERNAL_API_KEY || 'internal-scheduled-sync'\n};\n\nreturn [{ json: scheduledSyncData }];"
+      },
+      "id": "scheduled-data-prep",
+      "name": "Prepare Scheduled Sync Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 500]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "error-condition",
+              "leftValue": "={{ $json.error }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "isNotEmpty"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "error-handler",
+      "name": "Error Detection",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 500]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/communication/send-notification",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ process.env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "notificationType",
+              "value": "system_error"
+            },
+            {
+              "name": "error",
+              "value": "={{ $json.error }}"
+            },
+            {
+              "name": "workflowName",
+              "value": "cross-platform-data-sync"
+            },
+            {
+              "name": "channel",
+              "value": "=['slack']"
+            },
+            {
+              "name": "priority",
+              "value": "urgent"
+            },
+            {
+              "name": "message",
+              "value": "Cross-platform data sync workflow encountered an error and requires immediate attention."
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "error-notification",
+      "name": "Send Error Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 600]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/automation/log-activity",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $json.apiKey || process.env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "workflowName",
+              "value": "cross-platform-data-sync"
+            },
+            {
+              "name": "activityType",
+              "value": "data_sync_completed"
+            },
+            {
+              "name": "clientId",
+              "value": "={{ $json.clientId }}"
+            },
+            {
+              "name": "details",
+              "value": "={{ { syncTimestamp: $json.syncTimestamp, dataQuality: $json.dataQuality, alertsGenerated: $json.insights.alertsGenerated.length, platformsSynced: ['analytics', 'social_media', 'advertising', 'email'] } }}"
+            },
+            {
+              "name": "status",
+              "value": "success"
+            },
+            {
+              "name": "executionTime",
+              "value": "={{ $now }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "log-activity",
+      "name": "Log Sync Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 500]
+    }
+  ],
+  "connections": {
+    "webhook-trigger": {
+      "main": [
+        [
+          {
+            "node": "sync-type-router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "sync-type-router": {
+      "main": [
+        [
+          {
+            "node": "fetch-analytics-data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "sync-social-media",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "sync-ad-campaigns",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "sync-email-campaigns",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "fetch-analytics-data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "sync-social-media",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "sync-ad-campaigns",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "sync-email-campaigns",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "fetch-analytics-data": {
+      "main": [
+        [
+          {
+            "node": "merge-all-data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "sync-social-media": {
+      "main": [
+        [
+          {
+            "node": "merge-all-data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "sync-ad-campaigns": {
+      "main": [
+        [
+          {
+            "node": "merge-all-data",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "sync-email-campaigns": {
+      "main": [
+        [
+          {
+            "node": "merge-all-data",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "merge-all-data": {
+      "main": [
+        [
+          {
+            "node": "data-processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "data-processor": {
+      "main": [
+        [
+          {
+            "node": "update-database",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "update-database": {
+      "main": [
+        [
+          {
+            "node": "alert-checker",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "alert-checker": {
+      "main": [
+        [
+          {
+            "node": "send-alerts",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "generate-report",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "generate-report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "send-alerts": {
+      "main": [
+        [
+          {
+            "node": "final-merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "generate-report": {
+      "main": [
+        [
+          {
+            "node": "final-merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "final-merge": {
+      "main": [
+        [
+          {
+            "node": "webhook-response",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "log-activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "schedule-trigger": {
+      "main": [
+        [
+          {
+            "node": "scheduled-data-prep",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "scheduled-data-prep": {
+      "main": [
+        [
+          {
+            "node": "fetch-analytics-data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "sync-social-media",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "sync-ad-campaigns",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "sync-email-campaigns",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "error-handler": {
+      "main": [
+        [
+          {
+            "node": "error-notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-01-15T10:00:00.000Z",
+      "updatedAt": "2024-01-15T10:00:00.000Z",
+      "id": "cross-platform-sync",
+      "name": "Cross-Platform Data Sync"
+    }
+  ],
+  "triggerCount": 2,
+  "updatedAt": "2024-01-15T10:00:00.000Z",
+  "versionId": "1.0.0"
+}

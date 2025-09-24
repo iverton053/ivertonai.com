@@ -1,0 +1,915 @@
+{
+  "name": "Advanced Multi-Touch Nurture Sequences",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lead-enters-nurture",
+        "options": {}
+      },
+      "id": "83c2c7b4-7b63-4b02-8b14-5c8f7e3d2a1b",
+      "name": "Lead Enters Nurture Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [260, 300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "behavior-score-change",
+        "options": {}
+      },
+      "id": "94d3d8c5-8c74-5c13-9c25-6d9f8e4e3b2c",
+      "name": "Behavior Score Change Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [260, 500]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "email-engagement",
+        "options": {}
+      },
+      "id": "a5e4e9d6-9d85-6d24-ad36-7eaf9f5f4c3d",
+      "name": "Email Engagement Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [260, 700]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.leadScore}}",
+              "operation": "largerEqual",
+              "value2": "60"
+            },
+            {
+              "value1": "={{$json.lifecycleStage}}",
+              "operation": "equal",
+              "value2": "lead"
+            }
+          ],
+          "boolean": [
+            {
+              "value1": "={{$json.optedIn}}",
+              "operation": "equal",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "b6f5fae7-ae96-7e35-be47-8fbafa6f5d4e",
+      "name": "Qualify for Nurture",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [480, 400]
+    },
+    {
+      "parameters": {
+        "url": "={{$parameter.crmApiUrl}}/contacts/{{$json.contactId}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "headers": {
+            "Content-Type": "application/json"
+          }
+        }
+      },
+      "id": "c7g6gbf8-bf07-8f46-cf58-9gcbgb7g6e5f",
+      "name": "Get Contact Profile",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [700, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "crm-api-key",
+          "name": "CRM API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{$parameter.enrichmentApiUrl}}/enrich",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"email\": \"{{$json.email}}\",\n  \"company\": \"{{$json.company}}\",\n  \"sources\": [\"clearbit\", \"hunter\", \"linkedin\"]\n}",
+        "options": {
+          "headers": {
+            "Authorization": "Bearer {{$parameter.enrichmentApiKey}}",
+            "Content-Type": "application/json"
+          }
+        }
+      },
+      "id": "d8h7hcg9-cg18-9g57-dg69-ahdhch8h7f6g",
+      "name": "Enrich Contact Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [920, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.company_size}}",
+              "operation": "equal",
+              "value2": "enterprise"
+            }
+          ],
+          "number": [
+            {
+              "value1": "={{$json.leadScore}}",
+              "operation": "largerEqual",
+              "value2": 80
+            }
+          ]
+        }
+      },
+      "id": "e9i8idh0-dh29-ah68-eh7a-bididi9i8g7h",
+      "name": "Route by Profile",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1140, 400]
+    },
+    {
+      "parameters": {
+        "url": "={{$parameter.crmApiUrl}}/sequences/high-value-enterprise",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contactId\": \"{{$json.contactId}}\",\n  \"sequenceType\": \"high_value_enterprise\",\n  \"personalizations\": {\n    \"company\": \"{{$json.company}}\",\n    \"industry\": \"{{$json.industry}}\",\n    \"companySize\": \"{{$json.company_size}}\",\n    \"jobTitle\": \"{{$json.job_title}}\",\n    \"pain_points\": {{$json.identified_pain_points}},\n    \"decision_makers\": {{$json.decision_makers}}\n  },\n  \"assignedRep\": \"{{$json.assigned_sales_rep}}\"\n}",
+        "options": {
+          "headers": {
+            "Authorization": "Bearer {{$parameter.crmApiKey}}",
+            "Content-Type": "application/json"
+          }
+        }
+      },
+      "id": "f0j9jei1-ei3a-bi79-fi8b-cjejej0j9h8i",
+      "name": "Start Enterprise Sequence",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1360, 250]
+    },
+    {
+      "parameters": {
+        "url": "={{$parameter.crmApiUrl}}/sequences/standard-nurture",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contactId\": \"{{$json.contactId}}\",\n  \"sequenceType\": \"standard_nurture\",\n  \"personalizations\": {\n    \"firstName\": \"{{$json.first_name}}\",\n    \"company\": \"{{$json.company}}\",\n    \"industry\": \"{{$json.industry}}\",\n    \"interests\": {{$json.interests}}\n  }\n}",
+        "options": {
+          "headers": {
+            "Authorization": "Bearer {{$parameter.crmApiKey}}",
+            "Content-Type": "application/json"
+          }
+        }
+      },
+      "id": "g1k0kfj2-fj4b-cj8a-gj9c-dkfkfk1k0i9j",
+      "name": "Start Standard Sequence",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1360, 550]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{$json.email}}",
+        "subject": "Welcome to our community, {{$json.first_name}}! 🎉",
+        "emailFormat": "html",
+        "html": "=<!DOCTYPE html>\n<html>\n<head>\n  <style>\n    .container { max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif; }\n    .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; color: white; }\n    .content { padding: 30px; background: #ffffff; }\n    .cta-button { background: #667eea; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 20px 0; }\n    .footer { background: #f8f9fa; padding: 20px; text-align: center; color: #6c757d; }\n  </style>\n</head>\n<body>\n  <div class=\"container\">\n    <div class=\"header\">\n      <h1>Welcome {{$json.first_name}}!</h1>\n      <p>We're excited to help {{$json.company}} achieve its goals</p>\n    </div>\n    <div class=\"content\">\n      <h2>Here's what happens next:</h2>\n      <ul>\n        <li>📊 We'll analyze your {{$json.industry}} industry trends</li>\n        <li>🎯 Customize solutions for your {{$json.company_size}} company</li>\n        <li>🚀 Share relevant case studies and best practices</li>\n      </ul>\n      <a href=\"{{$parameter.baseUrl}}/onboarding?token={{$json.tracking_token}}\" class=\"cta-button\">Complete Your Profile</a>\n      <p>Questions? Reply to this email or schedule a call with our team.</p>\n    </div>\n    <div class=\"footer\">\n      <p>© 2024 Your Company | <a href=\"{{$parameter.baseUrl}}/unsubscribe?token={{$json.unsubscribe_token}}\">Unsubscribe</a></p>\n    </div>\n  </div>\n</body>\n</html>",
+        "options": {
+          "ccEmail": "={{$json.assigned_sales_rep_email}}",
+          "appendAttribution": false
+        }
+      },
+      "id": "h2l1lgk3-gk5c-dk9b-hkad-elpklk2l1j0k",
+      "name": "Send Welcome Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [1580, 300],
+      "credentials": {
+        "smtp": {
+          "id": "email-smtp",
+          "name": "SMTP Email"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "unit": "days",
+        "amount": 2
+      },
+      "id": "i3m2mhl4-hl6d-el0c-ilbe-fmqmlm3m2k1l",
+      "name": "Wait 2 Days",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [1800, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{$parameter.crmApiUrl}}/contacts/{{$json.contactId}}/activities",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "qs": {
+            "since": "={{$now - 172800000}}", 
+            "types": "email_open,email_click,website_visit,content_download"
+          }
+        }
+      },
+      "id": "j4n3nim5-im7e-fm1d-jmcf-gnrnmn4n3l2m",
+      "name": "Check Engagement",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [2020, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "crm-api-key",
+          "name": "CRM API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json.activities.length}}",
+              "operation": "larger",
+              "value2": 0
+            },
+            {
+              "value1": "={{$json.engagement_score}}",
+              "operation": "largerEqual",
+              "value2": 30
+            }
+          ]
+        }
+      },
+      "id": "k5o4ojn6-jn8f-gn2e-kndf-hosonn5o4m3n",
+      "name": "High Engagement?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [2240, 400]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{$json.email}}",
+        "subject": "{{$json.first_name}}, here's how {{$json.company}} can save 40% on {{$json.primary_pain_point}}",
+        "emailFormat": "html",
+        "html": "=<!DOCTYPE html>\n<html>\n<head>\n  <style>\n    .container { max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif; }\n    .header { background: #28a745; padding: 20px; text-align: center; color: white; }\n    .content { padding: 30px; background: #ffffff; }\n    .case-study { background: #f8f9fa; padding: 20px; border-left: 4px solid #28a745; margin: 20px 0; }\n    .cta-button { background: #28a745; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 20px 0; }\n    .roi-highlight { background: linear-gradient(135deg, #ffd700, #ffed4a); padding: 15px; border-radius: 8px; text-align: center; margin: 20px 0; }\n  </style>\n</head>\n<body>\n  <div class=\"container\">\n    <div class=\"header\">\n      <h1>Success Story: Similar to {{$json.company}}</h1>\n    </div>\n    <div class=\"content\">\n      <p>Hi {{$json.first_name}},</p>\n      <p>I noticed your interest in solving {{$json.primary_pain_point}} for {{$json.company}}.</p>\n      \n      <div class=\"case-study\">\n        <h3>Case Study: {{$json.similar_company_name}}</h3>\n        <p><strong>Industry:</strong> {{$json.industry}}</p>\n        <p><strong>Size:</strong> {{$json.company_size}}</p>\n        <p><strong>Challenge:</strong> {{$json.similar_challenge}}</p>\n        <p><strong>Results:</strong></p>\n        <ul>\n          <li>40% cost reduction in first 6 months</li>\n          <li>60% improvement in efficiency</li>\n          <li>${{$json.estimated_savings}} annual savings</li>\n        </ul>\n      </div>\n      \n      <div class=\"roi-highlight\">\n        <h3>Estimated ROI for {{$json.company}}</h3>\n        <p><strong>${{$json.projected_annual_savings}}</strong> potential annual savings</p>\n        <p>Based on your {{$json.company_size}} company profile</p>\n      </div>\n      \n      <a href=\"{{$parameter.baseUrl}}/demo?contact={{$json.contactId}}&campaign=nurture_case_study\" class=\"cta-button\">See How This Applies to {{$json.company}}</a>\n      \n      <p>Would you like to discuss how we can achieve similar results for {{$json.company}}?</p>\n      <p>Best regards,<br>{{$json.assigned_sales_rep_name}}</p>\n    </div>\n  </div>\n</body>\n</html>",
+        "options": {
+          "ccEmail": "={{$json.assigned_sales_rep_email}}",
+          "appendAttribution": false
+        }
+      },
+      "id": "l6p5pko7-ko9g-ho3f-loeg-iptooo6p5n4o",
+      "name": "Send Case Study Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [2460, 200],
+      "credentials": {
+        "smtp": {
+          "id": "email-smtp",
+          "name": "SMTP Email"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{$json.email}}",
+        "subject": "{{$json.first_name}}, quick question about {{$json.company}}'s {{$json.main_challenge}}",
+        "emailFormat": "html",
+        "html": "=<!DOCTYPE html>\n<html>\n<head>\n  <style>\n    .container { max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif; }\n    .header { background: #ffc107; padding: 20px; text-align: center; color: #212529; }\n    .content { padding: 30px; background: #ffffff; }\n    .question-box { background: #fff3cd; border: 1px solid #ffeaa7; padding: 20px; border-radius: 8px; margin: 20px 0; }\n    .cta-button { background: #ffc107; color: #212529; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 20px 0; font-weight: bold; }\n  </style>\n</head>\n<body>\n  <div class=\"container\">\n    <div class=\"header\">\n      <h1>Re-engagement: {{$json.company}}</h1>\n    </div>\n    <div class=\"content\">\n      <p>Hi {{$json.first_name}},</p>\n      <p>I sent you some information about solving {{$json.main_challenge}} but haven't heard back.</p>\n      \n      <div class=\"question-box\">\n        <h3>Quick Question:</h3>\n        <p>What's the biggest obstacle preventing {{$json.company}} from addressing {{$json.main_challenge}} right now?</p>\n        <ul>\n          <li>Budget constraints?</li>\n          <li>Technical complexity?</li>\n          <li>Internal resistance to change?</li>\n          <li>Lack of time/resources?</li>\n          <li>Something else entirely?</li>\n        </ul>\n      </div>\n      \n      <p>Understanding this would help me share more relevant resources.</p>\n      \n      <a href=\"{{$parameter.baseUrl}}/survey?contact={{$json.contactId}}&campaign=re_engagement\" class=\"cta-button\">Answer in 30 Seconds</a>\n      \n      <p>Or simply reply with your biggest challenge. I read every response personally.</p>\n      \n      <p>Best,<br>{{$json.assigned_sales_rep_name}}<br>{{$json.assigned_sales_rep_title}}</p>\n      \n      <p style=\"font-size: 12px; color: #6c757d;\">P.S. If this isn't relevant anymore, <a href=\"{{$parameter.baseUrl}}/unsubscribe?token={{$json.unsubscribe_token}}\">let me know here</a> and I'll stop sending these updates.</p>\n    </div>\n  </div>\n</body>\n</html>",
+        "options": {
+          "ccEmail": "={{$json.assigned_sales_rep_email}}",
+          "appendAttribution": false
+        }
+      },
+      "id": "m7q6qlp8-lp0h-ip4g-mqfh-jquppq7q6o5p",
+      "name": "Send Re-engagement Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [2460, 600],
+      "credentials": {
+        "smtp": {
+          "id": "email-smtp",
+          "name": "SMTP Email"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "unit": "days",
+        "amount": 3
+      },
+      "id": "n8r7rmq9-mq1i-jq5h-nrgi-krvrqr8r7p6q",
+      "name": "Wait 3 Days",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [2680, 400]
+    },
+    {
+      "parameters": {
+        "url": "={{$parameter.crmApiUrl}}/contacts/{{$json.contactId}}/score",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"scoreChange\": {\n    \"email_engagement\": {{$json.email_engagement_score}},\n    \"content_interaction\": {{$json.content_interaction_score}},\n    \"website_activity\": {{$json.website_activity_score}},\n    \"sequence_progression\": 5\n  },\n  \"activities\": [\n    {\n      \"type\": \"email_sent\",\n      \"campaign\": \"{{$json.sequence_name}}\",\n      \"step\": \"{{$json.current_step}}\",\n      \"timestamp\": \"{{$now}}\",\n      \"engagement_level\": \"{{$json.engagement_level}}\"\n    }\n  ]\n}",
+        "options": {
+          "headers": {
+            "Authorization": "Bearer {{$parameter.crmApiKey}}",
+            "Content-Type": "application/json"
+          }
+        }
+      },
+      "id": "o9s8snr0-nr2j-kr6i-osgh-lswsrs9s8q7r",
+      "name": "Update Lead Score",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [2900, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json.total_score}}",
+              "operation": "largerEqual",
+              "value2": 85
+            }
+          ],
+          "string": [
+            {
+              "value1": "={{$json.engagement_level}}",
+              "operation": "equal",
+              "value2": "high"
+            }
+          ]
+        }
+      },
+      "id": "p0t9tos1-os3k-ls7j-pthi-mtwsts0t9r8s",
+      "name": "Sales Ready?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [3120, 500]
+    },
+    {
+      "parameters": {
+        "url": "={{$parameter.crmApiUrl}}/leads/{{$json.contactId}}/handoff",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contactId\": \"{{$json.contactId}}\",\n  \"handoffReason\": \"nurture_sequence_completion\",\n  \"leadScore\": {{$json.total_score}},\n  \"engagementLevel\": \"{{$json.engagement_level}}\",\n  \"sequenceData\": {\n    \"sequenceName\": \"{{$json.sequence_name}}\",\n    \"stepsCompleted\": {{$json.steps_completed}},\n    \"totalEngagements\": {{$json.total_engagements}},\n    \"lastEngagement\": \"{{$json.last_engagement_date}}\",\n    \"primaryInterests\": {{$json.identified_interests}},\n    \"painPoints\": {{$json.identified_pain_points}}\n  },\n  \"assignedRep\": \"{{$json.assigned_sales_rep}}\",\n  \"priority\": \"high\",\n  \"recommendedActions\": [\n    \"Schedule demo call within 24 hours\",\n    \"Send personalized proposal\",\n    \"Introduce to technical team if needed\"\n  ]\n}",
+        "options": {
+          "headers": {
+            "Authorization": "Bearer {{$parameter.crmApiKey}}",
+            "Content-Type": "application/json"
+          }
+        }
+      },
+      "id": "q1u0upt2-pt4l-mt8k-quij-nuxutu1u0s9t",
+      "name": "Handoff to Sales",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [3340, 350]
+    },
+    {
+      "parameters": {
+        "url": "={{$parameter.slackWebhookUrl}}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"channel\": \"#sales-alerts\",\n  \"username\": \"Nurture Bot\",\n  \"icon_emoji\": \":fire:\",\n  \"attachments\": [\n    {\n      \"color\": \"good\",\n      \"title\": \"🔥 Hot Lead Ready for Sales!\",\n      \"fields\": [\n        {\n          \"title\": \"Contact\",\n          \"value\": \"{{$json.first_name}} {{$json.last_name}} - {{$json.job_title}} at {{$json.company}}\",\n          \"short\": false\n        },\n        {\n          \"title\": \"Lead Score\",\n          \"value\": \"{{$json.total_score}}/100\",\n          \"short\": true\n        },\n        {\n          \"title\": \"Engagement\",\n          \"value\": \"{{$json.engagement_level}} ({{$json.total_engagements}} interactions)\",\n          \"short\": true\n        },\n        {\n          \"title\": \"Sequence\",\n          \"value\": \"{{$json.sequence_name}} - {{$json.steps_completed}} steps completed\",\n          \"short\": false\n        },\n        {\n          \"title\": \"Assigned Rep\",\n          \"value\": \"<@{{$json.assigned_sales_rep_slack_id}}>\",\n          \"short\": true\n        },\n        {\n          \"title\": \"Estimated Value\",\n          \"value\": \"${{$json.estimated_deal_value}}\",\n          \"short\": true\n        }\n      ],\n      \"actions\": [\n        {\n          \"type\": \"button\",\n          \"text\": \"View in CRM\",\n          \"url\": \"{{$parameter.crmUrl}}/contacts/{{$json.contactId}}\"\n        },\n        {\n          \"type\": \"button\",\n          \"text\": \"Schedule Call\",\n          \"url\": \"{{$parameter.calendarUrl}}?contact={{$json.contactId}}\"\n        }\n      ]\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "r2v1vqu3-qu5m-nu9l-rvjk-ovyvuv2v1t0u",
+      "name": "Notify Sales Team",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [3560, 350]
+    },
+    {
+      "parameters": {
+        "url": "={{$parameter.crmApiUrl}}/sequences/continue",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contactId\": \"{{$json.contactId}}\",\n  \"sequenceId\": \"{{$json.sequence_id}}\",\n  \"nextStep\": \"{{$json.next_step}}\",\n  \"delay\": {\n    \"value\": {{$json.next_step_delay}},\n    \"unit\": \"{{$json.next_step_delay_unit}}\"\n  },\n  \"personalizations\": {\n    \"engagement_level\": \"{{$json.engagement_level}}\",\n    \"interests\": {{$json.identified_interests}},\n    \"behavior_patterns\": {{$json.behavior_patterns}}\n  }\n}",
+        "options": {
+          "headers": {
+            "Authorization": "Bearer {{$parameter.crmApiKey}}",
+            "Content-Type": "application/json"
+          }
+        }
+      },
+      "id": "s3w2wrv4-rv6n-ov0m-swkl-pwzwvw3w2u1v",
+      "name": "Continue Sequence",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [3340, 650]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.action}}",
+              "operation": "equal",
+              "value2": "email_opened"
+            }
+          ]
+        }
+      },
+      "id": "t4x3xsw5-sw7o-pw1n-txlm-qx0xwx4x3v2w",
+      "name": "Email Opened?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [500, 900]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.action}}",
+              "operation": "equal",
+              "value2": "email_clicked"
+            }
+          ]
+        }
+      },
+      "id": "u5y4ytx6-tx8p-qx2o-uymn-ry1yxx5y4w3x",
+      "name": "Email Clicked?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [500, 1100]
+    },
+    {
+      "parameters": {
+        "url": "={{$parameter.crmApiUrl}}/contacts/{{$json.contactId}}/activities",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"activity\": {\n    \"type\": \"email_opened\",\n    \"campaign\": \"{{$json.campaign_id}}\",\n    \"email_subject\": \"{{$json.email_subject}}\",\n    \"timestamp\": \"{{$json.timestamp}}\",\n    \"device\": \"{{$json.device}}\",\n    \"location\": \"{{$json.location}}\"\n  },\n  \"scoreUpdate\": {\n    \"email_engagement\": 2,\n    \"overall_engagement\": 1\n  }\n}",
+        "options": {
+          "headers": {
+            "Authorization": "Bearer {{$parameter.crmApiKey}}",
+            "Content-Type": "application/json"
+          }
+        }
+      },
+      "id": "v6z5zuy7-uy9q-ry3p-vzno-sz2zyy6z5x4y",
+      "name": "Track Email Open",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [720, 850],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "crm-api-key",
+          "name": "CRM API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{$parameter.crmApiUrl}}/contacts/{{$json.contactId}}/activities",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"activity\": {\n    \"type\": \"email_clicked\",\n    \"campaign\": \"{{$json.campaign_id}}\",\n    \"email_subject\": \"{{$json.email_subject}}\",\n    \"link_url\": \"{{$json.clicked_url}}\",\n    \"timestamp\": \"{{$json.timestamp}}\",\n    \"device\": \"{{$json.device}}\",\n    \"location\": \"{{$json.location}}\"\n  },\n  \"scoreUpdate\": {\n    \"email_engagement\": 5,\n    \"content_interest\": 3,\n    \"overall_engagement\": 2\n  }\n}",
+        "options": {
+          "headers": {
+            "Authorization": "Bearer {{$parameter.crmApiKey}}",
+            "Content-Type": "application/json"
+          }
+        }
+      },
+      "id": "w7a6avz8-vz0r-sz4q-waoq-ta3zaz7a6y5z",
+      "name": "Track Email Click",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [720, 1050],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "crm-api-key",
+          "name": "CRM API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.clicked_url}}",
+              "operation": "contains",
+              "value2": "demo"
+            }
+          ]
+        }
+      },
+      "id": "x8b7bwa9-wa1s-ta5r-xbpr-ub4aba8b7z6a",
+      "name": "Demo Link Clicked?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [940, 1050]
+    },
+    {
+      "parameters": {
+        "url": "={{$parameter.crmApiUrl}}/leads/{{$json.contactId}}/priority",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"priority\": \"high\",\n  \"reason\": \"demo_interest\",\n  \"scoreBoost\": 15,\n  \"autoActions\": [\n    \"notify_sales_rep\",\n    \"schedule_follow_up\",\n    \"send_demo_prep_email\"\n  ]\n}",
+        "options": {
+          "headers": {
+            "Authorization": "Bearer {{$parameter.crmApiKey}}",
+            "Content-Type": "application/json"
+          }
+        }
+      },
+      "id": "y9c8cxb0-xb2t-ub6s-ycqs-vc5bcb9c8a7b",
+      "name": "Mark High Priority",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1160, 950]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C1234567890",
+          "mode": "list"
+        },
+        "text": "=🔥 *URGENT: Demo Interest Alert!*\n\n*Contact:* {{$json.first_name}} {{$json.last_name}}\n*Company:* {{$json.company}} ({{$json.company_size}})\n*Title:* {{$json.job_title}}\n*Score:* {{$json.lead_score}}/100 → {{$json.new_score}}/100 (+15)\n\n*Action:* Clicked demo link in nurture email\n*Campaign:* {{$json.campaign_name}}\n*Time:* {{$json.timestamp}}\n\n*Next Steps:*\n• Sales rep notified: <@{{$json.assigned_sales_rep_slack_id}}>\n• Demo prep email will be sent automatically\n• Follow-up scheduled for next business day\n\n<{{$parameter.crmUrl}}/contacts/{{$json.contactId}}|View in CRM> | <{{$parameter.calendarUrl}}?contact={{$json.contactId}}|Schedule Demo>",
+        "otherOptions": {
+          "includeLinkToWorkflow": true
+        }
+      },
+      "id": "z0d9dyc1-yc3u-vc7t-zdrst-wd6cdc0d9b8c",
+      "name": "Alert Sales on Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2,
+      "position": [1380, 950],
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "slack-oauth",
+          "name": "Slack OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{$json.email}}",
+        "subject": "Demo prep: Everything you need for our {{$json.company}} call",
+        "emailFormat": "html",
+        "html": "=<!DOCTYPE html>\n<html>\n<head>\n  <style>\n    .container { max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif; }\n    .header { background: #17a2b8; padding: 20px; text-align: center; color: white; }\n    .content { padding: 30px; background: #ffffff; }\n    .prep-section { background: #e7f3ff; padding: 20px; border-radius: 8px; margin: 20px 0; }\n    .agenda-item { background: #f8f9fa; padding: 15px; margin: 10px 0; border-left: 4px solid #17a2b8; }\n    .cta-button { background: #17a2b8; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 20px 0; }\n  </style>\n</head>\n<body>\n  <div class=\"container\">\n    <div class=\"header\">\n      <h1>Your Demo is Confirmed! 🎉</h1>\n      <p>Let's make the most of our time together</p>\n    </div>\n    <div class=\"content\">\n      <p>Hi {{$json.first_name}},</p>\n      <p>I'm excited about our demo call! Here's everything you need to know:</p>\n      \n      <div class=\"prep-section\">\n        <h3>📅 Demo Details</h3>\n        <p><strong>Date:</strong> {{$json.demo_date}}</p>\n        <p><strong>Time:</strong> {{$json.demo_time}} ({{$json.timezone}})</p>\n        <p><strong>Duration:</strong> 30 minutes</p>\n        <p><strong>Meeting Link:</strong> <a href=\"{{$json.meeting_link}}\">Join Demo</a></p>\n      </div>\n      \n      <h3>📋 What We'll Cover</h3>\n      <div class=\"agenda-item\">\n        <strong>5 min:</strong> Quick intro and your specific challenges at {{$json.company}}\n      </div>\n      <div class=\"agenda-item\">\n        <strong>20 min:</strong> Live demo focused on {{$json.primary_use_case}}\n      </div>\n      <div class=\"agenda-item\">\n        <strong>5 min:</strong> Q&A and next steps\n      </div>\n      \n      <div class=\"prep-section\">\n        <h3>🎯 To maximize our time together:</h3>\n        <ul>\n          <li>Think about your biggest {{$json.main_challenge}} challenge</li>\n          <li>Consider who else should see this demo</li>\n          <li>Have any specific questions ready</li>\n        </ul>\n      </div>\n      \n      <a href=\"{{$parameter.baseUrl}}/demo-prep?contact={{$json.contactId}}\" class=\"cta-button\">Complete 2-Minute Prep Survey</a>\n      \n      <p>Questions before our call? Simply reply to this email.</p>\n      \n      <p>Looking forward to showing you how we can help {{$json.company}}!</p>\n      \n      <p>Best regards,<br>{{$json.assigned_sales_rep_name}}<br>{{$json.assigned_sales_rep_phone}}</p>\n    </div>\n  </div>\n</body>\n</html>",
+        "options": {
+          "ccEmail": "={{$json.assigned_sales_rep_email}}",
+          "appendAttribution": false
+        }
+      },
+      "id": "a1e0ezd2-zd4v-wd8u-aesru-xe7ded1e0c9d",
+      "name": "Send Demo Prep Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [1600, 950],
+      "credentials": {
+        "smtp": {
+          "id": "email-smtp",
+          "name": "SMTP Email"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Lead Enters Nurture Trigger": {
+      "main": [
+        [
+          {
+            "node": "Qualify for Nurture",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Behavior Score Change Trigger": {
+      "main": [
+        [
+          {
+            "node": "Qualify for Nurture",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Engagement Trigger": {
+      "main": [
+        [
+          {
+            "node": "Email Opened?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Email Clicked?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qualify for Nurture": {
+      "main": [
+        [
+          {
+            "node": "Get Contact Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Contact Profile": {
+      "main": [
+        [
+          {
+            "node": "Enrich Contact Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enrich Contact Data": {
+      "main": [
+        [
+          {
+            "node": "Route by Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Profile": {
+      "main": [
+        [
+          {
+            "node": "Start Enterprise Sequence",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Start Standard Sequence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Enterprise Sequence": {
+      "main": [
+        [
+          {
+            "node": "Send Welcome Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Standard Sequence": {
+      "main": [
+        [
+          {
+            "node": "Send Welcome Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Welcome Email": {
+      "main": [
+        [
+          {
+            "node": "Wait 2 Days",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 2 Days": {
+      "main": [
+        [
+          {
+            "node": "Check Engagement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Engagement": {
+      "main": [
+        [
+          {
+            "node": "High Engagement?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "High Engagement?": {
+      "main": [
+        [
+          {
+            "node": "Send Case Study Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Re-engagement Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Case Study Email": {
+      "main": [
+        [
+          {
+            "node": "Wait 3 Days",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Re-engagement Email": {
+      "main": [
+        [
+          {
+            "node": "Wait 3 Days",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 3 Days": {
+      "main": [
+        [
+          {
+            "node": "Update Lead Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Lead Score": {
+      "main": [
+        [
+          {
+            "node": "Sales Ready?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sales Ready?": {
+      "main": [
+        [
+          {
+            "node": "Handoff to Sales",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Continue Sequence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handoff to Sales": {
+      "main": [
+        [
+          {
+            "node": "Notify Sales Team",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Opened?": {
+      "main": [
+        [
+          {
+            "node": "Track Email Open",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Clicked?": {
+      "main": [
+        [
+          {
+            "node": "Track Email Click",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Track Email Click": {
+      "main": [
+        [
+          {
+            "node": "Demo Link Clicked?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Demo Link Clicked?": {
+      "main": [
+        [
+          {
+            "node": "Mark High Priority",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark High Priority": {
+      "main": [
+        [
+          {
+            "node": "Alert Sales on Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert Sales on Slack": {
+      "main": [
+        [
+          {
+            "node": "Send Demo Prep Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "errorWorkflow": {
+      "active": true
+    },
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "executionOrder": "v1"
+  },
+  "staticData": {},
+  "tags": [
+    {
+      "createdAt": "2024-01-21T10:00:00.000Z",
+      "updatedAt": "2024-01-21T10:00:00.000Z",
+      "id": "nurture-automation",
+      "name": "Nurture Automation"
+    },
+    {
+      "createdAt": "2024-01-21T10:00:00.000Z",
+      "updatedAt": "2024-01-21T10:00:00.000Z",
+      "id": "advanced-sequences",
+      "name": "Advanced Sequences"
+    }
+  ],
+  "triggerCount": 3,
+  "updatedAt": "2024-01-21T10:30:00.000Z",
+  "versionId": "12345678-1234-1234-1234-123456789012"
+}

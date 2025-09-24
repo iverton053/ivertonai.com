@@ -1,0 +1,689 @@
+{
+  "name": "A/B Testing Manager Workflow - Fixed",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "ab-test-cron",
+      "name": "Hourly A/B Test Check",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "requestMethod": "GET",
+        "url": "={{ $env.API_BASE_URL }}/api/ab-testing/tests?status=running",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 10000
+        }
+      },
+      "id": "get-running-tests",
+      "name": "Get Running Tests",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [460, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "api-auth",
+          "name": "Dashboard API Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-tests",
+              "leftValue": "={{ $json.tests && Array.isArray($json.tests) ? $json.tests.length : 0 }}",
+              "rightValue": "0",
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-tests-exist",
+      "name": "Check Tests Exist",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "tests",
+        "options": {
+          "destinationFieldName": "test"
+        }
+      },
+      "id": "split-tests",
+      "name": "Split Tests",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [900, 220]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "requestMethod": "GET",
+        "url": "={{ $env.API_BASE_URL }}/api/ab-testing/tests/{{ $json.test.id }}/results",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 15000
+        }
+      },
+      "id": "get-test-results",
+      "name": "Get Test Results",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1120, 220],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "api-auth",
+          "name": "Dashboard API Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "is-significant",
+              "leftValue": "={{ $json.significance && $json.significance.isSignificant }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            },
+            {
+              "id": "has-minimum-visitors",
+              "leftValue": "={{ $json.results && Array.isArray($json.results) ? $json.results.reduce((sum, variant) => sum + (variant.stats.unique_visitors || 0), 0) : 0 }}",
+              "rightValue": "100",
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            },
+            {
+              "id": "test-duration-met",
+              "leftValue": "={{ $json.test && $json.test.started_at ? Math.floor((Date.now() - new Date($json.test.started_at).getTime()) / (1000 * 60 * 60)) : 0 }}",
+              "rightValue": "={{ Math.floor(($json.test.duration_hours || 168) * 0.5) }}",
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-significance",
+      "name": "Check Statistical Significance",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1340, 220]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Find the winning variant with error handling\nconst inputData = $input.first().json;\nconst results = inputData.results || [];\nconst successMetric = inputData.test?.success_metric || 'conversion_rate';\n\nif (!Array.isArray(results) || results.length === 0) {\n  return {\n    error: 'No results available',\n    testId: inputData.test?.id,\n    testName: inputData.test?.name\n  };\n}\n\nlet winnerVariant = null;\nlet bestPerformance = -1;\n\nfor (const variant of results) {\n  if (!variant.stats) continue;\n  \n  let performance = 0;\n  \n  switch (successMetric) {\n    case 'conversion_rate':\n      performance = variant.stats.conversion_rate || 0;\n      break;\n    case 'click_rate':\n      performance = variant.stats.click_rate || 0;\n      break;\n    case 'open_rate':\n      performance = variant.stats.open_rate || 0;\n      break;\n    default:\n      performance = variant.stats.conversion_rate || 0;\n  }\n  \n  if (performance > bestPerformance) {\n    bestPerformance = performance;\n    winnerVariant = variant;\n  }\n}\n\nif (!winnerVariant) {\n  return {\n    error: 'No winner could be determined',\n    testId: inputData.test?.id,\n    testName: inputData.test?.name\n  };\n}\n\nreturn {\n  testId: inputData.test.id,\n  testName: inputData.test.name,\n  winnerId: winnerVariant.id,\n  winnerName: winnerVariant.name,\n  winnerPerformance: bestPerformance,\n  significance: inputData.significance || {},\n  results: results\n};"
+      },
+      "id": "determine-winner",
+      "name": "Determine Winner",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 120]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "no-error",
+              "leftValue": "={{ !$json.error }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            },
+            {
+              "id": "has-winner",
+              "leftValue": "={{ !!$json.winnerId }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-winner-valid",
+      "name": "Check Winner Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1560, 250]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "requestMethod": "POST",
+        "url": "={{ $env.API_BASE_URL }}/api/ab-testing/tests/{{ $json.testId }}/stop",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "winnerId",
+              "value": "={{ $json.winnerId }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 10000
+        }
+      },
+      "id": "stop-test",
+      "name": "Stop Test with Winner",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1780, 120],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "api-auth",
+          "name": "Dashboard API Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "post",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "🏆 **A/B Test Completed!**\\n\\n**Test:** {{ $json.testName }}\\n**Winner:** {{ $json.winnerName }}\\n**Performance:** {{ $json.winnerPerformance }}%\\n**Confidence:** {{ $json.significance.confidenceLevel || 'N/A' }}%\\n**Improvement:** {{ ($json.significance.improvement || 0).toFixed(2) }}%\\n\\nThe test has been automatically stopped and the winning variant has been declared."
+            },
+            {
+              "name": "channel",
+              "value": "{{ $env.SLACK_AB_TEST_CHANNEL || '#marketing' }}"
+            },
+            {
+              "name": "username",
+              "value": "A/B Test Bot"
+            },
+            {
+              "name": "icon_emoji",
+              "value": ":trophy:"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "notify-slack-winner",
+      "name": "Notify Slack - Winner",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2000, 120]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "test-expired",
+              "leftValue": "={{ $json.test && $json.test.started_at ? Math.floor((Date.now() - new Date($json.test.started_at).getTime()) / (1000 * 60 * 60)) : 0 }}",
+              "rightValue": "={{ $json.test.duration_hours || 168 }}",
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-expiry",
+      "name": "Check Test Expiry",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1560, 320]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Determine winner for expired test with error handling\nconst inputData = $input.first().json;\nconst results = inputData.results || [];\nconst successMetric = inputData.test?.success_metric || 'conversion_rate';\n\nif (!Array.isArray(results) || results.length === 0) {\n  return {\n    error: 'No results available for expired test',\n    testId: inputData.test?.id,\n    testName: inputData.test?.name,\n    isExpired: true\n  };\n}\n\nlet winnerVariant = null;\nlet bestPerformance = -1;\n\nfor (const variant of results) {\n  if (!variant.stats) continue;\n  \n  let performance = 0;\n  \n  switch (successMetric) {\n    case 'conversion_rate':\n      performance = variant.stats.conversion_rate || 0;\n      break;\n    case 'click_rate':\n      performance = variant.stats.click_rate || 0;\n      break;\n    case 'open_rate':\n      performance = variant.stats.open_rate || 0;\n      break;\n    default:\n      performance = variant.stats.conversion_rate || 0;\n  }\n  \n  if (performance > bestPerformance) {\n    bestPerformance = performance;\n    winnerVariant = variant;\n  }\n}\n\n// Even if no clear winner, pick the first variant as default\nif (!winnerVariant && results.length > 0) {\n  winnerVariant = results[0];\n  bestPerformance = 0;\n}\n\nreturn {\n  testId: inputData.test.id,\n  testName: inputData.test.name,\n  winnerId: winnerVariant?.id || 'A',\n  winnerName: winnerVariant?.name || 'Control',\n  winnerPerformance: bestPerformance,\n  isSignificant: inputData.significance?.isSignificant || false,\n  isExpired: true,\n  results: results\n};"
+      },
+      "id": "determine-winner-expired",
+      "name": "Determine Winner (Expired)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 320]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "requestMethod": "POST",
+        "url": "={{ $env.API_BASE_URL }}/api/ab-testing/tests/{{ $json.testId }}/stop",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "winnerId",
+              "value": "={{ $json.winnerId }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 10000
+        }
+      },
+      "id": "stop-expired-test",
+      "name": "Stop Expired Test",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2000, 320],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "api-auth",
+          "name": "Dashboard API Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "post",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "⏰ **A/B Test Expired**\\n\\n**Test:** {{ $json.testName }}\\n**Best Performer:** {{ $json.winnerName }}\\n**Performance:** {{ $json.winnerPerformance }}%\\n**Status:** {{ $json.isSignificant ? 'Statistically Significant' : 'Not Significant' }}\\n\\nTest duration completed. {{ $json.isSignificant ? 'Winner declared based on statistical significance.' : 'Best performer selected due to time expiry.' }}"
+            },
+            {
+              "name": "channel",
+              "value": "{{ $env.SLACK_AB_TEST_CHANNEL || '#marketing' }}"
+            },
+            {
+              "name": "username",
+              "value": "A/B Test Bot"
+            },
+            {
+              "name": "icon_emoji",
+              "value": ":alarm_clock:"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "notify-slack-expired",
+      "name": "Notify Slack - Expired",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2220, 320]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "low-performance",
+              "leftValue": "={{ $json.results && Array.isArray($json.results) ? $json.results.every(variant => (variant.stats?.unique_visitors || 0) < 50) : true }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            },
+            {
+              "id": "running-long",
+              "leftValue": "={{ $json.test && $json.test.started_at ? Math.floor((Date.now() - new Date($json.test.started_at).getTime()) / (1000 * 60 * 60)) : 0 }}",
+              "rightValue": "24",
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-low-traffic",
+      "name": "Check Low Traffic Warning",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1560, 520]
+    },
+    {
+      "parameters": {
+        "method": "post",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "⚠️ **A/B Test Low Traffic Warning**\\n\\n**Test:** {{ $json.test.name }}\\n**Running Time:** {{ Math.floor((Date.now() - new Date($json.test.started_at).getTime()) / (1000 * 60 * 60)) }} hours\\n**Total Visitors:** {{ ($json.results || []).reduce((sum, variant) => sum + (variant.stats?.unique_visitors || 0), 0) }}\\n\\nThis test has low traffic and may not reach statistical significance. Consider:\\n• Increasing traffic allocation\\n• Extending test duration\\n• Reviewing targeting criteria"
+            },
+            {
+              "name": "channel",
+              "value": "{{ $env.SLACK_AB_TEST_CHANNEL || '#marketing' }}"
+            },
+            {
+              "name": "username",
+              "value": "A/B Test Bot"
+            },
+            {
+              "name": "icon_emoji",
+              "value": ":warning:"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "notify-low-traffic",
+      "name": "Notify Low Traffic",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1780, 520]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "no-action-needed",
+      "name": "No Action Needed",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1780, 720]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "no-tests-running",
+      "name": "No Tests Running",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [900, 400]
+    }
+  ],
+  "connections": {
+    "Hourly A/B Test Check": {
+      "main": [
+        [
+          {
+            "node": "Get Running Tests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Running Tests": {
+      "main": [
+        [
+          {
+            "node": "Check Tests Exist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Tests Exist": {
+      "main": [
+        [
+          {
+            "node": "Split Tests",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Tests Running",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Tests": {
+      "main": [
+        [
+          {
+            "node": "Get Test Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Test Results": {
+      "main": [
+        [
+          {
+            "node": "Check Statistical Significance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Statistical Significance": {
+      "main": [
+        [
+          {
+            "node": "Determine Winner",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check Test Expiry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Determine Winner": {
+      "main": [
+        [
+          {
+            "node": "Check Winner Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Winner Valid": {
+      "main": [
+        [
+          {
+            "node": "Stop Test with Winner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stop Test with Winner": {
+      "main": [
+        [
+          {
+            "node": "Notify Slack - Winner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Test Expiry": {
+      "main": [
+        [
+          {
+            "node": "Determine Winner (Expired)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check Low Traffic Warning",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Determine Winner (Expired)": {
+      "main": [
+        [
+          {
+            "node": "Stop Expired Test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stop Expired Test": {
+      "main": [
+        [
+          {
+            "node": "Notify Slack - Expired",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Low Traffic Warning": {
+      "main": [
+        [
+          {
+            "node": "Notify Low Traffic",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Action Needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": {
+      "errorWorkflow": ""
+    }
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-09-22T10:00:00.000Z",
+      "updatedAt": "2024-09-22T10:00:00.000Z",
+      "id": "ab-testing",
+      "name": "A/B Testing"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-09-22T10:00:00.000Z",
+  "versionId": "2.0"
+}

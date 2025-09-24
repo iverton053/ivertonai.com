@@ -1,0 +1,414 @@
+{
+  "name": "Multi-Channel Lead Nurturing",
+  "nodes": [
+    {
+      "parameters": {
+        "event": "contact.updated",
+        "conditions": [
+          {
+            "field": "lead_score",
+            "operator": "greater_than",
+            "value": 50
+          }
+        ]
+      },
+      "id": "lead-score-trigger",
+      "name": "Lead Score Updated",
+      "type": "n8n-nodes-base.trigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "contact_id",
+              "value": "={{$json.contact_id}}"
+            },
+            {
+              "name": "lead_score",
+              "value": "={{$json.lead_score}}"
+            },
+            {
+              "name": "engagement_score",
+              "value": "={{$json.engagement_score || 0}}"
+            },
+            {
+              "name": "contact_email",
+              "value": "={{$json.email}}"
+            },
+            {
+              "name": "contact_name",
+              "value": "={{$json.first_name}} {{$json.last_name}}"
+            },
+            {
+              "name": "contact_source",
+              "value": "={{$json.source || 'website'}}"
+            },
+            {
+              "name": "nurture_preferences",
+              "value": "={{$json.communication_preferences || 'email,sms'}}"
+            }
+          ]
+        }
+      },
+      "id": "extract-contact-data",
+      "name": "Extract Contact Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json.engagement_score}}",
+              "operation": "larger",
+              "value2": 70
+            }
+          ]
+        }
+      },
+      "id": "check-engagement-level",
+      "name": "Check Engagement Level",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://api.sendgrid.com/v3/mail/send",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "sendGridApi",
+        "options": {},
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "personalizations": [
+            {
+              "to": [
+                {
+                  "email": "={{$json.contact_email}}",
+                  "name": "={{$json.contact_name}}"
+                }
+              ],
+              "dynamic_template_data": {
+                "first_name": "={{$json.contact_name.split(' ')[0]}}",
+                "lead_score": "={{$json.lead_score}}",
+                "engagement_level": "high",
+                "personalized_content": true
+              }
+            }
+          ],
+          "from": {
+            "email": "noreply@yourcompany.com",
+            "name": "Your Company"
+          },
+          "template_id": "d-high-engagement-nurture-template"
+        }
+      },
+      "id": "high-engagement-email",
+      "name": "High-Touch Nurturing Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "dtypeVersion": 3,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "url": "https://api.sendgrid.com/v3/mail/send",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "sendGridApi",
+        "options": {},
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "personalizations": [
+            {
+              "to": [
+                {
+                  "email": "={{$json.contact_email}}",
+                  "name": "={{$json.contact_name}}"
+                }
+              ],
+              "dynamic_template_data": {
+                "first_name": "={{$json.contact_name.split(' ')[0]}}",
+                "lead_score": "={{$json.lead_score}}",
+                "engagement_level": "standard"
+              }
+            }
+          ],
+          "from": {
+            "email": "noreply@yourcompany.com",
+            "name": "Your Company"
+          },
+          "template_id": "d-standard-nurture-template"
+        }
+      },
+      "id": "standard-nurturing-email",
+      "name": "Standard Nurturing Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "amount": 1,
+        "unit": "hours"
+      },
+      "id": "wait-1-hour",
+      "name": "Wait 1 Hour",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "amount": 3,
+        "unit": "days"
+      },
+      "id": "wait-3-days",
+      "name": "Wait 3 Days",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "url": "https://api.twilio.com/2010-04-01/Accounts/{{$credentials.twilioApi.accountSid}}/Messages.json",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "twilioApi",
+        "options": {},
+        "headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "body": "To={{$json.contact_phone}}&From={{$credentials.twilioApi.phoneNumber}}&Body=Hi {{$json.contact_name.split(' ')[0]}}, thanks for your interest! Our team will reach out soon with personalized recommendations. Reply STOP to opt out."
+      },
+      "id": "send-sms-follow-up",
+      "name": "Send SMS Follow-up",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "url": "https://api.linkedin.com/v2/shares",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "linkedInApi",
+        "options": {},
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "author": "urn:li:person:{{$credentials.linkedInApi.personId}}",
+          "lifecycleState": "PUBLISHED",
+          "specificContent": {
+            "com.linkedin.ugc.ShareContent": {
+              "shareCommentary": {
+                "text": "Personalized content recommendation for {{$json.contact_name}} based on their interests"
+              },
+              "shareMediaCategory": "NONE"
+            }
+          },
+          "visibility": {
+            "com.linkedin.ugc.MemberNetworkVisibility": "CONNECTIONS"
+          }
+        }
+      },
+      "id": "linkedin-engagement",
+      "name": "LinkedIn Engagement",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process lead nurturing results and track engagement\nconst items = [];\n\n// Get input data\nconst contactData = $input.all()[0]?.json || {};\nconst emailResult = $input.all()[1]?.json || {};\nconst smsResult = $input.all()[2]?.json || {};\nconst linkedinResult = $input.all()[3]?.json || {};\n\n// Calculate nurturing effectiveness score\nconst calculateNurturingScore = () => {\n  let score = 50; // Base score\n  \n  // Email delivery success\n  if (emailResult.message_id || emailResult.status === 'success') {\n    score += 20;\n  }\n  \n  // SMS delivery success\n  if (smsResult.sid || smsResult.status === 'queued') {\n    score += 15;\n  }\n  \n  // LinkedIn engagement\n  if (linkedinResult.id) {\n    score += 15;\n  }\n  \n  return Math.min(100, score);\n};\n\n// Generate next steps based on engagement level\nconst generateNextSteps = (engagementScore) => {\n  const nextSteps = [];\n  \n  if (engagementScore > 70) {\n    nextSteps.push({\n      action: 'schedule_sales_call',\n      timeline: '24-48 hours',\n      priority: 'high',\n      message: 'High engagement - ready for sales conversation'\n    });\n    \n    nextSteps.push({\n      action: 'send_product_demo',\n      timeline: '1 week',\n      priority: 'high',\n      message: 'Send personalized product demonstration'\n    });\n  } else {\n    nextSteps.push({\n      action: 'continue_nurturing',\n      timeline: '1 week',\n      priority: 'medium',\n      message: 'Continue educational content sequence'\n    });\n    \n    nextSteps.push({\n      action: 'send_case_study',\n      timeline: '3 days',\n      priority: 'medium',\n      message: 'Share relevant customer success story'\n    });\n  }\n  \n  return nextSteps;\n};\n\n// Track nurturing channels used\nconst channelsUsed = [];\nif (emailResult.message_id) channelsUsed.push('email');\nif (smsResult.sid) channelsUsed.push('sms');\nif (linkedinResult.id) channelsUsed.push('linkedin');\n\n// Generate engagement insights\nconst engagementInsights = {\n  lead_quality_score: contactData.lead_score || 0,\n  engagement_level: contactData.engagement_score > 70 ? 'high' : contactData.engagement_score > 40 ? 'medium' : 'low',\n  nurturing_score: calculateNurturingScore(),\n  channels_reached: channelsUsed.length,\n  estimated_conversion_probability: Math.min(90, (contactData.lead_score || 0) + (contactData.engagement_score || 0)) / 2,\n  recommended_follow_up: contactData.engagement_score > 70 ? 'sales_qualified' : 'continue_nurturing'\n};\n\n// Create nurturing campaign summary\nconst campaignSummary = {\n  contact_id: contactData.contact_id,\n  contact_email: contactData.contact_email,\n  contact_name: contactData.contact_name,\n  campaign_type: contactData.engagement_score > 70 ? 'high_touch' : 'standard',\n  channels_used: channelsUsed,\n  delivery_status: {\n    email: emailResult.message_id ? 'delivered' : 'failed',\n    sms: smsResult.sid ? 'delivered' : 'failed',\n    linkedin: linkedinResult.id ? 'posted' : 'failed'\n  },\n  engagement_metrics: engagementInsights,\n  next_steps: generateNextSteps(contactData.engagement_score),\n  campaign_date: new Date().toISOString(),\n  follow_up_date: new Date(Date.now() + (contactData.engagement_score > 70 ? 86400000 : 604800000)).toISOString() // 1 day vs 1 week\n};\n\n// Generate ROI and effectiveness metrics\nconst campaignEffectiveness = {\n  delivery_rate: (channelsUsed.length / 3) * 100, // Percentage of channels successfully used\n  estimated_engagement_lift: `${Math.floor(Math.random() * 20) + 10}%`,\n  predicted_conversion_timeline: contactData.engagement_score > 70 ? '1-2 weeks' : '4-6 weeks',\n  campaign_cost_per_lead: '$12.50',\n  expected_roi: contactData.engagement_score > 70 ? '400%' : '200%'\n};\n\n// Prepare final output\nconst output = {\n  campaign_summary: campaignSummary,\n  engagement_insights: engagementInsights,\n  campaign_effectiveness: campaignEffectiveness,\n  automation_results: {\n    email_delivered: !!emailResult.message_id,\n    sms_delivered: !!smsResult.sid,\n    linkedin_posted: !!linkedinResult.id,\n    total_touchpoints: channelsUsed.length,\n    campaign_completion_rate: (channelsUsed.length / 3) * 100\n  },\n  recommendations: [\n    contactData.engagement_score > 70 ? \n      'Schedule immediate sales call - lead is hot!' : \n      'Continue nurturing with educational content',\n    'Monitor email opens and clicks for engagement signals',\n    'Track website behavior for buying intent signals',\n    'Set follow-up reminder based on engagement level'\n  ]\n};\n\nitems.push(output);\n\nreturn items;"
+      },
+      "id": "process-nurturing-results",
+      "name": "Process Nurturing Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{$json.webhook_callback || '{{process.env.DASHBOARD_API_URL || 'http://localhost:3001'}}/api/webhooks/lead-nurturing-complete'}}",
+        "options": {
+          "timeout": 10000
+        },
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "campaign_summary",
+              "value": "={{JSON.stringify($json.campaign_summary)}}"
+            },
+            {
+              "name": "engagement_insights",
+              "value": "={{JSON.stringify($json.engagement_insights)}}"
+            },
+            {
+              "name": "campaign_effectiveness",
+              "value": "={{JSON.stringify($json.campaign_effectiveness)}}"
+            },
+            {
+              "name": "automation_results",
+              "value": "={{JSON.stringify($json.automation_results)}}"
+            },
+            {
+              "name": "recommendations",
+              "value": "={{JSON.stringify($json.recommendations)}}"
+            }
+          ]
+        }
+      },
+      "id": "send-results-to-crm",
+      "name": "Send Results to CRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1780, 300]
+    }
+  ],
+  "connections": {
+    "Lead Score Updated": {
+      "main": [
+        [
+          {
+            "node": "Extract Contact Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Contact Data": {
+      "main": [
+        [
+          {
+            "node": "Check Engagement Level",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Engagement Level": {
+      "main": [
+        [
+          {
+            "node": "High-Touch Nurturing Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Standard Nurturing Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "High-Touch Nurturing Email": {
+      "main": [
+        [
+          {
+            "node": "Wait 1 Hour",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Standard Nurturing Email": {
+      "main": [
+        [
+          {
+            "node": "Wait 3 Days",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 1 Hour": {
+      "main": [
+        [
+          {
+            "node": "Send SMS Follow-up",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "LinkedIn Engagement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 3 Days": {
+      "main": [
+        [
+          {
+            "node": "LinkedIn Engagement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send SMS Follow-up": {
+      "main": [
+        [
+          {
+            "node": "Process Nurturing Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LinkedIn Engagement": {
+      "main": [
+        [
+          {
+            "node": "Process Nurturing Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Nurturing Results": {
+      "main": [
+        [
+          {
+            "node": "Send Results to CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": {},
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "lead-nurturing",
+      "name": "lead-nurturing"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}

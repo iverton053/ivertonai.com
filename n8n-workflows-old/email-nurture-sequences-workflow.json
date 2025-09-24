@@ -1,0 +1,792 @@
+{
+  "name": "Email Nurture Sequences Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lead-status-change",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Lead Status Change Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "lead-status-webhook"
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/crm/leads/{{$json.leadId}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "options": {}
+      },
+      "id": "get-lead-data",
+      "name": "Get Lead Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "lead-score-check",
+              "leftValue": "={{$json.data.lead_scores[0].score}}",
+              "rightValue": 50,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            },
+            {
+              "id": "status-check",
+              "leftValue": "={{$json.data.status}}",
+              "rightValue": "new",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "lead-qualification-check",
+      "name": "Lead Qualification Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Determine email sequence based on lead data\nconst leadData = $input.first().json.data;\nconst leadScore = leadData.lead_scores[0]?.score || 0;\nconst leadSource = leadData.source;\nconst daysSinceCreated = Math.floor((Date.now() - new Date(leadData.created_at).getTime()) / (1000 * 60 * 60 * 24));\n\nlet emailSequence;\nlet sequenceStep = 1;\n\n// Check if lead already has nurture sequence progress\nif (leadData.custom_fields && leadData.custom_fields.nurture_sequence) {\n  const nurture = JSON.parse(leadData.custom_fields.nurture_sequence);\n  emailSequence = nurture.sequence_type;\n  sequenceStep = (nurture.current_step || 0) + 1;\n} else {\n  // Determine initial sequence based on lead characteristics\n  if (leadScore >= 75) {\n    emailSequence = 'high_intent';\n  } else if (leadScore >= 50) {\n    emailSequence = 'medium_intent';\n  } else {\n    emailSequence = 'awareness_building';\n  }\n}\n\n// Define sequence configurations\nconst sequences = {\n  high_intent: {\n    name: 'High Intent Lead Sequence',\n    emails: [\n      { template: 'welcome_high_intent', delay: 0 },\n      { template: 'case_study_relevant', delay: 1 },\n      { template: 'demo_invitation', delay: 3 },\n      { template: 'consultation_offer', delay: 7 },\n      { template: 'final_value_proposition', delay: 14 }\n    ]\n  },\n  medium_intent: {\n    name: 'Medium Intent Lead Sequence',\n    emails: [\n      { template: 'welcome_medium_intent', delay: 0 },\n      { template: 'educational_content_1', delay: 2 },\n      { template: 'social_proof', delay: 5 },\n      { template: 'educational_content_2', delay: 10 },\n      { template: 'soft_pitch', delay: 15 },\n      { template: 'demo_invitation', delay: 21 }\n    ]\n  },\n  awareness_building: {\n    name: 'Awareness Building Sequence',\n    emails: [\n      { template: 'welcome_nurture', delay: 0 },\n      { template: 'educational_content_1', delay: 3 },\n      { template: 'industry_insights', delay: 7 },\n      { template: 'educational_content_2', delay: 14 },\n      { template: 'success_stories', delay: 21 },\n      { template: 'value_demonstration', delay: 28 },\n      { template: 'gentle_pitch', delay: 35 }\n    ]\n  }\n};\n\nconst currentSequence = sequences[emailSequence];\nconst currentEmail = currentSequence.emails[sequenceStep - 1];\n\n// Check if sequence is complete\nif (!currentEmail) {\n  return [{\n    json: {\n      sequenceComplete: true,\n      leadData,\n      emailSequence,\n      sequenceStep\n    }\n  }];\n}\n\n// Calculate send delay (for scheduled sends)\nconst sendDate = new Date();\nsendDate.setDate(sendDate.getDate() + currentEmail.delay);\n\nreturn [{\n  json: {\n    leadData,\n    emailSequence,\n    sequenceStep,\n    currentEmail,\n    sendDate: sendDate.toISOString(),\n    sequenceComplete: false,\n    sequenceName: currentSequence.name,\n    isImmediate: currentEmail.delay === 0\n  }\n}];"
+      },
+      "id": "sequence-logic",
+      "name": "Email Sequence Logic",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "sequence-complete-check",
+              "leftValue": "={{$json.sequenceComplete}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "sequence-complete-check",
+      "name": "Sequence Complete Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/email/templates",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "agencyId",
+              "value": "={{$json.leadData.agency_id}}"
+            },
+            {
+              "name": "category",
+              "value": "nurture_sequence"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "get-email-templates",
+      "name": "Get Email Templates",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1340,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Find and customize the email template\nconst templateData = $input.first().json;\nconst sequenceData = $input.all()[0].json;\nconst templates = templateData.data;\n\n// Find the template for current email\nconst templateName = sequenceData.currentEmail.template;\nconst template = templates.find(t => t.name.includes(templateName) || t.category === templateName);\n\nif (!template) {\n  throw new Error(`Template not found: ${templateName}`);\n}\n\n// Personalization data\nconst lead = sequenceData.leadData;\nconst personalization = {\n  firstName: lead.first_name || 'there',\n  lastName: lead.last_name || '',\n  company: lead.company || '',\n  jobTitle: lead.job_title || '',\n  leadScore: lead.lead_scores[0]?.score || 0,\n  source: lead.source || 'website',\n  sequenceName: sequenceData.sequenceName,\n  sequenceStep: sequenceData.sequenceStep\n};\n\n// Replace template variables\nlet subject = template.subject;\nlet content = template.content;\n\n// Basic personalization replacements\nObject.keys(personalization).forEach(key => {\n  const placeholder = new RegExp(`{{${key}}}`, 'gi');\n  subject = subject.replace(placeholder, personalization[key]);\n  content = content.replace(placeholder, personalization[key]);\n});\n\n// Advanced personalization based on lead characteristics\nif (lead.lead_scores[0]?.score >= 75) {\n  content = content.replace('{{urgency_level}}', 'high');\n  content = content.replace('{{call_to_action}}', 'Schedule a call today');\n} else if (lead.lead_scores[0]?.score >= 50) {\n  content = content.replace('{{urgency_level}}', 'medium');\n  content = content.replace('{{call_to_action}}', 'Learn more about our solutions');\n} else {\n  content = content.replace('{{urgency_level}}', 'low');\n  content = content.replace('{{call_to_action}}', 'Explore our resources');\n}\n\n// Industry-specific content\nif (lead.custom_fields && lead.custom_fields.industry) {\n  const industry = JSON.parse(lead.custom_fields.industry);\n  content = content.replace('{{industry_specific}}', `As a ${industry} professional,`);\n} else {\n  content = content.replace('{{industry_specific}}', '');\n}\n\nreturn [{\n  json: {\n    ...sequenceData,\n    emailContent: {\n      templateId: template.id,\n      subject: subject,\n      content: content,\n      previewText: template.preview_text || subject.substring(0, 100)\n    },\n    personalization\n  }\n}];"
+      },
+      "id": "personalize-email",
+      "name": "Personalize Email Content",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "immediate-send-check",
+              "leftValue": "={{$json.isImmediate}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-timing-check",
+      "name": "Send Timing Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/email/campaigns",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "agencyId",
+              "value": "={{$json.leadData.agency_id}}"
+            },
+            {
+              "name": "clientId",
+              "value": "={{$json.leadData.client_id}}"
+            },
+            {
+              "name": "name",
+              "value": "Nurture Sequence - {{$json.sequenceName}} - Step {{$json.sequenceStep}}"
+            },
+            {
+              "name": "subject",
+              "value": "={{$json.emailContent.subject}}"
+            },
+            {
+              "name": "templateId",
+              "value": "={{$json.emailContent.templateId}}"
+            },
+            {
+              "name": "listIds",
+              "value": "[]"
+            },
+            {
+              "name": "scheduledDate",
+              "value": "={{$json.isImmediate ? null : $json.sendDate}}"
+            },
+            {
+              "name": "segmentFilters",
+              "value": "[{\"field\": \"email\", \"operator\": \"equals\", \"value\": \"{{$json.leadData.email}}\"}]"
+            },
+            {
+              "name": "trackingSettings",
+              "value": "{\"trackOpens\": true, \"trackClicks\": true, \"trackConversions\": true}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "create-email-campaign",
+      "name": "Create Email Campaign",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        2000,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/email/campaigns/{{$json.data.id}}/send",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "sendImmediately",
+              "value": "={{$('Send Timing Check').item.json.isImmediate}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-email-campaign",
+      "name": "Send Email Campaign",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        2220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/crm/leads/{{$('Get Lead Data').item.json.data.id}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "custom_fields",
+              "value": "={{JSON.stringify({\n  ...JSON.parse($('Get Lead Data').item.json.data.custom_fields || '{}'),\n  nurture_sequence: {\n    sequence_type: $('Email Sequence Logic').item.json.emailSequence,\n    current_step: $('Email Sequence Logic').item.json.sequenceStep,\n    last_email_sent: new Date().toISOString(),\n    next_email_date: $('Email Sequence Logic').item.json.sendDate\n  }\n})}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "update-lead-sequence-progress",
+      "name": "Update Lead Sequence Progress",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        2440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/crm/leads/{{$('Get Lead Data').item.json.data.id}}/activity",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "type",
+              "value": "email_sequence_sent"
+            },
+            {
+              "name": "description",
+              "value": "Nurture sequence email sent: {{$('Email Sequence Logic').item.json.sequenceName}} - Step {{$('Email Sequence Logic').item.json.sequenceStep}}"
+            },
+            {
+              "name": "teamMemberId",
+              "value": "system"
+            },
+            {
+              "name": "outcome",
+              "value": "email_sent"
+            },
+            {
+              "name": "nextAction",
+              "value": "{{$('Email Sequence Logic').item.json.sequenceComplete ? 'Sequence completed - manual follow-up required' : 'Next email scheduled for ' + $('Email Sequence Logic').item.json.sendDate}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "log-lead-activity",
+      "name": "Log Lead Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        2660,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/crm/leads/{{$('Get Lead Data').item.json.data.id}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "status",
+              "value": "qualified"
+            },
+            {
+              "name": "notes",
+              "value": "Nurture sequence completed successfully. Lead is ready for sales follow-up."
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "mark-lead-qualified",
+      "name": "Mark Lead as Qualified",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1340,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "delay-required-check",
+              "leftValue": "={{$json.isImmediate}}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "schedule-delay-check",
+      "name": "Schedule Delay Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "amount": "={{Math.max(1, Math.floor((new Date($json.sendDate) - new Date()) / (1000 * 60)))}}",
+        "unit": "minutes"
+      },
+      "id": "schedule-email-delay",
+      "name": "Schedule Email Delay",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        2000,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/crm/leads/{{$('Get Lead Data').item.json.data.id}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "status",
+              "value": "unqualified"
+            },
+            {
+              "name": "notes",
+              "value": "Lead does not meet qualification criteria for nurture sequence."
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "mark-lead-unqualified",
+      "name": "Mark Lead as Unqualified",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        900,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Error handling and logging\nconst error = $input.first().json;\nconst leadData = $('Get Lead Data').item?.json?.data;\n\nconsole.error('Email Nurture Sequence Error:', {\n  leadId: leadData?.id,\n  error: error,\n  timestamp: new Date().toISOString()\n});\n\n// Optionally send error notification\nreturn [{\n  json: {\n    error: true,\n    leadId: leadData?.id || 'unknown',\n    errorMessage: error.message || 'Unknown error occurred',\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "error-handler",
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/communication/notifications",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "agencyId",
+              "value": "={{$('Get Lead Data').item.json.data.agency_id}}"
+            },
+            {
+              "name": "recipientId",
+              "value": "admin"
+            },
+            {
+              "name": "title",
+              "value": "Email Nurture Sequence Error"
+            },
+            {
+              "name": "message",
+              "value": "Error in email nurture sequence for lead {{$('Get Lead Data').item.json.data.id}}: {{$json.errorMessage}}"
+            },
+            {
+              "name": "type",
+              "value": "error"
+            },
+            {
+              "name": "priority",
+              "value": "high"
+            },
+            {
+              "name": "channels",
+              "value": "[\"in_app\", \"email\"]"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-error-notification",
+      "name": "Send Error Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        3100,
+        200
+      ]
+    }
+  ],
+  "connections": {
+    "Lead Status Change Webhook": {
+      "main": [
+        [
+          {
+            "node": "Get Lead Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Lead Data": {
+      "main": [
+        [
+          {
+            "node": "Lead Qualification Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead Qualification Check": {
+      "main": [
+        [
+          {
+            "node": "Email Sequence Logic",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Lead as Unqualified",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Sequence Logic": {
+      "main": [
+        [
+          {
+            "node": "Sequence Complete Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sequence Complete Check": {
+      "main": [
+        [
+          {
+            "node": "Mark Lead as Qualified",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Email Templates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Email Templates": {
+      "main": [
+        [
+          {
+            "node": "Personalize Email Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Personalize Email Content": {
+      "main": [
+        [
+          {
+            "node": "Send Timing Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Timing Check": {
+      "main": [
+        [
+          {
+            "node": "Create Email Campaign",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Schedule Delay Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Email Campaign": {
+      "main": [
+        [
+          {
+            "node": "Send Email Campaign",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email Campaign": {
+      "main": [
+        [
+          {
+            "node": "Update Lead Sequence Progress",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Lead Sequence Progress": {
+      "main": [
+        [
+          {
+            "node": "Log Lead Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Delay Check": {
+      "main": [
+        [
+          {
+            "node": "Schedule Email Delay",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Email Delay": {
+      "main": [
+        [
+          {
+            "node": "Create Email Campaign",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "error-handler"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "nurture-sequence",
+      "name": "Email Nurture"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}

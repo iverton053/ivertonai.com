@@ -1,0 +1,967 @@
+{
+  "name": "content_gap_topic_cluster_analyzer",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "content-gap-analyzer",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "e1319994-45f6-4e95-a1bb-c1523db7d8a9",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1008,
+        272
+      ],
+      "webhookId": "content-gap-webhook-001"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get input from Webhook body\nconst inputData = $input.first().json.body;\n\n// Validate required fields\nif (!inputData.website_url || !inputData.competitor_urls) {\n  throw new Error('Missing required fields: website_url and competitor_urls');\n}\n\n// Normalize client URL\nconst clientUrl = inputData.website_url.replace(/\\/$/, '');\n\n// Normalize competitor URLs\nconst competitorUrls = Array.isArray(inputData.competitor_urls)\n  ? inputData.competitor_urls.map(url => url.replace(/\\/$/, ''))\n  : [inputData.competitor_urls.replace(/\\/$/, '')];\n\n// Extract domain without using URL class\nfunction extractDomain(url) {\n  return url.replace(/^https?:\\/\\//, '').split('/')[0];\n}\n\nconst analysisData = {\n  analysis_metadata: {\n    analyzed_date: new Date().toISOString(),\n    client_url: clientUrl,\n    competitor_urls: competitorUrls,\n    total_topics_analyzed: 0,\n    analysis_confidence: 0,\n    data_sources_used: [\n      \"serp_api\",\n      \"google_trends\",\n      \"openai_analysis\",\n      \"content_scraping\"\n    ],\n    limitations: \"Search volumes are trend-based estimates, traffic projections are ranges\"\n  },\n  urls_to_analyze: [clientUrl, ...competitorUrls],\n  client_domain: extractDomain(clientUrl),\n  competitor_domains: competitorUrls.map(extractDomain)\n};\n\nreturn analysisData;"
+      },
+      "id": "f13622e5-7d1e-4c5d-89c1-a680885ee175",
+      "name": "Data Preparation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -848,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://app.scrapingbee.com/api/v1/",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "api_key",
+              "value": "LI8AKZ580B31RCTX7KEDH9GCX2NE38C5SDS9V2BAT0UYV4CB9H4USHZOGZU59AJTRZN6M3ZM987O7VRV"
+            },
+            {
+              "name": "url",
+              "value": "={{ $json.analysis_metadata.client_url }}"
+            },
+            {
+              "name": "render_js",
+              "value": "true"
+            },
+            {
+              "name": "block_resources",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "6c55cedb-fd33-47fa-9b9e-0699809a2f76",
+      "name": "Scrape Client Site",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -128,
+        -16
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Enhanced Content Analysis Node - Fixed for Merged Scraped Data\nconst items = $input.all();\n\n// Get the original data preparation data\nconst dataPreparationData = $('Data Preparation').item.json;\n\nconsole.log('=== ENHANCED CONTENT ANALYSIS DEBUG ===');\nconsole.log('Total items received:', items.length);\nconsole.log('Data Preparation data:', JSON.stringify(dataPreparationData, null, 2));\n\n// Initialize the analysis structure\nconst analysisData = {\n  client_domain: dataPreparationData.client_domain || 'unknown',\n  competitor_domains: dataPreparationData.competitor_domains || [],\n  analysis_metadata: dataPreparationData.analysis_metadata || {},\n  site_analysis: {},\n  urls_analyzed: []\n};\n\n// Function to extract domain from URL\nfunction extractDomain(url) {\n  try {\n    return url.replace(/^https?:\\/\\//, '').split('/')[0];\n  } catch (e) {\n    return 'unknown';\n  }\n}\n\n// Function to extract text content from HTML\nfunction extractTextFromHTML(html) {\n  if (!html || typeof html !== 'string') return '';\n  \n  // Remove script and style elements\n  let text = html.replace(/<script\\b[^<]*(?:(?!<\\/script>)<[^<]*)*<\\/script>/gi, '');\n  text = text.replace(/<style\\b[^<]*(?:(?!<\\/style>)<[^<]*)*<\\/style>/gi, '');\n  \n  // Remove HTML tags\n  text = text.replace(/<[^>]+>/g, ' ');\n  \n  // Clean up whitespace\n  text = text.replace(/\\s+/g, ' ').trim();\n  \n  return text;\n}\n\n// Function to extract key topics from content\nfunction extractTopics(content) {\n  if (!content) return [];\n  \n  const contentLower = content.toLowerCase();\n  const topics = [];\n  \n  // Marketing automation keywords\n  const marketingKeywords = [\n    'marketing automation', 'email marketing', 'lead generation', 'crm integration',\n    'campaign management', 'customer journey', 'marketing funnel', 'lead nurturing',\n    'marketing qualified leads', 'sales automation', 'drip campaigns'\n  ];\n  \n  // AI and technology keywords\n  const aiKeywords = [\n    'artificial intelligence', 'machine learning', 'ai tools', 'automation platform',\n    'intelligent automation', 'predictive analytics', 'data analytics', 'business intelligence'\n  ];\n  \n  // Content and SEO keywords\n  const contentKeywords = [\n    'content marketing', 'seo optimization', 'content creation', 'blog management',\n    'social media marketing', 'digital marketing', 'online marketing', 'content strategy'\n  ];\n  \n  // Check for topic presence\n  marketingKeywords.forEach(keyword => {\n    if (contentLower.includes(keyword)) {\n      topics.push(`Marketing: ${keyword}`);\n    }\n  });\n  \n  aiKeywords.forEach(keyword => {\n    if (contentLower.includes(keyword)) {\n      topics.push(`AI/Tech: ${keyword}`);\n    }\n  });\n  \n  contentKeywords.forEach(keyword => {\n    if (contentLower.includes(keyword)) {\n      topics.push(`Content: ${keyword}`);\n    }\n  });\n  \n  return [...new Set(topics)]; // Remove duplicates\n}\n\n// Function to count headings in HTML\nfunction countHeadings(html) {\n  if (!html) return 0;\n  const headingRegex = /<h[1-6][^>]*>/gi;\n  const matches = html.match(headingRegex);\n  return matches ? matches.length : 0;\n}\n\n// Process each scraped item\nitems.forEach((item, index) => {\n  try {\n    console.log(`Processing item ${index}:`, Object.keys(item.json || {}));\n    \n    if (!item.json || !item.json.data) {\n      console.log(`Item ${index} has no data property`);\n      return;\n    }\n    \n    const url = item.json.url || `unknown-${index}`;\n    const htmlContent = item.json.data;\n    const domain = extractDomain(url);\n    \n    console.log(`Processing URL: ${url}`);\n    console.log(`Domain: ${domain}`);\n    console.log(`Content length: ${htmlContent ? htmlContent.length : 0}`);\n    \n    // Extract and analyze content\n    const textContent = extractTextFromHTML(htmlContent);\n    const topics = extractTopics(textContent);\n    const headingCount = countHeadings(htmlContent);\n    const wordCount = textContent.split(/\\s+/).filter(word => word.length > 0).length;\n    \n    // Store analysis\n    analysisData.site_analysis[domain] = {\n      url: url,\n      domain: domain,\n      content: textContent.substring(0, 2000), // Store first 2000 chars for analysis\n      word_count: wordCount,\n      heading_count: headingCount,\n      topics_identified: topics,\n      topics_present: topics.reduce((acc, topic) => {\n        acc[topic] = true;\n        return acc;\n      }, {}),\n      content_analysis: {\n        has_marketing_content: topics.some(t => t.includes('Marketing')),\n        has_ai_content: topics.some(t => t.includes('AI/Tech')),\n        has_content_marketing: topics.some(t => t.includes('Content')),\n        content_depth: wordCount > 1000 ? 'comprehensive' : wordCount > 500 ? 'medium' : 'basic',\n        technical_seo: headingCount > 5 ? 'good' : 'basic'\n      },\n      scraped_at: new Date().toISOString()\n    };\n    \n    analysisData.urls_analyzed.push(url);\n    \n    console.log(`Analysis for ${domain}:`, {\n      topics: topics.length,\n      words: wordCount,\n      headings: headingCount\n    });\n    \n  } catch (error) {\n    console.error(`Error processing item ${index}:`, error.message);\n    \n    // Add error entry\n    analysisData.site_analysis[`error-${index}`] = {\n      url: item.json?.url || `unknown-${index}`,\n      error: error.message,\n      scraped_at: new Date().toISOString()\n    };\n  }\n});\n\n// Validate client domain analysis\nif (analysisData.client_domain !== 'unknown' && !analysisData.site_analysis[analysisData.client_domain]) {\n  console.log('WARNING: Client domain not found in scraped data');\n  \n  // Try to find client data by URL matching\n  const clientUrl = analysisData.analysis_metadata.client_url;\n  if (clientUrl) {\n    const matchingDomain = Object.keys(analysisData.site_analysis).find(domain => {\n      const siteData = analysisData.site_analysis[domain];\n      return siteData.url && siteData.url.includes(clientUrl.replace(/^https?:\\/\\//, ''));\n    });\n    \n    if (matchingDomain) {\n      console.log(`Found client data under domain: ${matchingDomain}`);\n      analysisData.client_domain = matchingDomain;\n    }\n  }\n}\n\n// Enhanced summary with better metrics\nconst totalSitesAnalyzed = Object.keys(analysisData.site_analysis).length;\nconst sitesWithErrors = Object.keys(analysisData.site_analysis).filter(key => \n  analysisData.site_analysis[key].error\n).length;\nconst successfulAnalyses = totalSitesAnalyzed - sitesWithErrors;\n\nconst allTopics = [];\nObject.values(analysisData.site_analysis).forEach(site => {\n  if (site.topics_identified) {\n    allTopics.push(...site.topics_identified);\n  }\n});\n\nconst uniqueTopics = [...new Set(allTopics)];\n\n// Update analysis metadata\nanalysisData.analysis_metadata = {\n  ...analysisData.analysis_metadata,\n  processing_timestamp: new Date().toISOString(),\n  total_urls_processed: totalSitesAnalyzed,\n  successful_analyses: successfulAnalyses,\n  failed_analyses: sitesWithErrors,\n  total_unique_topics_found: uniqueTopics.length,\n  analysis_confidence: successfulAnalyses > 0 ? Math.min(85 + (successfulAnalyses * 5), 95) : 30,\n  data_sources_used: [\n    \"content_scraping\",\n    \"topic_extraction\", \n    \"content_analysis\",\n    \"competitive_analysis\"\n  ]\n};\n\nconsole.log('=== FINAL ANALYSIS SUMMARY ===');\nconsole.log('Client domain:', analysisData.client_domain);\nconsole.log('Competitor domains:', analysisData.competitor_domains);\nconsole.log('Total sites analyzed:', totalSitesAnalyzed);\nconsole.log('Successful analyses:', successfulAnalyses);\nconsole.log('Failed analyses:', sitesWithErrors);\nconsole.log('Unique topics found:', uniqueTopics.length);\nconsole.log('Analysis confidence:', analysisData.analysis_metadata.analysis_confidence + '%');\n\n// Debug: Show what was found for each domain\nObject.entries(analysisData.site_analysis).forEach(([domain, data]) => {\n  if (!data.error) {\n    console.log(`${domain}: ${data.topics_identified?.length || 0} topics, ${data.word_count || 0} words`);\n  } else {\n    console.log(`${domain}: ERROR - ${data.error}`);\n  }\n});\n\n// Return the processed analysis data\nreturn analysisData;"
+      },
+      "id": "04c8f8a9-2705-4ba8-a029-26fa4e6cd7d6",
+      "name": "Enhanced Content Analysis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://serpapi.com/search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "=site:{{ $('Enhanced Content Analysis').item.json.client_domain }} marketing automation OR AI content OR email marketing"
+            },
+            {
+              "name": "engine",
+              "value": "google"
+            },
+            {
+              "name": "api_key",
+              "value": "e6ad7c56c54a24ffe431dd1b7948dab877e53e795b43e67824c9f5c4253b9bf4"
+            },
+            {
+              "name": "num",
+              "value": "20"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "378a7852-b5ad-4de6-b157-724a6701f7be",
+      "name": "SERP Client Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        832,
+        0
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "url": "https://serpapi.com/search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "=site:{{ $('Enhanced Content Analysis').item.json.competitor_domains[0] }} marketing automation OR AI content OR email marketing"
+            },
+            {
+              "name": "engine",
+              "value": "google"
+            },
+            {
+              "name": "api_key",
+              "value": "e6ad7c56c54a24ffe431dd1b7948dab877e53e795b43e67824c9f5c4253b9bf4"
+            },
+            {
+              "name": "num",
+              "value": "20"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "c8310cf3-c30e-42d6-9500-da473fe58d90",
+      "name": "SERP Competitor Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        832,
+        192
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "url": "https://serpapi.com/search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "marketing automation tools 2025"
+            },
+            {
+              "name": "engine",
+              "value": "google"
+            },
+            {
+              "name": "api_key",
+              "value": "e6ad7c56c54a24ffe431dd1b7948dab877e53e795b43e67824c9f5c4253b9bf4"
+            },
+            {
+              "name": "num",
+              "value": "20"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "faace468-037b-4fc1-b1d0-bc9f8d9e52c8",
+      "name": "SERP Industry Analysis 1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        832,
+        368
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "url": "https://serpapi.com/search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "AI content creation tools 2025"
+            },
+            {
+              "name": "engine",
+              "value": "google"
+            },
+            {
+              "name": "api_key",
+              "value": "e6ad7c56c54a24ffe431dd1b7948dab877e53e795b43e67824c9f5c4253b9bf4"
+            },
+            {
+              "name": "num",
+              "value": "20"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "66168425-c335-4928-9aac-15cd6dbd1a02",
+      "name": "SERP Industry Analysis 2",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        832,
+        528
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Fixed Enhanced Gap Analysis - Improved gap detection and scoring\nconst items = $input.all();\n\n// Get the Enhanced Content Analysis data from the node reference\nconst contentAnalysisData = $('Enhanced Content Analysis').item.json;\n\nconsole.log('=== ENHANCED GAP ANALYSIS DEBUG ===');\nconsole.log('Total SERP items received:', items.length);\nconsole.log('Content Analysis data available:', !!contentAnalysisData);\n\n// Initialize the main data structure from content analysis\nconst mainData = {\n  client_domain: contentAnalysisData.client_domain || 'unknown',\n  competitor_domains: contentAnalysisData.competitor_domains || [],\n  site_analysis: contentAnalysisData.site_analysis || {},\n  analysis_metadata: contentAnalysisData.analysis_metadata || {}\n};\n\n// Process SERP results from the merged items\nconst searchResults = {\n  client_serp_results: [],\n  competitor_serp_results: [],\n  industry_trends: []\n};\n\n// Process each SERP API response\nitems.forEach((item, index) => {\n  if (!item.json || item.json.error) {\n    console.log(`SERP API call ${index} failed:`, item.json?.error || 'No data');\n    return;\n  }\n  \n  const results = item.json.organic_results || [];\n  const query = item.json.search_parameters?.q || '';\n  \n  console.log(`Processing search ${index}: \"${query}\" - ${results.length} results`);\n  \n  // Categorize SERP results based on query content\n  if (query.includes('site:') && mainData.client_domain && query.includes(mainData.client_domain)) {\n    // Client site search results\n    searchResults.client_serp_results = results.slice(0, 20);\n    console.log(`Added ${results.length} client SERP results`);\n  } else if (query.includes('site:') && mainData.competitor_domains.some(domain => query.includes(domain))) {\n    // Competitor site search results\n    searchResults.competitor_serp_results.push(...results.slice(0, 20));\n    console.log(`Added ${results.length} competitor SERP results`);\n  } else {\n    // Industry trend searches\n    searchResults.industry_trends.push({\n      query: query,\n      results: results.slice(0, 10)\n    });\n    console.log(`Added industry trend: \"${query}\" with ${results.length} results`);\n  }\n});\n\n// Determine business type for context-aware analysis\nfunction detectBusinessType(siteContent) {\n  const businessKeywords = {\n    'marketing_agency': ['marketing agency', 'digital marketing', 'advertising', 'marketing services', 'marketing solutions', 'brand marketing'],\n    'business_platform': ['business research', 'company information', 'business database', 'corporate data', 'business intelligence'],\n    'technology_platform': ['software', 'platform', 'technology', 'saas', 'automation tools', 'tech solutions'],\n    'ecommerce': ['ecommerce', 'online store', 'shopping', 'retail', 'products', 'buy online'],\n    'consulting': ['consulting', 'consultancy', 'advisory', 'business consulting', 'strategy consulting']\n  };\n  \n  const content = (siteContent || '').toLowerCase();\n  \n  for (const [type, keywords] of Object.entries(businessKeywords)) {\n    if (keywords.some(keyword => content.includes(keyword))) {\n      return type;\n    }\n  }\n  \n  return 'general_business';\n}\n\n// Get client business type\nconst clientSite = mainData.site_analysis[mainData.client_domain];\nconst clientBusinessType = detectBusinessType(clientSite?.content || '');\n\nconsole.log('Client business type detected:', clientBusinessType);\n\n// Context-aware topic categories based on business type\nfunction getRelevantTopics(businessType) {\n  const allTopics = {\n    // Core marketing topics (relevant for marketing agencies)\n    'AI Marketing Automation': {\n      keywords: ['ai marketing automation', 'automated marketing ai', 'marketing automation ai', 'ai powered marketing', 'intelligent marketing automation', 'marketing ai tools'],\n      relevance: { marketing_agency: 10, technology_platform: 8, consulting: 6, business_platform: 4, general_business: 5 }\n    },\n    'Content Creation AI': {\n      keywords: ['ai content creation', 'ai content generation', 'automated content writing', 'ai copywriting', 'content ai tools', 'ai writing tools'],\n      relevance: { marketing_agency: 10, technology_platform: 7, consulting: 8, business_platform: 6, general_business: 7 }\n    },\n    'Email Marketing Automation': {\n      keywords: ['email marketing automation', 'automated email campaigns', 'email automation platform', 'drip email campaigns', 'email sequence automation'],\n      relevance: { marketing_agency: 10, technology_platform: 6, consulting: 5, business_platform: 3, general_business: 6 }\n    },\n    'Social Media Automation': {\n      keywords: ['social media automation', 'automated social posting', 'social media scheduling', 'social marketing automation', 'social media ai tools'],\n      relevance: { marketing_agency: 10, technology_platform: 5, consulting: 4, business_platform: 2, general_business: 6 }\n    },\n    \n    // Business intelligence topics (relevant for business platforms)\n    'Business Intelligence AI': {\n      keywords: ['business intelligence ai', 'ai business analytics', 'automated business insights', 'business data ai', 'intelligent business reporting'],\n      relevance: { business_platform: 10, technology_platform: 8, consulting: 7, marketing_agency: 4, general_business: 6 }\n    },\n    'Data Analytics Automation': {\n      keywords: ['data analytics automation', 'automated data analysis', 'ai data insights', 'business data automation', 'intelligent data processing'],\n      relevance: { business_platform: 10, technology_platform: 9, consulting: 6, marketing_agency: 5, general_business: 5 }\n    },\n    'Company Research Tools': {\n      keywords: ['company research tools', 'business research automation', 'corporate data analysis', 'business intelligence tools', 'company information systems'],\n      relevance: { business_platform: 10, consulting: 7, technology_platform: 5, marketing_agency: 3, general_business: 4 }\n    },\n    \n    // Technology topics (relevant for tech platforms)\n    'API Integration': {\n      keywords: ['api integration', 'automated api', 'api automation', 'integration platforms', 'api management'],\n      relevance: { technology_platform: 10, business_platform: 6, marketing_agency: 4, consulting: 3, general_business: 3 }\n    },\n    'Process Automation': {\n      keywords: ['process automation', 'workflow automation', 'business process automation', 'automated workflows', 'process optimization'],\n      relevance: { technology_platform: 9, business_platform: 8, consulting: 7, marketing_agency: 6, general_business: 7 }\n    },\n    \n    // General business topics\n    'Lead Generation Automation': {\n      keywords: ['lead generation automation', 'automated lead nurturing', 'lead scoring automation', 'conversion automation', 'lead management automation'],\n      relevance: { marketing_agency: 10, consulting: 7, technology_platform: 6, business_platform: 5, general_business: 8 }\n    },\n    'SEO Tools & Analytics': {\n      keywords: ['seo automation tools', 'automated seo analysis', 'seo marketing tools', 'search optimization automation', 'seo analytics platform'],\n      relevance: { marketing_agency: 10, technology_platform: 6, consulting: 5, business_platform: 4, general_business: 7 }\n    },\n    'Marketing Analytics & Reporting': {\n      keywords: ['marketing analytics automation', 'automated reporting tools', 'marketing performance tracking', 'roi measurement automation', 'marketing dashboard automation'],\n      relevance: { marketing_agency: 10, consulting: 6, technology_platform: 7, business_platform: 5, general_business: 6 }\n    }\n  };\n  \n  // Filter topics by relevance score (>=3 for broader coverage) - FIXED: Lowered threshold\n  const relevantTopics = {};\n  Object.entries(allTopics).forEach(([topic, data]) => {\n    const relevanceScore = data.relevance[businessType] || data.relevance.general_business || 5;\n    if (relevanceScore >= 3) { // FIXED: Changed from 5 to 3\n      relevantTopics[topic] = data.keywords;\n    }\n  });\n  \n  return relevantTopics;\n}\n\n// Get topics relevant to the client's business type\nconst topicCategories = getRelevantTopics(clientBusinessType);\n\nconsole.log(`Using ${Object.keys(topicCategories).length} topics relevant for ${clientBusinessType}`);\n\n// Improved keyword matching function\nfunction hasTopicKeywords(text, keywords) {\n  if (!text) return false;\n  const cleanText = text.toLowerCase();\n  \n  return keywords.some(keyword => {\n    const keywordLower = keyword.toLowerCase();\n    \n    // Exact phrase match for multi-word keywords\n    if (keywordLower.includes(' ')) {\n      return cleanText.includes(keywordLower);\n    }\n    \n    // Word boundary match for single words\n    const wordRegex = new RegExp(`\\\\b${keywordLower}\\\\b`, 'i');\n    return wordRegex.test(cleanText);\n  });\n}\n\n// Enhanced content analysis function\nfunction analyzeContentForTopics(content, keywords) {\n  if (!content) return false;\n  \n  // Handle different content structures\n  const textContent = typeof content === 'string' ? content : \n                     content.text || content.content || content.description || '';\n  \n  return hasTopicKeywords(textContent, keywords);\n}\n\n// Analyze content gaps\nconst contentGaps = [];\nconst siteAnalysis = mainData.site_analysis || {};\nconst clientDomain = mainData.client_domain || 'unknown';\nconst competitorDomains = mainData.competitor_domains || [];\n\nconsole.log('Gap Analysis Input Summary:');\nconsole.log('- Client domain:', clientDomain);\nconsole.log('- Client business type:', clientBusinessType);\nconsole.log('- Competitor domains:', competitorDomains);\nconsole.log('- Sites analyzed:', Object.keys(siteAnalysis).length);\nconsole.log('- Client SERP results:', searchResults.client_serp_results.length);\nconsole.log('- Competitor SERP results:', searchResults.competitor_serp_results.length);\nconsole.log('- Industry trend groups:', searchResults.industry_trends.length);\n\n// Track all topics analyzed for accurate reporting\nconst allTopicsAnalyzed = [];\n\n// Analyze each topic category\nObject.entries(topicCategories).forEach(([topic, keywords]) => {\n  allTopicsAnalyzed.push(topic);\n  \n  // Check client content presence\n  let clientHasTopic = false;\n  let clientSerpPresence = false;\n  \n  // Analyze client site data\n  if (siteAnalysis[clientDomain]) {\n    const clientSite = siteAnalysis[clientDomain];\n    clientHasTopic = \n      clientSite.topics_identified?.some(t => hasTopicKeywords(t, keywords)) ||\n      clientSite.topics_present?.[topic] ||\n      Object.keys(clientSite.topics_present || {}).some(t => hasTopicKeywords(t, keywords)) ||\n      clientSite.content_analysis?.topics?.some(t => hasTopicKeywords(t, keywords)) ||\n      analyzeContentForTopics(clientSite.content, keywords);\n  }\n  \n  // Check client SERP presence\n  clientSerpPresence = searchResults.client_serp_results.some(result => \n    hasTopicKeywords(result.title, keywords) || \n    hasTopicKeywords(result.snippet, keywords) ||\n    hasTopicKeywords(result.description, keywords)\n  );\n  \n  // Check competitor content presence\n  let competitorHasTopic = false;\n  let competitorSerpPresence = false;\n  \n  competitorDomains.forEach(domain => {\n    if (siteAnalysis[domain]) {\n      const compSite = siteAnalysis[domain];\n      if (compSite.topics_identified?.some(t => hasTopicKeywords(t, keywords)) ||\n          compSite.topics_present?.[topic] ||\n          Object.keys(compSite.topics_present || {}).some(t => hasTopicKeywords(t, keywords)) ||\n          analyzeContentForTopics(compSite.content, keywords)) {\n        competitorHasTopic = true;\n      }\n    }\n  });\n  \n  // Check competitor SERP presence\n  competitorSerpPresence = searchResults.competitor_serp_results.some(result => \n    hasTopicKeywords(result.title, keywords) || \n    hasTopicKeywords(result.snippet, keywords) ||\n    hasTopicKeywords(result.description, keywords)\n  );\n  \n  // Calculate industry trend strength\n  const industryTrendStrength = searchResults.industry_trends.reduce((total, trendGroup) => {\n    const matches = (trendGroup.results || []).filter(result => \n      hasTopicKeywords(result.title, keywords) || \n      hasTopicKeywords(result.snippet, keywords) ||\n      hasTopicKeywords(result.description, keywords)\n    ).length;\n    return total + matches;\n  }, 0);\n  \n  // FIXED: More aggressive gap detection\n  const clientCoverage = clientHasTopic || clientSerpPresence;\n  const competitorAdvantage = competitorHasTopic || competitorSerpPresence;\n  const marketDemand = industryTrendStrength > 0;\n  \n  // FIXED: Detect gaps when client has no coverage AND (competitors have advantage OR market demand exists OR it's relevant to business type)\n  const topicRelevance = topicCategories[topic] ? 1 : 0; // All topics in our filtered list are relevant\n  const hasGap = !clientCoverage && (competitorAdvantage || marketDemand || topicRelevance);\n  \n  if (hasGap) {\n    // FIXED: Improved scoring algorithm with weighted factors\n    let gapScore = 0;\n    \n    // Base score from industry trends (0-10 scale)\n    gapScore += Math.min(industryTrendStrength * 1.5, 10);\n    \n    // Competitor advantage bonus\n    if (competitorAdvantage) gapScore += 6;\n    \n    // Market demand bonus\n    if (marketDemand) gapScore += 4;\n    \n    // Business relevance bonus\n    const relevanceScore = getRelevantTopics(clientBusinessType)[topic] ? \n      (clientBusinessType === 'business_platform' && topic.includes('Business Intelligence') ? 8 :\n       clientBusinessType === 'marketing_agency' && (topic.includes('Marketing') || topic.includes('Content')) ? 8 : 4) : 0;\n    gapScore += relevanceScore;\n    \n    // Zero client coverage bonus (clear gap)\n    if (!clientCoverage) gapScore += 3;\n    \n    // FIXED: Better priority assignment with clearer thresholds\n    let priority = 'low';\n    if (gapScore >= 15 && competitorAdvantage && marketDemand) {\n      priority = 'high';\n    } else if (gapScore >= 8 && (competitorAdvantage || (marketDemand && relevanceScore >= 4))) {\n      priority = 'medium';\n    } else if (gapScore >= 4) {\n      priority = 'low';\n    }\n    \n    // Only include gaps with meaningful scores\n    if (gapScore >= 4) {\n      contentGaps.push({\n        topic: topic,\n        keywords: keywords.slice(0, 5),\n        client_coverage: {\n          content_present: clientHasTopic,\n          serp_presence: clientSerpPresence,\n          total_coverage: clientCoverage\n        },\n        competitor_advantage: {\n          content_coverage: competitorHasTopic,\n          serp_presence: competitorSerpPresence,\n          has_advantage: competitorAdvantage\n        },\n        market_opportunity: {\n          industry_trend_strength: industryTrendStrength,\n          market_demand: marketDemand,\n          opportunity_score: Math.round(industryTrendStrength + (marketDemand ? 3 : 0) + (relevanceScore / 2))\n        },\n        priority: priority,\n        gap_score: Math.round(gapScore),\n        recommendation: generateRecommendation(topic, priority, competitorAdvantage, industryTrendStrength, clientBusinessType)\n      });\n    }\n  }\n  \n  // Debug logging for all topics\n  console.log(`Topic Analysis: ${topic}`);\n  console.log(`  Client: content=${clientHasTopic}, serp=${clientSerpPresence}, total=${clientCoverage}`);\n  console.log(`  Competitor: content=${competitorHasTopic}, serp=${competitorSerpPresence}, advantage=${competitorAdvantage}`);\n  console.log(`  Market: trend_strength=${industryTrendStrength}, demand=${marketDemand}`);\n  console.log(`  Gap detected: ${hasGap}, Score: ${hasGap ? Math.round(industryTrendStrength * 1.5 + (competitorAdvantage ? 6 : 0) + (marketDemand ? 4 : 0)) : 0}`);\n});\n\n// Generate contextual recommendations\nfunction generateRecommendation(topic, priority, competitorAdvantage, trendStrength, businessType) {\n  const topicLower = topic.toLowerCase();\n  \n  if (priority === 'high') {\n    return `High priority: Create comprehensive ${topicLower} content strategy. Strong market demand and competitor advantage detected.`;\n  } else if (priority === 'medium') {\n    if (competitorAdvantage && trendStrength > 1) {\n      return `Medium priority: Develop ${topicLower} content to match competitor coverage and capitalize on market trends.`;\n    } else if (competitorAdvantage) {\n      return `Medium priority: Address competitor advantage in ${topicLower} to maintain competitive position.`;\n    } else {\n      return `Medium priority: Explore ${topicLower} opportunities to capture emerging market demand.`;\n    }\n  } else {\n    return `Low priority: Monitor ${topicLower} trends and consider future content development as market matures.`;\n  }\n}\n\n// Sort gaps by priority and score\ncontentGaps.sort((a, b) => {\n  const priorityOrder = { 'high': 3, 'medium': 2, 'low': 1 };\n  if (priorityOrder[a.priority] !== priorityOrder[b.priority]) {\n    return priorityOrder[b.priority] - priorityOrder[a.priority];\n  }\n  return b.gap_score - a.gap_score;\n});\n\n// Calculate comprehensive analysis summary with accurate counts\nconst topicsAnalyzed = allTopicsAnalyzed.length;\nconst clientTopicsCovered = allTopicsAnalyzed.filter(topic => {\n  const keywords = topicCategories[topic];\n  const clientSite = siteAnalysis[clientDomain];\n  \n  if (!clientSite) return false;\n  \n  return clientSite.topics_identified?.some(t => hasTopicKeywords(t, keywords)) ||\n         clientSite.topics_present?.[topic] ||\n         Object.keys(clientSite.topics_present || {}).some(t => hasTopicKeywords(t, keywords)) ||\n         analyzeContentForTopics(clientSite.content, keywords);\n}).length;\n\nconst analysisMetrics = {\n  total_topics_analyzed: topicsAnalyzed,\n  total_gaps_found: contentGaps.length,\n  high_priority_gaps: contentGaps.filter(g => g.priority === 'high').length,\n  medium_priority_gaps: contentGaps.filter(g => g.priority === 'medium').length,\n  low_priority_gaps: contentGaps.filter(g => g.priority === 'low').length,\n  client_content_coverage_percentage: Math.round((clientTopicsCovered / topicsAnalyzed) * 100),\n  total_serp_results_analyzed: searchResults.client_serp_results.length + \n                              searchResults.competitor_serp_results.length +\n                              searchResults.industry_trends.reduce((sum, trend) => sum + (trend.results?.length || 0), 0),\n  analysis_confidence: contentGaps.length >= 3 ? 90 : contentGaps.length >= 1 ? 80 : 70, // FIXED: Better confidence scoring\n  client_business_type: clientBusinessType,\n  data_sources_used: [\n    'serp_analysis',\n    'content_scraping', \n    'competitor_analysis',\n    'industry_trends'\n  ].filter(source => {\n    if (source === 'serp_analysis') return searchResults.client_serp_results.length > 0;\n    if (source === 'content_scraping') return Object.keys(siteAnalysis).length > 0;\n    if (source === 'competitor_analysis') return searchResults.competitor_serp_results.length > 0;\n    if (source === 'industry_trends') return searchResults.industry_trends.length > 0;\n    return false;\n  })\n};\n\nconsole.log('=== FINAL GAP ANALYSIS SUMMARY ===');\nconsole.log('Business type:', clientBusinessType);\nconsole.log('Topics analyzed:', topicsAnalyzed);\nconsole.log('Client coverage:', `${clientTopicsCovered}/${topicsAnalyzed} (${analysisMetrics.client_content_coverage_percentage}%)`);\nconsole.log('Total gaps found:', contentGaps.length);\nconsole.log('High priority gaps:', analysisMetrics.high_priority_gaps);\nconsole.log('Medium priority gaps:', analysisMetrics.medium_priority_gaps);\nconsole.log('Low priority gaps:', analysisMetrics.low_priority_gaps);\nconsole.log('SERP results analyzed:', analysisMetrics.total_serp_results_analyzed);\nconsole.log('Analysis confidence:', analysisMetrics.analysis_confidence + '%');\n\n// Return comprehensive results with the content analysis data included\nreturn {\n  client_domain: clientDomain,\n  competitor_domains: competitorDomains,\n  search_results: searchResults,\n  identified_gaps: contentGaps,\n  analysis_summary: analysisMetrics,\n  site_analysis: siteAnalysis,\n  analysis_metadata: {\n    ...mainData.analysis_metadata,\n    analyzed_date: new Date().toISOString(),\n    client_business_type: clientBusinessType,\n    total_topics_analyzed: topicsAnalyzed,\n    analysis_confidence: analysisMetrics.analysis_confidence,\n    data_sources_used: analysisMetrics.data_sources_used,\n    limitations: contentGaps.length === 0 ? 'Limited gap detection - client may already have strong coverage or need more targeted competitor analysis' : 'Analysis based on available search and content data'\n  }\n};"
+      },
+      "id": "a7e8206f-d39f-4dad-a5b7-e582acbab1dc",
+      "name": "Enhanced Gap Analysis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1424,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are a content gap analysis expert. Analyze the provided website data and competitive landscape using this framework:\n\nANALYSIS FRAMEWORK:\n1. Content Gap Identification\n2. Competitive Advantage Assessment  \n3. Strategic Opportunities\n4. Implementation Priorities\n\nFOCUS AREAS:\n- Keyword gaps and opportunities\n- Content format gaps\n- Topic coverage analysis\n- Competitive positioning insights\n\nProvide actionable recommendations with priority levels and expected impact.",
+              "role": "system"
+            },
+            {
+              "content": "=Analyze this comprehensive content and competitive data:\n{{ JSON.stringify($json, null, 2) }}"
+            }
+          ]
+        },
+        "options": {
+          "maxTokens": 2000,
+          "temperature": 0.3
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        1264,
+        208
+      ],
+      "id": "5d74d1ae-2871-478e-9671-f427ada0d7ba",
+      "name": "AI Content Strategy Analysis",
+      "credentials": {
+        "openAiApi": {
+          "id": "DZ7bok5bQ76SLAup",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// FINAL FIXED VERSION - Comprehensive Output Generation\nconst items = $input.all();\n\nconsole.log('=== COMPREHENSIVE OUTPUT GENERATION DEBUG ===');\nconsole.log('Total items received:', items.length);\n\n// Initialize data containers\nlet aiAnalysisData = null;\nlet gapAnalysisData = null;\n\n// Process items to identify data sources\nitems.forEach((item, index) => {\n  const itemKeys = item.json ? Object.keys(item.json) : [];\n  console.log(`Item ${index}:`, {\n    hasJson: !!item.json,\n    keys: itemKeys,\n    hasIdentifiedGaps: itemKeys.includes('identified_gaps'),\n    hasContent: itemKeys.includes('content') || itemKeys.includes('choices'),\n    hasClientDomain: itemKeys.includes('client_domain'),\n    preview: JSON.stringify(item).substring(0, 150) + '...'\n  });\n  \n  // Identify AI analysis (OpenAI response structure)\n  if (item.json && (item.json.content || item.json.choices || item.json.message)) {\n    aiAnalysisData = item.json;\n    console.log(`✓ AI Analysis found at item ${index}`);\n  }\n  \n  // Identify gap analysis (Enhanced Gap Analysis output)\n  if (item.json && item.json.identified_gaps && item.json.client_domain) {\n    gapAnalysisData = item.json;\n    console.log(`✓ Gap Analysis found at item ${index}`);\n  }\n});\n\n// Fallback: use positional logic if property detection fails\nif (!gapAnalysisData && items.length >= 1) {\n  // The last item is usually the gap analysis in your workflow\n  const lastItem = items[items.length - 1];\n  if (lastItem.json && lastItem.json.identified_gaps) {\n    gapAnalysisData = lastItem.json;\n    console.log('✓ Gap Analysis found using fallback logic');\n  }\n}\n\nif (!aiAnalysisData && items.length >= 2) {\n  // AI analysis is typically earlier in the chain\n  for (let i = 0; i < items.length - 1; i++) {\n    if (items[i].json && (items[i].json.content || items[i].json.choices)) {\n      aiAnalysisData = items[i].json;\n      console.log(`✓ AI Analysis found using fallback at item ${i}`);\n      break;\n    }\n  }\n}\n\nconsole.log('=== DATA SOURCE VALIDATION ===');\nconsole.log('Gap Analysis found:', !!gapAnalysisData);\nconsole.log('AI Analysis found:', !!aiAnalysisData);\n\nif (!gapAnalysisData) {\n  console.error('CRITICAL: No gap analysis data found!');\n  return { error: 'Gap analysis data not found', debug: { items_received: items.length, item_keys: items.map(i => Object.keys(i.json || {})) } };\n}\n\n// Extract and process AI analysis\nlet aiAnalysis = 'Analysis not available';\nif (aiAnalysisData) {\n  if (typeof aiAnalysisData.content === 'string') {\n    aiAnalysis = aiAnalysisData.content;\n  } else if (aiAnalysisData.choices && aiAnalysisData.choices[0]?.message?.content) {\n    aiAnalysis = aiAnalysisData.choices[0].message.content;\n  } else if (aiAnalysisData.message?.content) {\n    aiAnalysis = aiAnalysisData.message.content;\n  } else if (typeof aiAnalysisData === 'string') {\n    aiAnalysis = aiAnalysisData;\n  }\n  \n  // Try to parse JSON if it looks like JSON\n  try {\n    if (typeof aiAnalysis === 'string' && aiAnalysis.trim().startsWith('{')) {\n      const parsed = JSON.parse(aiAnalysis);\n      aiAnalysis = parsed;\n    }\n  } catch (e) {\n    // Keep as string if not valid JSON\n    console.log('AI analysis kept as string (not JSON)');\n  }\n}\n\n// Use the ACTUAL gap analysis data - don't override it!\nconst identifiedGaps = gapAnalysisData.identified_gaps || [];\nconst clientDomain = gapAnalysisData.client_domain || 'unknown';\nconst competitorDomains = gapAnalysisData.competitor_domains || [];\nconst siteAnalysis = gapAnalysisData.site_analysis || {};\nconst analysisMetadata = gapAnalysisData.analysis_metadata || {};\nconst searchResults = gapAnalysisData.search_results || {};\nconst analysisSummary = gapAnalysisData.analysis_summary || {};\n\nconsole.log('=== USING REAL DATA ===');\nconsole.log('Identified gaps:', identifiedGaps.length);\nconsole.log('Client domain:', clientDomain);\nconsole.log('Competitor domains:', competitorDomains.length);\nconsole.log('Site analysis domains:', Object.keys(siteAnalysis).length);\n\n// Process gaps using REAL data (don't generate fake scores!)\nconst contentGaps = {\n  high_priority: [],\n  medium_priority: [],\n  low_priority: []\n};\n\nidentifiedGaps.forEach((gap, index) => {\n  console.log(`Processing real gap ${index}:`, {\n    topic: gap.topic,\n    priority: gap.priority,\n    gap_score: gap.gap_score,\n    market_strength: gap.market_opportunity?.industry_trend_strength\n  });\n  \n  // Use the REAL data from Enhanced Gap Analysis - don't recalculate!\n  const processedGap = {\n    topic: gap.topic,\n    keywords: gap.keywords || [],\n    \n    // Use REAL scores from the analysis\n    gap_score: gap.gap_score,\n    priority_level: gap.priority,\n    \n    // Use REAL market data\n    market_opportunity: gap.market_opportunity || {},\n    client_coverage: gap.client_coverage || {},\n    competitor_advantage: gap.competitor_advantage || {},\n    \n    // Generate display-friendly versions\n    search_volume_estimate: gap.market_opportunity?.industry_trend_strength > 5 ? 'High' : \n                          gap.market_opportunity?.industry_trend_strength > 2 ? 'Medium' : 'Low',\n    \n    competition_difficulty: gap.competitor_advantage?.has_advantage ? 'High' : 'Medium',\n    \n    // Traffic estimate based on real trend strength\n    estimated_monthly_traffic: gap.market_opportunity?.industry_trend_strength > 0 ? \n      `${gap.market_opportunity.industry_trend_strength * 100}-${gap.market_opportunity.industry_trend_strength * 200} potential visitors` :\n      '50-150 potential visitors',\n    \n    content_recommendations: {\n      content_type: gap.gap_score >= 15 ? 'pillar_page' : gap.gap_score >= 10 ? 'comprehensive_guide' : 'targeted_article',\n      search_intent: gap.topic.toLowerCase().includes('tools') ? 'commercial' : 'informational',\n      priority_level: gap.priority,\n      estimated_effort: gap.gap_score >= 15 ? 'high' : 'medium',\n      recommendation: gap.recommendation || `Address \"${gap.topic}\" content gap`\n    },\n    \n    // Keep original analysis data\n    original_analysis: {\n      gap_score: gap.gap_score,\n      market_opportunity: gap.market_opportunity,\n      client_coverage: gap.client_coverage,\n      competitor_advantage: gap.competitor_advantage\n    }\n  };\n  \n  // Use REAL priority assignments\n  if (gap.priority === 'high') {\n    contentGaps.high_priority.push(processedGap);\n  } else if (gap.priority === 'medium') {\n    contentGaps.medium_priority.push(processedGap);\n  } else {\n    contentGaps.low_priority.push(processedGap);\n  }\n});\n\n// Sort by real gap scores\nObject.keys(contentGaps).forEach(priority => {\n  contentGaps[priority].sort((a, b) => (b.gap_score || 0) - (a.gap_score || 0));\n});\n\nconsole.log('=== REAL GAPS DISTRIBUTION ===');\nconsole.log('High priority:', contentGaps.high_priority.length);\nconsole.log('Medium priority:', contentGaps.medium_priority.length);\nconsole.log('Low priority:', contentGaps.low_priority.length);\n\n// Calculate metrics from REAL data\nconst clientSite = siteAnalysis[clientDomain] || {};\nconst clientTopicsCovered = clientSite.topics_identified?.length || 0;\nconst clientWordCount = clientSite.word_count || 0;\n\n// Real competitor analysis\nconst competitorStats = competitorDomains.map(domain => {\n  const site = siteAnalysis[domain] || {};\n  return {\n    domain,\n    topics_covered: site.topics_identified?.length || 0,\n    content_volume: site.word_count || 0\n  };\n});\n\nconst avgCompetitorTopics = competitorStats.length > 0 ? \n  Math.floor(competitorStats.reduce((sum, comp) => sum + comp.topics_covered, 0) / competitorStats.length) : 0;\n\n// Calculate real traffic potential from high-priority gaps\nconst realTrafficPotential = contentGaps.high_priority.reduce((sum, gap) => {\n  const trendStrength = gap.market_opportunity?.industry_trend_strength || 0;\n  return sum + (trendStrength * 150); // More conservative estimate\n}, 0);\n\n// Generate final comprehensive output using REAL data\nconst finalOutput = {\n  analysis_metadata: {\n    analyzed_date: analysisMetadata.analyzed_date || new Date().toISOString(),\n    client_domain: clientDomain,\n    competitor_domains: competitorDomains,\n    total_topics_analyzed: analysisSummary.total_topics_analyzed || identifiedGaps.length,\n    gaps_identified: identifiedGaps.length,\n    analysis_confidence: analysisSummary.analysis_confidence || analysisMetadata.analysis_confidence || 85,\n    ai_insights_included: aiAnalysis !== 'Analysis not available',\n    data_sources_used: analysisSummary.data_sources_used || analysisMetadata.data_sources_used || ['content_analysis', 'serp_analysis'],\n    limitations: analysisMetadata.limitations || 'Analysis based on available search and content data',\n    client_business_type: analysisMetadata.client_business_type || 'general_business'\n  },\n  \n  content_gaps: contentGaps,\n  \n  strategic_insights: {\n    client_content_status: {\n      domain: clientDomain,\n      topics_covered: clientTopicsCovered,\n      content_volume: clientWordCount,\n      technical_health: (clientSite.heading_count || 0) > 5 ? 'good' : 'needs_improvement',\n      content_depth: clientWordCount > 2000 ? 'comprehensive' : clientWordCount > 1000 ? 'medium' : 'basic'\n    },\n    \n    market_opportunities: {\n      high_impact_topics: contentGaps.high_priority.length,\n      medium_impact_topics: contentGaps.medium_priority.length,\n      quick_wins: contentGaps.medium_priority.filter(g => g.content_recommendations.estimated_effort === 'medium').length,\n      total_traffic_potential: realTrafficPotential > 0 ? `${Math.floor(realTrafficPotential)}+ monthly visitors` : 'Limited data available',\n      top_opportunity: contentGaps.high_priority[0]?.topic || contentGaps.medium_priority[0]?.topic || 'Analyze more competitors for better opportunities'\n    },\n    \n    competitive_landscape: {\n      competitor_domains_analyzed: competitorDomains.length,\n      average_competitor_topics: avgCompetitorTopics,\n      client_vs_competitor_gap: Math.max(0, avgCompetitorTopics - clientTopicsCovered),\n      competitive_advantage_areas: contentGaps.high_priority\n        .filter(gap => !gap.competitor_advantage?.has_advantage)\n        .map(gap => gap.topic)\n        .slice(0, 3),\n      competitor_details: competitorStats\n    }\n  },\n  \n  ai_analysis: aiAnalysis,\n  \n  implementation_roadmap: {\n    immediate_actions: contentGaps.high_priority.slice(0, 3).map(gap => ({\n      topic: gap.topic,\n      priority: gap.priority_level,\n      estimated_effort: gap.content_recommendations.estimated_effort,\n      expected_impact: gap.gap_score >= 15 ? 'High' : gap.gap_score >= 10 ? 'Medium' : 'Low',\n      gap_score: gap.gap_score\n    })),\n    \n    next_phase_actions: contentGaps.medium_priority.slice(0, 5).map(gap => ({\n      topic: gap.topic,\n      priority: gap.priority_level,\n      gap_score: gap.gap_score\n    })),\n    \n    timeline_estimate: contentGaps.high_priority.length > 0 ? \n      `${Math.ceil(contentGaps.high_priority.length / 2)}-${Math.ceil((contentGaps.high_priority.length + contentGaps.medium_priority.length) / 2)} months` :\n      '2-4 months for medium priority items',\n    \n    resource_requirements: {\n      content_pieces_needed: contentGaps.high_priority.length + Math.floor(contentGaps.medium_priority.length / 2),\n      research_hours: contentGaps.high_priority.length * 6 + contentGaps.medium_priority.length * 3,\n      writing_hours: contentGaps.high_priority.length * 12 + contentGaps.medium_priority.length * 6\n    }\n  },\n  \n  kpi_metrics: {\n    critical_gaps: contentGaps.high_priority.length,\n    total_opportunities: contentGaps.high_priority.length + contentGaps.medium_priority.length,\n    projected_traffic_increase: realTrafficPotential > 0 ? \n      `${Math.floor(realTrafficPotential * 0.2)}-${Math.floor(realTrafficPotential * 0.6)} monthly visitors` :\n      'Requires more competitive analysis',\n    content_coverage_improvement: identifiedGaps.length > 0 ? \n      `${Math.floor(((contentGaps.high_priority.length + contentGaps.medium_priority.length) / identifiedGaps.length) * 100)}% of identified gaps` :\n      '0%',\n    roi_potential: contentGaps.high_priority.length >= 3 ? 'High' : \n                  contentGaps.high_priority.length >= 1 ? 'Medium' : \n                  contentGaps.medium_priority.length >= 3 ? 'Medium' : 'Low'\n  },\n  \n  // Include raw analysis data for debugging\n  raw_analysis_data: {\n    search_results_summary: {\n      client_serp_results: searchResults.client_serp_results?.length || 0,\n      competitor_serp_results: searchResults.competitor_serp_results?.length || 0,\n      industry_trends: searchResults.industry_trends?.length || 0\n    },\n    site_analysis_summary: Object.keys(siteAnalysis).map(domain => ({\n      domain,\n      topics_found: siteAnalysis[domain]?.topics_identified?.length || 0,\n      word_count: siteAnalysis[domain]?.word_count || 0,\n      has_error: !!siteAnalysis[domain]?.error\n    })),\n    analysis_summary: analysisSummary\n  },\n  \n  debug_info: {\n    items_received: items.length,\n    ai_analysis_found: !!aiAnalysisData,\n    gap_analysis_found: !!gapAnalysisData,\n    gaps_processed: identifiedGaps.length,\n    client_domain: clientDomain,\n    processing_timestamp: new Date().toISOString(),\n    data_quality: {\n      has_client_data: !!siteAnalysis[clientDomain],\n      has_competitor_data: competitorDomains.some(domain => siteAnalysis[domain] && !siteAnalysis[domain].error),\n      has_serp_data: (searchResults.client_serp_results?.length || 0) > 0,\n      total_domains_analyzed: Object.keys(siteAnalysis).length\n    }\n  }\n};\n\nconsole.log('=== FINAL OUTPUT METRICS ===');\nconsole.log('High priority gaps:', contentGaps.high_priority.length);\nconsole.log('Medium priority gaps:', contentGaps.medium_priority.length);\nconsole.log('Total traffic potential:', realTrafficPotential);\nconsole.log('Analysis confidence:', finalOutput.analysis_metadata.analysis_confidence);\nconsole.log('AI analysis available:', aiAnalysis !== 'Analysis not available');\n\nreturn finalOutput;"
+      },
+      "id": "495c64ac-a408-4c53-919b-4efdc5535917",
+      "name": "Comprehensive Output Generation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1904,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json, null, 2) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "4796afbc-906e-41c0-8eb4-c7d501a566fb",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        2160,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "numberInputs": 4
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        304,
+        272
+      ],
+      "id": "d8e885d0-2985-48b3-a8e8-f96dc3d79435",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "numberInputs": 4
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1072,
+        304
+      ],
+      "id": "25887d7d-dd7a-4bbb-86a6-18c9592bac2a",
+      "name": "Merge1"
+    },
+    {
+      "parameters": {
+        "url": "https://app.scrapingbee.com/api/v1/",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "api_key",
+              "value": "LI8AKZ580B31RCTX7KEDH9GCX2NE38C5SDS9V2BAT0UYV4CB9H4USHZOGZU59AJTRZN6M3ZM987O7VRV"
+            },
+            {
+              "name": "url",
+              "value": "={{ $json.analysis_metadata.competitor_urls[0] }}"
+            },
+            {
+              "name": "render_js",
+              "value": "true"
+            },
+            {
+              "name": "block_resources",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "dc7f4fdd-fd64-4c65-a0d3-f2880f251648",
+      "name": "Scrape Competitor url[1]",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -144,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://app.scrapingbee.com/api/v1/",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "api_key",
+              "value": "LI8AKZ580B31RCTX7KEDH9GCX2NE38C5SDS9V2BAT0UYV4CB9H4USHZOGZU59AJTRZN6M3ZM987O7VRV"
+            },
+            {
+              "name": "url",
+              "value": "={{ $json.analysis_metadata.competitor_urls[1] }}"
+            },
+            {
+              "name": "render_js",
+              "value": "true"
+            },
+            {
+              "name": "block_resources",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "ee00fca6-92b3-4c9d-a291-c5b8f52fa44f",
+      "name": "Scrape Competitor url[2]",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -128,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://app.scrapingbee.com/api/v1/",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "api_key",
+              "value": "LI8AKZ580B31RCTX7KEDH9GCX2NE38C5SDS9V2BAT0UYV4CB9H4USHZOGZU59AJTRZN6M3ZM987O7VRV"
+            },
+            {
+              "name": "url",
+              "value": "={{ $json.analysis_metadata.competitor_urls[2] }}"
+            },
+            {
+              "name": "render_js",
+              "value": "true"
+            },
+            {
+              "name": "block_resources",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "b6d25868-dc70-45f2-92e6-e0b176a44a6c",
+      "name": "Scrape Competitor url[3]",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -128,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 2
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -352,
+        224
+      ],
+      "id": "419d5824-cd7f-44dd-83d8-573ee6e06110",
+      "name": "Wait",
+      "webhookId": "475db44f-4c3c-40aa-9b27-c5a01220be55"
+    },
+    {
+      "parameters": {
+        "amount": 2
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -528,
+        352
+      ],
+      "id": "2e96ffc7-56d0-4447-9225-c86353bd8611",
+      "name": "Wait1",
+      "webhookId": "168ffed8-440e-47f3-8edf-66c1b16aaa57"
+    },
+    {
+      "parameters": {
+        "amount": 2
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -656,
+        480
+      ],
+      "id": "310dad58-ddfc-4bab-bfd0-3743094a1dd7",
+      "name": "Wait2",
+      "webhookId": "e647e7a8-20d7-4813-8f1b-c3c630217cff"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f683df62-f533-41ea-a00d-257329177572",
+              "name": "url",
+              "value": "={{ $('Data Preparation').item.json.analysis_metadata.client_url }}",
+              "type": "string"
+            },
+            {
+              "id": "84289fd8-3279-401c-a26a-28588d5cfa97",
+              "name": "data",
+              "value": "={{ $json.data }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        80,
+        -16
+      ],
+      "id": "2acecc8f-6dba-466f-b13f-f3433a095ec4",
+      "name": "Edit Fields1"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f683df62-f533-41ea-a00d-257329177572",
+              "name": "url",
+              "value": "={{ $('Data Preparation').item.json.analysis_metadata.competitor_urls[0] }}",
+              "type": "string"
+            },
+            {
+              "id": "84289fd8-3279-401c-a26a-28588d5cfa97",
+              "name": "data",
+              "value": "={{ $json.data }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        32,
+        160
+      ],
+      "id": "dcd9d03f-e432-4e0e-8fc9-abe7a6b70d00",
+      "name": "Edit Fields2"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f683df62-f533-41ea-a00d-257329177572",
+              "name": "url",
+              "value": "={{ $('Data Preparation').item.json.analysis_metadata.competitor_urls[1] }}",
+              "type": "string"
+            },
+            {
+              "id": "84289fd8-3279-401c-a26a-28588d5cfa97",
+              "name": "data",
+              "value": "={{ $json.data }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        64,
+        352
+      ],
+      "id": "54706305-886c-4f0e-b4c9-f810ea0f8b5c",
+      "name": "Edit Fields3"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f683df62-f533-41ea-a00d-257329177572",
+              "name": "url",
+              "value": "={{ $('Data Preparation').item.json.analysis_metadata.competitor_urls[2] }}",
+              "type": "string"
+            },
+            {
+              "id": "84289fd8-3279-401c-a26a-28588d5cfa97",
+              "name": "data",
+              "value": "={{ $json.data }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        80,
+        544
+      ],
+      "id": "804faab3-fbac-4f93-b56e-5b2e4bd3b3a7",
+      "name": "Edit Fields4"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1632,
+        336
+      ],
+      "id": "67b08de7-3b71-4a3d-9f86-6d085a4e1d38",
+      "name": "Merge2"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Data Preparation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Data Preparation": {
+      "main": [
+        [
+          {
+            "node": "Scrape Client Site",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Wait1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Wait2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scrape Client Site": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enhanced Content Analysis": {
+      "main": [
+        [
+          {
+            "node": "SERP Client Analysis",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "SERP Competitor Analysis",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "SERP Industry Analysis 1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "SERP Industry Analysis 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SERP Client Analysis": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SERP Competitor Analysis": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "SERP Industry Analysis 1": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "SERP Industry Analysis 2": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Enhanced Gap Analysis": {
+      "main": [
+        [
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "AI Content Strategy Analysis": {
+      "main": [
+        [
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comprehensive Output Generation": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Enhanced Content Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge1": {
+      "main": [
+        [
+          {
+            "node": "Enhanced Gap Analysis",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "AI Content Strategy Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scrape Competitor url[1]": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scrape Competitor url[2]": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scrape Competitor url[3]": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Scrape Competitor url[1]",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait1": {
+      "main": [
+        [
+          {
+            "node": "Scrape Competitor url[2]",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait2": {
+      "main": [
+        [
+          {
+            "node": "Scrape Competitor url[3]",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields1": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields2": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Edit Fields3": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Edit Fields4": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Merge2": {
+      "main": [
+        [
+          {
+            "node": "Comprehensive Output Generation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "0694c38a-ff59-45f0-9486-b92490870a53",
+  "meta": {
+    "instanceId": "832574878d48053e8f4173f82ea35f0a6d5f63b9a22a16b17175c73127e82456"
+  },
+  "id": "8ug6bsS2mnw5spTl",
+  "tags": []
+}

@@ -1,0 +1,443 @@
+{
+  "name": "Brand Mention & Social Listening",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "hourly-trigger",
+      "name": "Hourly Social Check",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "brand_keywords",
+              "value": "your-brand,company-name,@yourcompany"
+            },
+            {
+              "name": "platforms",
+              "value": "twitter,facebook,instagram,linkedin,reddit"
+            },
+            {
+              "name": "alert_threshold",
+              "value": "negative"
+            },
+            {
+              "name": "response_team",
+              "value": "social@company.com"
+            },
+            {
+              "name": "sentiment_threshold",
+              "value": "-0.3"
+            }
+          ]
+        }
+      },
+      "id": "set-monitoring-params",
+      "name": "Set Monitoring Parameters",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://api.twitter.com/2/tweets/search/recent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "twitterOAuth2Api",
+        "options": {},
+        "qs": {
+          "query": "={{$json.brand_keywords.split(',').map(k => k.trim()).join(' OR ')}}",
+          "max_results": "50",
+          "tweet.fields": "created_at,public_metrics,context_annotations,author_id",
+          "expansions": "author_id"
+        }
+      },
+      "id": "search-twitter-mentions",
+      "name": "Search Twitter Mentions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [680, 200]
+    },
+    {
+      "parameters": {
+        "url": "https://graph.facebook.com/v18.0/search",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "options": {},
+        "qs": {
+          "q": "={{$json.brand_keywords.split(',')[0]}}",
+          "type": "post",
+          "fields": "message,created_time,from,likes.summary(true),comments.summary(true)",
+          "limit": "25"
+        }
+      },
+      "id": "search-facebook-mentions",
+      "name": "Search Facebook Mentions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://www.reddit.com/search.json",
+        "options": {},
+        "qs": {
+          "q": "={{$json.brand_keywords.split(',')[0]}}",
+          "sort": "new",
+          "t": "hour",
+          "limit": "25"
+        }
+      },
+      "id": "search-reddit-mentions",
+      "name": "Search Reddit Mentions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "options": {},
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "model": "gpt-3.5-turbo",
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a sentiment analysis expert. Analyze social media mentions and provide sentiment scores and categorization. Return results in JSON format with sentiment scores (-1 to 1), categories (positive/neutral/negative), and urgency levels (low/medium/high/critical)."
+            },
+            {
+              "role": "user",
+              "content": "Analyze these social media mentions for brand sentiment:\n\nTwitter Data: {{JSON.stringify($input.all()[0].json)}}\nFacebook Data: {{JSON.stringify($input.all()[1].json)}}\nReddit Data: {{JSON.stringify($input.all()[2].json)}}\n\nBrand Keywords: {{$json.brand_keywords}}\n\nReturn analysis in this format:\n{\n  \"overall_sentiment\": 0.2,\n  \"sentiment_category\": \"positive\",\n  \"mention_count\": 15,\n  \"platform_breakdown\": {\n    \"twitter\": {\"sentiment\": 0.1, \"mentions\": 8},\n    \"facebook\": {\"sentiment\": 0.3, \"mentions\": 4},\n    \"reddit\": {\"sentiment\": 0.2, \"mentions\": 3}\n  },\n  \"critical_mentions\": [\n    {\n      \"platform\": \"twitter\",\n      \"text\": \"mention text\",\n      \"sentiment\": -0.8,\n      \"urgency\": \"critical\",\n      \"author\": \"username\",\n      \"url\": \"tweet_url\",\n      \"engagement\": {\"likes\": 50, \"shares\": 10}\n    }\n  ],\n  \"trending_topics\": [\"customer service\", \"product quality\"],\n  \"response_recommendations\": [\n    {\n      \"mention_id\": \"tweet_123\",\n      \"action\": \"public_response\",\n      \"priority\": \"high\",\n      \"suggested_response\": \"Thank you for the feedback...\"\n    }\n  ]\n}"
+            }
+          ],
+          "max_tokens": 1500,
+          "temperature": 0.3
+        }
+      },
+      "id": "sentiment-analysis",
+      "name": "AI Sentiment Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process social listening results and generate alerts\nconst items = [];\n\n// Get input data\nconst twitterData = $input.all()[0]?.json || {};\nconst facebookData = $input.all()[1]?.json || {};\nconst redditData = $input.all()[2]?.json || {};\nconst sentimentAnalysis = $input.all()[3]?.json || {};\n\n// Parse AI sentiment analysis\nconst parseAIResponse = (response) => {\n  try {\n    if (response?.choices?.[0]?.message?.content) {\n      const content = response.choices[0].message.content;\n      const jsonMatch = content.match(/\\{[\\s\\S]*\\}/);\n      if (jsonMatch) {\n        return JSON.parse(jsonMatch[0]);\n      }\n    }\n    return null;\n  } catch (error) {\n    return null;\n  }\n};\n\nconst aiResults = parseAIResponse(sentimentAnalysis);\n\n// Process raw social media data\nconst processSocialData = () => {\n  const mentions = [];\n  \n  // Process Twitter mentions\n  if (twitterData.data) {\n    twitterData.data.forEach(tweet => {\n      mentions.push({\n        platform: 'twitter',\n        id: tweet.id,\n        text: tweet.text,\n        author: tweet.author_id,\n        created_at: tweet.created_at,\n        engagement: tweet.public_metrics,\n        url: `https://twitter.com/user/status/${tweet.id}`\n      });\n    });\n  }\n  \n  // Process Facebook mentions\n  if (facebookData.data) {\n    facebookData.data.forEach(post => {\n      mentions.push({\n        platform: 'facebook',\n        id: post.id,\n        text: post.message,\n        author: post.from?.name,\n        created_at: post.created_time,\n        engagement: {\n          likes: post.likes?.summary?.total_count || 0,\n          comments: post.comments?.summary?.total_count || 0\n        },\n        url: `https://facebook.com/${post.id}`\n      });\n    });\n  }\n  \n  // Process Reddit mentions\n  if (redditData.data?.children) {\n    redditData.data.children.forEach(item => {\n      const post = item.data;\n      mentions.push({\n        platform: 'reddit',\n        id: post.id,\n        text: post.title + (post.selftext ? ': ' + post.selftext : ''),\n        author: post.author,\n        created_at: new Date(post.created_utc * 1000).toISOString(),\n        engagement: {\n          upvotes: post.ups,\n          comments: post.num_comments\n        },\n        url: `https://reddit.com${post.permalink}`\n      });\n    });\n  }\n  \n  return mentions;\n};\n\nconst allMentions = processSocialData();\n\n// Generate alerts based on sentiment and urgency\nconst generateAlerts = () => {\n  const alerts = [];\n  \n  if (aiResults) {\n    // Critical mentions alert\n    if (aiResults.critical_mentions && aiResults.critical_mentions.length > 0) {\n      alerts.push({\n        type: 'critical_mention',\n        severity: 'high',\n        message: `${aiResults.critical_mentions.length} critical brand mentions detected`,\n        platform_summary: aiResults.platform_breakdown,\n        mentions: aiResults.critical_mentions,\n        timestamp: new Date().toISOString(),\n        requires_immediate_response: true\n      });\n    }\n    \n    // Negative sentiment trend\n    if (aiResults.overall_sentiment < parseFloat($json.sentiment_threshold)) {\n      alerts.push({\n        type: 'negative_sentiment_trend',\n        severity: 'medium',\n        message: `Overall sentiment below threshold (${aiResults.overall_sentiment.toFixed(2)})`,\n        sentiment_breakdown: aiResults.platform_breakdown,\n        trending_topics: aiResults.trending_topics,\n        timestamp: new Date().toISOString(),\n        action_required: 'Monitor and prepare response strategy'\n      });\n    }\n    \n    // High engagement negative mention\n    const highEngagementNegative = aiResults.critical_mentions?.filter(mention => \n      mention.sentiment < -0.5 && \n      (mention.engagement?.likes > 20 || mention.engagement?.shares > 5)\n    );\n    \n    if (highEngagementNegative && highEngagementNegative.length > 0) {\n      alerts.push({\n        type: 'viral_negative_mention',\n        severity: 'critical',\n        message: 'Negative mention gaining viral traction',\n        mentions: highEngagementNegative,\n        timestamp: new Date().toISOString(),\n        escalation_required: true\n      });\n    }\n  }\n  \n  // Volume spike alert\n  if (allMentions.length > 30) {\n    alerts.push({\n      type: 'mention_volume_spike',\n      severity: 'medium',\n      message: `Unusual mention volume detected: ${allMentions.length} mentions`,\n      platform_distribution: {\n        twitter: allMentions.filter(m => m.platform === 'twitter').length,\n        facebook: allMentions.filter(m => m.platform === 'facebook').length,\n        reddit: allMentions.filter(m => m.platform === 'reddit').length\n      },\n      timestamp: new Date().toISOString()\n    });\n  }\n  \n  return alerts;\n};\n\n// Generate response recommendations\nconst responseRecommendations = aiResults?.response_recommendations || [\n  {\n    platform: 'twitter',\n    action: 'monitor',\n    priority: 'low',\n    message: 'Continue monitoring for sentiment changes'\n  }\n];\n\n// Calculate brand health score\nconst calculateBrandHealthScore = () => {\n  if (!aiResults) return 75;\n  \n  let score = 50; // Base score\n  \n  // Sentiment impact (40 points)\n  score += (aiResults.overall_sentiment * 40);\n  \n  // Mention volume impact (20 points)\n  const volumeScore = Math.min(20, allMentions.length / 2);\n  score += volumeScore;\n  \n  // Critical mentions penalty\n  if (aiResults.critical_mentions) {\n    score -= (aiResults.critical_mentions.length * 10);\n  }\n  \n  return Math.max(0, Math.min(100, Math.round(score)));\n};\n\n// Prepare comprehensive report\nconst socialListeningReport = {\n  monitoring_summary: {\n    timestamp: new Date().toISOString(),\n    monitoring_period: '1 hour',\n    brand_keywords: $json.brand_keywords.split(','),\n    platforms_monitored: $json.platforms.split(','),\n    total_mentions_found: allMentions.length\n  },\n  sentiment_analysis: {\n    overall_sentiment: aiResults?.overall_sentiment || 0,\n    sentiment_category: aiResults?.sentiment_category || 'neutral',\n    brand_health_score: calculateBrandHealthScore(),\n    platform_breakdown: aiResults?.platform_breakdown || {},\n    trending_topics: aiResults?.trending_topics || []\n  },\n  mention_details: {\n    all_mentions: allMentions.slice(0, 20), // Limit for performance\n    critical_mentions: aiResults?.critical_mentions || [],\n    mention_count_by_platform: {\n      twitter: allMentions.filter(m => m.platform === 'twitter').length,\n      facebook: allMentions.filter(m => m.platform === 'facebook').length,\n      reddit: allMentions.filter(m => m.platform === 'reddit').length\n    }\n  },\n  alerts: generateAlerts(),\n  response_recommendations: responseRecommendations,\n  team_notifications: {\n    should_notify_team: generateAlerts().some(alert => alert.severity === 'high' || alert.severity === 'critical'),\n    notification_recipients: [$json.response_team],\n    escalation_required: generateAlerts().some(alert => alert.escalation_required)\n  }\n};\n\nitems.push(socialListeningReport);\n\nreturn items;"
+      },
+      "id": "process-social-data",
+      "name": "Process Social Listening Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.team_notifications.should_notify_team}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "check-alert-threshold",
+      "name": "Check for Negative Sentiment",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://api.sendgrid.com/v3/mail/send",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "sendGridApi",
+        "options": {},
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "personalizations": [
+            {
+              "to": [
+                {
+                  "email": "={{$json.team_notifications.notification_recipients[0]}}",
+                  "name": "Social Media Team"
+                }
+              ],
+              "dynamic_template_data": {
+                "alert_summary": "={{$json.alerts.length}} social media alerts require attention",
+                "brand_health_score": "={{$json.sentiment_analysis.brand_health_score}}",
+                "critical_mentions": "={{$json.mention_details.critical_mentions.length}}",
+                "overall_sentiment": "={{$json.sentiment_analysis.sentiment_category}}",
+                "alert_details": "={{JSON.stringify($json.alerts)}}"
+              }
+            }
+          ],
+          "from": {
+            "email": "alerts@yourcompany.com",
+            "name": "Social Listening System"
+          },
+          "template_id": "d-social-listening-alert-template"
+        }
+      },
+      "id": "send-team-alert",
+      "name": "Send Team Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1560, 200]
+    },
+    {
+      "parameters": {
+        "url": "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK",
+        "options": {},
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "channel": "#social-media-alerts",
+          "username": "Social Listening Bot",
+          "icon_emoji": ":warning:",
+          "attachments": [
+            {
+              "color": "={{$json.sentiment_analysis.brand_health_score > 70 ? 'good' : $json.sentiment_analysis.brand_health_score > 40 ? 'warning' : 'danger'}}",
+              "title": "Brand Mention Alert",
+              "fields": [
+                {
+                  "title": "Total Mentions",
+                  "value": "={{$json.monitoring_summary.total_mentions_found}}",
+                  "short": true
+                },
+                {
+                  "title": "Brand Health Score",
+                  "value": "={{$json.sentiment_analysis.brand_health_score}}/100",
+                  "short": true
+                },
+                {
+                  "title": "Overall Sentiment",
+                  "value": "={{$json.sentiment_analysis.sentiment_category}}",
+                  "short": true
+                },
+                {
+                  "title": "Critical Mentions",
+                  "value": "={{$json.mention_details.critical_mentions.length}}",
+                  "short": true
+                }
+              ],
+              "footer": "Social Listening System",
+              "ts": "={{Math.floor(Date.now() / 1000)}}"
+            }
+          ]
+        }
+      },
+      "id": "send-slack-notification",
+      "name": "Send Slack Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1560, 400]
+    },
+    {
+      "parameters": {
+        "url": "={{$json.webhook_callback || '{{process.env.DASHBOARD_API_URL || 'http://localhost:3001'}}/api/webhooks/social-listening-update'}}",
+        "options": {
+          "timeout": 10000
+        },
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "monitoring_summary",
+              "value": "={{JSON.stringify($json.monitoring_summary)}}"
+            },
+            {
+              "name": "sentiment_analysis",
+              "value": "={{JSON.stringify($json.sentiment_analysis)}}"
+            },
+            {
+              "name": "mention_details",
+              "value": "={{JSON.stringify($json.mention_details)}}"
+            },
+            {
+              "name": "alerts",
+              "value": "={{JSON.stringify($json.alerts)}}"
+            },
+            {
+              "name": "response_recommendations",
+              "value": "={{JSON.stringify($json.response_recommendations)}}"
+            }
+          ]
+        }
+      },
+      "id": "send-dashboard-update",
+      "name": "Send Dashboard Update",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1780, 300]
+    }
+  ],
+  "connections": {
+    "Hourly Social Check": {
+      "main": [
+        [
+          {
+            "node": "Set Monitoring Parameters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Monitoring Parameters": {
+      "main": [
+        [
+          {
+            "node": "Search Twitter Mentions",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Search Facebook Mentions",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Search Reddit Mentions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Twitter Mentions": {
+      "main": [
+        [
+          {
+            "node": "AI Sentiment Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Facebook Mentions": {
+      "main": [
+        [
+          {
+            "node": "AI Sentiment Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Reddit Mentions": {
+      "main": [
+        [
+          {
+            "node": "AI Sentiment Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Sentiment Analysis": {
+      "main": [
+        [
+          {
+            "node": "Process Social Listening Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Social Listening Data": {
+      "main": [
+        [
+          {
+            "node": "Check for Negative Sentiment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check for Negative Sentiment": {
+      "main": [
+        [
+          {
+            "node": "Send Team Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Slack Notification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Dashboard Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Team Alert": {
+      "main": [
+        [
+          {
+            "node": "Send Dashboard Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Slack Notification": {
+      "main": [
+        [
+          {
+            "node": "Send Dashboard Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": {},
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "social-listening",
+      "name": "social-listening"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}

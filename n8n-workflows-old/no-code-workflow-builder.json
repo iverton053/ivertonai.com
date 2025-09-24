@@ -1,0 +1,234 @@
+{
+  "name": "No-Code Workflow Builder Management",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "workflow-builder",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "No-Code Builder API Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "workflow-builder-webhook"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "action",
+              "value": "={{$json.action || 'create_workflow'}}"
+            },
+            {
+              "name": "workflow_name",
+              "value": "={{$json.workflow_name || ''}}"
+            },
+            {
+              "name": "workflow_type",
+              "value": "={{$json.workflow_type || 'automation'}}"
+            },
+            {
+              "name": "user_id",
+              "value": "={{$json.user_id || ''}}"
+            },
+            {
+              "name": "complexity",
+              "value": "={{$json.complexity || 'simple'}}"
+            },
+            {
+              "name": "category",
+              "value": "={{$json.category || 'mixed'}}"
+            },
+            {
+              "name": "template_id",
+              "value": "={{$json.template_id || ''}}"
+            },
+            {
+              "name": "workflow_config",
+              "value": "={{JSON.stringify($json.workflow_config || {})}}"
+            }
+          ]
+        }
+      },
+      "id": "extract-parameters",
+      "name": "Extract Builder Parameters",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.action}}",
+              "operation": "equal",
+              "value2": "create_workflow"
+            }
+          ]
+        }
+      },
+      "id": "route-action",
+      "name": "Route Builder Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// No-Code Workflow Builder Logic\nconst items = [];\n\n// Available drag-and-drop components\nconst WORKFLOW_COMPONENTS = {\n  triggers: [\n    {\n      id: 'email_opened',\n      name: 'Email Opened',\n      description: 'Triggers when a contact opens an email',\n      icon: 'mail',\n      category: 'email',\n      complexity: 'simple',\n      config: {\n        email_service: 'required',\n        tracking_enabled: true\n      }\n    },\n    {\n      id: 'form_submitted',\n      name: 'Form Submitted',\n      description: 'Triggers when someone submits a form',\n      icon: 'form',\n      category: 'leads',\n      complexity: 'simple',\n      config: {\n        form_id: 'required',\n        validation_rules: 'optional'\n      }\n    },\n    {\n      id: 'schedule_trigger',\n      name: 'Schedule',\n      description: 'Run workflow on a schedule',\n      icon: 'clock',\n      category: 'automation',\n      complexity: 'simple',\n      config: {\n        frequency: 'daily',\n        time: '09:00',\n        timezone: 'UTC'\n      }\n    },\n    {\n      id: 'webhook_trigger',\n      name: 'Webhook',\n      description: 'Receive data from external systems',\n      icon: 'webhook',\n      category: 'integration',\n      complexity: 'intermediate',\n      config: {\n        authentication: 'optional',\n        content_type: 'json'\n      }\n    }\n  ],\n  actions: [\n    {\n      id: 'send_email',\n      name: 'Send Email',\n      description: 'Send personalized email to contacts',\n      icon: 'mail',\n      category: 'email',\n      complexity: 'simple',\n      config: {\n        template: 'required',\n        recipient: 'required',\n        personalization: true\n      }\n    },\n    {\n      id: 'update_crm',\n      name: 'Update CRM',\n      description: 'Update contact information in CRM',\n      icon: 'database',\n      category: 'crm',\n      complexity: 'simple',\n      config: {\n        crm_system: 'required',\n        fields_to_update: 'required'\n      }\n    },\n    {\n      id: 'post_social',\n      name: 'Post to Social Media',\n      description: 'Post content to social media platforms',\n      icon: 'share',\n      category: 'social',\n      complexity: 'simple',\n      config: {\n        platforms: ['facebook', 'twitter', 'linkedin'],\n        content: 'required',\n        scheduling: 'optional'\n      }\n    },\n    {\n      id: 'ai_analysis',\n      name: 'AI Analysis',\n      description: 'Analyze data using AI/GPT',\n      icon: 'brain',\n      category: 'ai',\n      complexity: 'advanced',\n      config: {\n        ai_model: 'gpt-4',\n        prompt: 'required',\n        max_tokens: 1000\n      }\n    },\n    {\n      id: 'slack_notification',\n      name: 'Slack Notification',\n      description: 'Send notification to Slack channel',\n      icon: 'message',\n      category: 'notification',\n      complexity: 'simple',\n      config: {\n        channel: 'required',\n        message: 'required',\n        mention_users: 'optional'\n      }\n    }\n  ],\n  logic: [\n    {\n      id: 'condition',\n      name: 'Condition',\n      description: 'Branch workflow based on conditions',\n      icon: 'branch',\n      category: 'logic',\n      complexity: 'intermediate',\n      config: {\n        field: 'required',\n        operator: 'required',\n        value: 'required'\n      }\n    },\n    {\n      id: 'delay',\n      name: 'Delay',\n      description: 'Wait before next action',\n      icon: 'clock',\n      category: 'logic',\n      complexity: 'simple',\n      config: {\n        duration: 'required',\n        unit: 'hours'\n      }\n    },\n    {\n      id: 'loop',\n      name: 'Loop',\n      description: 'Repeat actions for multiple items',\n      icon: 'repeat',\n      category: 'logic',\n      complexity: 'advanced',\n      config: {\n        data_source: 'required',\n        max_iterations: 100\n      }\n    }\n  ]\n};\n\n// Pre-built workflow templates\nconst WORKFLOW_TEMPLATES = [\n  {\n    id: 'welcome_sequence',\n    name: 'Welcome Email Sequence',\n    description: 'Automated welcome series for new subscribers',\n    category: 'email',\n    complexity: 'simple',\n    steps: 5,\n    estimated_setup_time: '10 minutes',\n    components: [\n      { type: 'trigger', id: 'form_submitted' },\n      { type: 'delay', id: 'delay', duration: 1, unit: 'hours' },\n      { type: 'action', id: 'send_email', template: 'welcome' },\n      { type: 'delay', id: 'delay', duration: 3, unit: 'days' },\n      { type: 'action', id: 'send_email', template: 'getting_started' }\n    ]\n  },\n  {\n    id: 'lead_scoring',\n    name: 'Smart Lead Scoring',\n    description: 'Automatically score and route leads',\n    category: 'crm',\n    complexity: 'intermediate',\n    steps: 7,\n    estimated_setup_time: '20 minutes',\n    components: [\n      { type: 'trigger', id: 'form_submitted' },\n      { type: 'action', id: 'ai_analysis', prompt: 'Score this lead 1-100' },\n      { type: 'logic', id: 'condition', field: 'score', operator: '>', value: 80 },\n      { type: 'action', id: 'slack_notification', channel: 'sales' },\n      { type: 'action', id: 'update_crm', priority: 'high' }\n    ]\n  },\n  {\n    id: 'social_campaign',\n    name: 'Cross-Platform Social Campaign',\n    description: 'Schedule and post content across platforms',\n    category: 'social',\n    complexity: 'simple',\n    steps: 4,\n    estimated_setup_time: '15 minutes',\n    components: [\n      { type: 'trigger', id: 'schedule_trigger', frequency: 'daily' },\n      { type: 'action', id: 'ai_analysis', prompt: 'Generate social content' },\n      { type: 'action', id: 'post_social', platforms: ['facebook', 'twitter'] },\n      { type: 'action', id: 'slack_notification', message: 'Content posted' }\n    ]\n  },\n  {\n    id: 'competitor_monitoring',\n    name: 'Competitor Intelligence',\n    description: 'Monitor competitor activities and alerts',\n    category: 'mixed',\n    complexity: 'advanced',\n    steps: 8,\n    estimated_setup_time: '30 minutes',\n    components: [\n      { type: 'trigger', id: 'schedule_trigger', frequency: 'daily' },\n      { type: 'action', id: 'ai_analysis', prompt: 'Analyze competitor data' },\n      { type: 'logic', id: 'condition', field: 'threat_level', operator: '>', value: 'medium' },\n      { type: 'action', id: 'send_email', template: 'competitor_alert' },\n      { type: 'action', id: 'update_crm', notes: 'competitor_intelligence' }\n    ]\n  }\n];\n\n// Handle different actions\nif ($json.action === 'create_workflow') {\n  const response = {\n    action: 'create_workflow',\n    status: 'success',\n    workflow: {\n      id: `workflow_${Date.now()}`,\n      name: $json.workflow_name || 'New Workflow',\n      type: $json.workflow_type || 'automation',\n      category: $json.category || 'mixed',\n      complexity: $json.complexity || 'simple',\n      created_at: new Date().toISOString(),\n      created_by: $json.user_id,\n      n8n_compatible: true,\n      components_used: [],\n      configuration: JSON.parse($json.workflow_config || '{}')\n    },\n    metadata: {\n      timestamp: new Date().toISOString(),\n      builder_version: '1.0',\n      n8n_version: 'compatible'\n    }\n  };\n  items.push(response);\n} else if ($json.action === 'get_components') {\n  const response = {\n    action: 'get_components',\n    status: 'success',\n    components: WORKFLOW_COMPONENTS,\n    metadata: {\n      total_triggers: WORKFLOW_COMPONENTS.triggers.length,\n      total_actions: WORKFLOW_COMPONENTS.actions.length,\n      total_logic: WORKFLOW_COMPONENTS.logic.length,\n      timestamp: new Date().toISOString()\n    }\n  };\n  items.push(response);\n} else if ($json.action === 'get_templates') {\n  let filteredTemplates = WORKFLOW_TEMPLATES;\n  \n  // Apply filters\n  if ($json.category && $json.category !== 'all') {\n    filteredTemplates = filteredTemplates.filter(template => \n      template.category === $json.category\n    );\n  }\n  \n  if ($json.complexity && $json.complexity !== 'all') {\n    filteredTemplates = filteredTemplates.filter(template => \n      template.complexity === $json.complexity\n    );\n  }\n  \n  const response = {\n    action: 'get_templates',\n    status: 'success',\n    templates: filteredTemplates,\n    metadata: {\n      total_available: WORKFLOW_TEMPLATES.length,\n      filtered_count: filteredTemplates.length,\n      timestamp: new Date().toISOString()\n    }\n  };\n  items.push(response);\n} else if ($json.action === 'export_n8n') {\n  // Convert workflow to n8n format\n  const n8nWorkflow = {\n    name: $json.workflow_name || 'Exported Workflow',\n    nodes: [],\n    connections: {},\n    active: true,\n    settings: {\n      executionOrder: 'v1',\n      saveManualExecutions: false,\n      callerPolicy: 'workflowsFromSameOwner'\n    },\n    staticData: {},\n    tags: [{\n      createdAt: new Date().toISOString(),\n      updatedAt: new Date().toISOString(),\n      id: 'no-code-builder',\n      name: 'no-code-builder'\n    }],\n    triggerCount: 0,\n    updatedAt: new Date().toISOString(),\n    versionId: '1'\n  };\n  \n  const response = {\n    action: 'export_n8n',\n    status: 'success',\n    n8n_workflow: n8nWorkflow,\n    download_url: `/api/workflows/export/${$json.workflow_id || 'temp'}.json`,\n    metadata: {\n      timestamp: new Date().toISOString(),\n      export_format: 'n8n_compatible',\n      file_size_estimate: JSON.stringify(n8nWorkflow).length\n    }\n  };\n  items.push(response);\n} else {\n  // Default response for unknown actions\n  const response = {\n    action: $json.action || 'unknown',\n    status: 'error',\n    error: {\n      code: 'UNSUPPORTED_ACTION',\n      message: `Action '${$json.action}' is not supported by the No-Code Workflow Builder`\n    },\n    supported_actions: [\n      'create_workflow',\n      'get_components', \n      'get_templates',\n      'export_n8n'\n    ]\n  };\n  items.push(response);\n}\n\nreturn items;"
+      },
+      "id": "workflow-builder-logic",
+      "name": "No-Code Builder Logic",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Handle template instantiation\nconst items = [];\n\nconst TEMPLATE_CONFIGURATIONS = {\n  welcome_sequence: {\n    nodes: [\n      {\n        id: 'trigger_form',\n        name: 'Form Submission Trigger',\n        type: 'n8n-nodes-base.webhook',\n        position: [100, 100],\n        parameters: {\n          httpMethod: 'POST',\n          path: 'form-submit'\n        }\n      },\n      {\n        id: 'delay_1hour',\n        name: 'Wait 1 Hour',\n        type: 'n8n-nodes-base.wait',\n        position: [300, 100],\n        parameters: {\n          amount: 1,\n          unit: 'hours'\n        }\n      },\n      {\n        id: 'send_welcome',\n        name: 'Send Welcome Email',\n        type: 'n8n-nodes-base.emailSend',\n        position: [500, 100],\n        parameters: {\n          subject: 'Welcome to {{company_name}}!',\n          html: '<h1>Welcome!</h1><p>Thanks for joining us.</p>'\n        }\n      }\n    ],\n    connections: {\n      'trigger_form': { 'main': [[{ 'node': 'delay_1hour', 'type': 'main', 'index': 0 }]] },\n      'delay_1hour': { 'main': [[{ 'node': 'send_welcome', 'type': 'main', 'index': 0 }]] }\n    }\n  },\n  lead_scoring: {\n    nodes: [\n      {\n        id: 'trigger_contact',\n        name: 'Contact Updated Trigger', \n        type: 'n8n-nodes-base.webhook',\n        position: [100, 100],\n        parameters: {\n          httpMethod: 'POST',\n          path: 'contact-update'\n        }\n      },\n      {\n        id: 'ai_score',\n        name: 'AI Lead Scoring',\n        type: 'n8n-nodes-base.openAi',\n        position: [300, 100],\n        parameters: {\n          resource: 'text',\n          operation: 'complete',\n          model: 'gpt-3.5-turbo',\n          prompt: 'Score this lead from 1-100 based on the data: {{$json}}'\n        }\n      },\n      {\n        id: 'condition_score',\n        name: 'Check High Score',\n        type: 'n8n-nodes-base.if',\n        position: [500, 100],\n        parameters: {\n          conditions: {\n            number: [{\n              value1: '={{$json.score}}',\n              operation: 'larger',\n              value2: 80\n            }]\n          }\n        }\n      }\n    ]\n  }\n};\n\nconst templateId = $json.template_id;\nconst templateConfig = TEMPLATE_CONFIGURATIONS[templateId];\n\nif (templateConfig) {\n  const response = {\n    action: 'instantiate_template',\n    status: 'success',\n    template_id: templateId,\n    workflow: {\n      id: `workflow_${templateId}_${Date.now()}`,\n      name: `${templateId.replace(/_/g, ' ')} - Instance`,\n      nodes: templateConfig.nodes,\n      connections: templateConfig.connections || {},\n      settings: {\n        executionOrder: 'v1',\n        saveManualExecutions: false\n      },\n      n8n_compatible: true\n    },\n    metadata: {\n      timestamp: new Date().toISOString(),\n      template_used: templateId,\n      ready_to_export: true\n    }\n  };\n  items.push(response);\n} else {\n  const response = {\n    action: 'instantiate_template',\n    status: 'error',\n    error: {\n      code: 'TEMPLATE_NOT_FOUND',\n      message: `Template '${templateId}' not found`,\n      available_templates: Object.keys(TEMPLATE_CONFIGURATIONS)\n    }\n  };\n  items.push(response);\n}\n\nreturn items;"
+      },
+      "id": "template-instantiation",
+      "name": "Template Instantiation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{$json.webhook_callback || 'http://localhost:3001/api/webhooks/workflow-builder-response'}}",
+        "options": {
+          "timeout": 10000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{JSON.stringify($json)}}"
+      },
+      "id": "send-response",
+      "name": "Send to Dashboard",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1120, 250]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "status",
+              "value": "success"
+            },
+            {
+              "name": "message",
+              "value": "No-Code Workflow Builder request processed successfully"
+            }
+          ]
+        }
+      },
+      "id": "success-response",
+      "name": "Success Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [1340, 250]
+    }
+  ],
+  "connections": {
+    "No-Code Builder API Trigger": {
+      "main": [
+        [
+          {
+            "node": "Extract Builder Parameters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Builder Parameters": {
+      "main": [
+        [
+          {
+            "node": "Route Builder Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Builder Action": {
+      "main": [
+        [
+          {
+            "node": "No-Code Builder Logic",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Template Instantiation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No-Code Builder Logic": {
+      "main": [
+        [
+          {
+            "node": "Send to Dashboard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Template Instantiation": {
+      "main": [
+        [
+          {
+            "node": "Send to Dashboard", 
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send to Dashboard": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": {},
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "no-code-builder",
+      "name": "no-code-builder"
+    },
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z", 
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "workflow-management",
+      "name": "workflow-management"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}

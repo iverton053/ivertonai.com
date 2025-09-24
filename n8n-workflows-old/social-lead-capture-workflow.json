@@ -1,0 +1,446 @@
+{
+  "name": "Social Lead Capture Automation (Fixed)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "linkedin-connection",
+        "responseMode": "responseNode",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "name": "LinkedIn Connection Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "id": "linkedin-connection-webhook"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "instagram-interaction",
+        "responseMode": "responseNode",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "name": "Instagram Interaction Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 500],
+      "id": "instagram-interaction-webhook"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "facebook-interaction",
+        "responseMode": "responseNode",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "name": "Facebook Interaction Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 700],
+      "id": "facebook-interaction-webhook"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "threads-interaction",
+        "responseMode": "responseNode",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "name": "Threads Interaction Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 900],
+      "id": "threads-interaction-webhook"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "youtube-engagement",
+        "responseMode": "responseNode",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "name": "YouTube Engagement Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 1100],
+      "id": "youtube-engagement-webhook"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pinterest-engagement",
+        "responseMode": "responseNode",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "name": "Pinterest Engagement Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 1300],
+      "id": "pinterest-engagement-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Enhanced Social Media Lead Capture Engine\\nconst inputData = $input.first().json;\\nconst body = inputData.body || inputData;\\n\\n// Determine platform from input or URL path\\nlet platform = body.platform || 'unknown';\\nif (!platform || platform === 'unknown') {\\n  const path = inputData.path || '';\\n  if (path.includes('linkedin')) platform = 'linkedin';\\n  else if (path.includes('instagram')) platform = 'instagram';\\n  else if (path.includes('facebook')) platform = 'facebook';\\n  else if (path.includes('threads')) platform = 'threads';\\n  else if (path.includes('youtube')) platform = 'youtube';\\n  else if (path.includes('pinterest')) platform = 'pinterest';\\n}\\n\\n// Validate required data\\nif (!body.interaction_type && !body.event_type) {\\n  return [{\\n    json: {\\n      error: true,\\n      message: 'Missing interaction_type or event_type',\\n      platform: platform\\n    }\\n  }];\\n}\\n\\n// Platform configuration\\nconst platformConfig = {\\n  linkedin: {\\n    name: 'LinkedIn',\\n    priority: 'very_high',\\n    lead_value_multiplier: 1.5\\n  },\\n  instagram: {\\n    name: 'Instagram',\\n    priority: 'high',\\n    lead_value_multiplier: 1.2\\n  },\\n  facebook: {\\n    name: 'Facebook',\\n    priority: 'high',\\n    lead_value_multiplier: 1.1\\n  },\\n  threads: {\\n    name: 'Threads',\\n    priority: 'very_high',\\n    lead_value_multiplier: 1.4\\n  },\\n  youtube: {\\n    name: 'YouTube',\\n    priority: 'medium',\\n    lead_value_multiplier: 1.0\\n  },\\n  pinterest: {\\n    name: 'Pinterest',\\n    priority: 'medium',\\n    lead_value_multiplier: 0.9\\n  }\\n};\\n\\n// Extract contact information\\nconst contactInfo = {\\n  full_name: body.full_name || body.name || body.sender?.name || '',\\n  username: body.username || body.sender?.username || '',\\n  email: body.email || '',\\n  company: body.company || body.sender?.company || '',\\n  title: body.title || body.headline || body.sender?.headline || '',\\n  location: body.location || body.sender?.location || '',\\n  profile_url: body.profile_url || body.sender?.profileUrl || '',\\n  follower_count: body.follower_count || body.followers || 0,\\n  verified: body.verified || body.is_verified || false\\n};\\n\\n// Extract content information\\nconst contentInfo = {\\n  message: body.message || body.content || body.text || '',\\n  interaction_type: body.interaction_type || body.event_type,\\n  post_url: body.post_url || body.url || '',\\n  timestamp: body.timestamp || new Date().toISOString()\\n};\\n\\n// Calculate engagement score\\nconst scoreMatrix = {\\n  linkedin: {\\n    'connection_request': 30,\\n    'message': 40,\\n    'comment': 20,\\n    'like': 8,\\n    'share': 25,\\n    'profile_view': 15\\n  },\\n  instagram: {\\n    'follow': 15,\\n    'like': 5,\\n    'comment': 18,\\n    'share': 22,\\n    'story_reply': 25,\\n    'direct_message': 35\\n  },\\n  facebook: {\\n    'like': 5,\\n    'comment': 15,\\n    'share': 20,\\n    'message': 30,\\n    'friend_request': 25\\n  },\\n  threads: {\\n    'follow': 20,\\n    'like': 8,\\n    'reply': 25,\\n    'repost': 22,\\n    'quote': 28\\n  },\\n  youtube: {\\n    'subscribe': 25,\\n    'like': 8,\\n    'comment': 18,\\n    'share': 20\\n  },\\n  pinterest: {\\n    'follow': 12,\\n    'like': 6,\\n    'comment': 15,\\n    'save': 18\\n  }\\n};\\n\\nconst baseScore = scoreMatrix[platform]?.[contentInfo.interaction_type] || 10;\\nlet finalScore = baseScore;\\n\\n// Apply multipliers\\nif (contactInfo.verified) finalScore *= 1.3;\\nif (contactInfo.company) finalScore *= 1.2;\\nif (contactInfo.follower_count > 1000) finalScore *= 1.1;\\nif (contactInfo.follower_count > 10000) finalScore *= 1.2;\\nif (platformConfig[platform]?.lead_value_multiplier) {\\n  finalScore *= platformConfig[platform].lead_value_multiplier;\\n}\\n\\n// Determine lead quality\\nlet qualityLevel = 'low';\\nlet priority = 'normal';\\nif (finalScore >= 50) {\\n  qualityLevel = 'high';\\n  priority = 'urgent';\\n} else if (finalScore >= 25) {\\n  qualityLevel = 'medium';\\n  priority = 'high';\\n}\\n\\n// Generate lead qualification\\nconst leadData = {\\n  lead_id: `lead_${platform}_${Date.now()}`,\\n  platform: platform,\\n  platform_name: platformConfig[platform]?.name || platform,\\n  contact_info: contactInfo,\\n  content_info: contentInfo,\\n  \\n  lead_qualification: {\\n    score: Math.round(finalScore),\\n    quality_level: qualityLevel,\\n    priority: priority,\\n    qualification_factors: [\\n      contactInfo.verified ? 'verified_account' : null,\\n      contactInfo.company ? 'has_company' : null,\\n      contactInfo.follower_count > 1000 ? 'influencer' : null,\\n      platform === 'linkedin' ? 'professional_network' : null\\n    ].filter(Boolean)\\n  },\\n  \\n  enrichment_data: {\\n    estimated_value: Math.round(finalScore * 50), // $50 per point\\n    follow_up_timeline: priority === 'urgent' ? '2 hours' : priority === 'high' ? '24 hours' : '72 hours',\\n    platform_priority: platformConfig[platform]?.priority || 'medium'\\n  },\\n  \\n  processing_metadata: {\\n    processed_at: new Date().toISOString(),\\n    workflow_version: '2.0-fixed',\\n    data_completeness: Object.values(contactInfo).filter(v => v && v !== '').length / Object.keys(contactInfo).length\\n  }\\n};\\n\\nreturn [{ json: leadData }];"
+      },
+      "name": "Process Social Lead",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 700],
+      "id": "process-social-lead"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.contact_info.full_name }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "isNotEmpty"
+              }
+            },
+            {
+              "leftValue": "={{ $json.lead_qualification.score }}",
+              "rightValue": 15,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "name": "Valid Lead?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 700],
+      "id": "valid-lead-check"
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.CRM_API_BASE_URL || 'http://localhost:3001' }}/api/crm/leads",
+        "sendBody": true,
+        "specifyBody": "json",
+        "bodyJson": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "name": "Save to CRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [900, 600],
+      "id": "save-to-crm"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.lead_qualification.quality_level }}",
+              "rightValue": "high",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "name": "High Quality Lead?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1120, 600],
+      "id": "high-quality-check"
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.SLACK_WEBHOOK_URL || 'https://hooks.slack.com/services/your/webhook/url' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "bodyJson": "={{ {\n  \"text\": \"🎯 High-Quality Social Lead Captured!\",\n  \"attachments\": [\n    {\n      \"color\": \"good\",\n      \"fields\": [\n        {\n          \"title\": \"Contact\",\n          \"value\": $json.contact_info.full_name + (($json.contact_info.company) ? \" at \" + $json.contact_info.company : \"\"),\n          \"short\": true\n        },\n        {\n          \"title\": \"Platform\",\n          \"value\": $json.platform_name,\n          \"short\": true\n        },\n        {\n          \"title\": \"Score\",\n          \"value\": $json.lead_qualification.score + \"/100\",\n          \"short\": true\n        },\n        {\n          \"title\": \"Priority\",\n          \"value\": $json.lead_qualification.priority,\n          \"short\": true\n        }\n      ]\n    }\n  ]\n} }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "name": "Alert Sales Team",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1340, 500],
+      "id": "alert-sales-team"
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.CRM_API_BASE_URL || 'http://localhost:3001' }}/api/crm/tasks",
+        "sendBody": true,
+        "specifyBody": "json",
+        "bodyJson": "={{ {\n  \"title\": \"Follow up with \" + $json.platform_name + \" lead: \" + $json.contact_info.full_name,\n  \"description\": \"High-quality social lead from \" + $json.platform_name + \". Score: \" + $json.lead_qualification.score + \"/100\",\n  \"priority\": $json.lead_qualification.priority,\n  \"due_date\": new Date(Date.now() + ($json.lead_qualification.priority === 'urgent' ? 2*60*60*1000 : 24*60*60*1000)).toISOString(),\n  \"metadata\": {\n    \"lead_id\": $json.lead_id,\n    \"platform\": $json.platform,\n    \"quality_level\": $json.lead_qualification.quality_level,\n    \"contact_info\": $json.contact_info\n  }\n} }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "name": "Create Follow-up Task",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1340, 700],
+      "id": "create-follow-up-task"
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.CRM_API_BASE_URL || 'http://localhost:3001' }}/api/analytics/lead-capture",
+        "sendBody": true,
+        "specifyBody": "json",
+        "bodyJson": "={{ {\n  \"event_type\": \"social_lead_captured\",\n  \"platform\": $json.platform,\n  \"quality_level\": $json.lead_qualification.quality_level,\n  \"score\": $json.lead_qualification.score,\n  \"estimated_value\": $json.enrichment_data.estimated_value,\n  \"timestamp\": new Date().toISOString()\n} }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "name": "Track Analytics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [900, 900],
+      "id": "track-analytics"
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.CRM_API_BASE_URL || 'http://localhost:3001' }}/api/analytics/low-quality-leads",
+        "sendBody": true,
+        "specifyBody": "json",
+        "bodyJson": "={{ {\n  \"reason\": \"low_score_or_missing_data\",\n  \"platform\": $json.platform,\n  \"score\": $json.lead_qualification?.score || 0,\n  \"missing_fields\": Object.keys($json.contact_info || {}).filter(key => !$json.contact_info[key]),\n  \"timestamp\": new Date().toISOString()\n} }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "name": "Log Low Quality Lead",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [680, 900],
+      "id": "log-low-quality-lead"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  \"status\": \"success\",\n  \"message\": \"Social lead captured and processed\",\n  \"lead_id\": $json.lead_id,\n  \"quality_level\": $json.lead_qualification.quality_level,\n  \"score\": $json.lead_qualification.score,\n  \"platform\": $json.platform_name,\n  \"follow_up_priority\": $json.lead_qualification.priority,\n  \"processed_at\": new Date().toISOString()\n} }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "name": "Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1560, 600],
+      "id": "success-response"
+    }
+  ],
+  "connections": {
+    "LinkedIn Connection Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Social Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Instagram Interaction Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Social Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Facebook Interaction Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Social Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Threads Interaction Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Social Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YouTube Engagement Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Social Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pinterest Engagement Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Social Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Social Lead": {
+      "main": [
+        [
+          {
+            "node": "Valid Lead?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid Lead?": {
+      "main": [
+        [
+          {
+            "node": "Save to CRM",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Low Quality Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save to CRM": {
+      "main": [
+        [
+          {
+            "node": "High Quality Lead?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Track Analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "High Quality Lead?": {
+      "main": [
+        [
+          {
+            "node": "Alert Sales Team",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create Follow-up Task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert Sales Team": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Follow-up Task": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "timezone": "America/New_York",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "executionOrder": "v1"
+  },
+  "versionId": "2.0-fixed",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "social-lead-capture-fixed"
+  },
+  "id": "social-lead-capture-fixed",
+  "tags": [
+    {
+      "id": "social-media-fixed",
+      "name": "Social Media"
+    },
+    {
+      "id": "lead-capture-fixed",
+      "name": "Lead Capture"
+    },
+    {
+      "id": "automation-fixed",
+      "name": "Automation"
+    }
+  ]
+}

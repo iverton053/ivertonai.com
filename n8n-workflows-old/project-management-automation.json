@@ -1,0 +1,521 @@
+{
+  "name": "Project Management Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "project-webhook",
+        "options": {}
+      },
+      "id": "project-webhook",
+      "name": "Project Status Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [280, 200],
+      "webhookId": "project-status-update"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "project-status-change",
+              "leftValue": "={{ $json.event_type }}",
+              "rightValue": "project_status_changed",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        }
+      },
+      "id": "check-event-type",
+      "name": "Check Event Type",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [500, 200]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://localhost:3002/api/projects/{{ $json.project_id }}/full-details",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "get-project-details",
+      "name": "Get Project Details",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "api-key-auth",
+          "name": "API Key Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Analyze project status and determine automated actions\nconst project = $input.first().json.project;\nconst webhookData = $('Project Status Webhook').first().json;\n\nconst automatedActions = {\n  project_id: project.id,\n  project_name: project.name,\n  client_id: project.client_id,\n  client: project.client,\n  old_status: webhookData.old_status,\n  new_status: webhookData.new_status,\n  changed_by: webhookData.changed_by,\n  actions_needed: [],\n  notifications: [],\n  billing_updates: [],\n  time_tracking: []\n};\n\n// Determine actions based on status change\nswitch (webhookData.new_status) {\n  case 'active':\n    if (webhookData.old_status === 'planning') {\n      automatedActions.actions_needed.push({\n        type: 'start_time_tracking',\n        description: 'Enable time tracking for all team members',\n        priority: 'high'\n      });\n      \n      automatedActions.actions_needed.push({\n        type: 'create_project_channel',\n        description: 'Create dedicated Slack channel for project communication',\n        priority: 'medium'\n      });\n      \n      automatedActions.billing_updates.push({\n        type: 'activate_billing',\n        description: 'Start billing cycle for hourly/milestone-based projects',\n        priority: 'high'\n      });\n      \n      automatedActions.notifications.push({\n        type: 'team_notification',\n        recipients: project.team_members,\n        subject: `Project ${project.name} has started!`,\n        message: `The project ${project.name} for ${project.client.name} is now active. Time tracking is enabled.`\n      });\n      \n      automatedActions.notifications.push({\n        type: 'client_notification',\n        recipients: [project.client.email],\n        subject: `Your project ${project.name} has started`,\n        message: `We're excited to announce that your project has officially started. You can track progress at your client portal.`\n      });\n    }\n    break;\n    \n  case 'completed':\n    automatedActions.actions_needed.push({\n      type: 'stop_time_tracking',\n      description: 'Stop all active time tracking sessions',\n      priority: 'high'\n    });\n    \n    automatedActions.actions_needed.push({\n      type: 'generate_final_invoice',\n      description: 'Generate final project invoice with all unbilled hours',\n      priority: 'high'\n    });\n    \n    automatedActions.actions_needed.push({\n      type: 'create_project_report',\n      description: 'Generate comprehensive project completion report',\n      priority: 'medium'\n    });\n    \n    automatedActions.actions_needed.push({\n      type: 'client_feedback_request',\n      description: 'Send client satisfaction survey',\n      priority: 'medium'\n    });\n    \n    automatedActions.billing_updates.push({\n      type: 'finalize_billing',\n      description: 'Process final billing and close project financially',\n      priority: 'high'\n    });\n    \n    automatedActions.notifications.push({\n      type: 'completion_notification',\n      recipients: [project.client.email, ...project.team_members.map(m => m.email)],\n      subject: `Project ${project.name} completed successfully!`,\n      message: `Great news! Project ${project.name} has been completed. Final invoicing will be processed automatically.`\n    });\n    break;\n    \n  case 'on_hold':\n    automatedActions.actions_needed.push({\n      type: 'pause_time_tracking',\n      description: 'Pause all active time tracking sessions',\n      priority: 'high'\n    });\n    \n    automatedActions.actions_needed.push({\n      type: 'suspend_billing',\n      description: 'Suspend recurring billing until project resumes',\n      priority: 'medium'\n    });\n    \n    automatedActions.notifications.push({\n      type: 'hold_notification',\n      recipients: [project.client.email],\n      subject: `Project ${project.name} has been placed on hold`,\n      message: `Your project has been temporarily placed on hold. We'll notify you when work resumes.`\n    });\n    break;\n    \n  case 'cancelled':\n    automatedActions.actions_needed.push({\n      type: 'stop_all_activities',\n      description: 'Stop time tracking, billing, and all project activities',\n      priority: 'high'\n    });\n    \n    automatedActions.actions_needed.push({\n      type: 'generate_cancellation_invoice',\n      description: 'Generate invoice for work completed up to cancellation',\n      priority: 'high'\n    });\n    \n    automatedActions.billing_updates.push({\n      type: 'process_cancellation',\n      description: 'Process cancellation billing and refunds if applicable',\n      priority: 'high'\n    });\n    break;\n}\n\n// Add budget monitoring if project is active\nif (webhookData.new_status === 'active' && project.budget > 0) {\n  const budgetUsed = (project.actual_hours * project.hourly_rate) || project.total_invoiced || 0;\n  const budgetPercentage = (budgetUsed / project.budget) * 100;\n  \n  if (budgetPercentage > 80) {\n    automatedActions.actions_needed.push({\n      type: 'budget_warning',\n      description: `Project has used ${budgetPercentage.toFixed(1)}% of budget`,\n      priority: 'high',\n      metadata: {\n        budget_used: budgetUsed,\n        budget_total: project.budget,\n        budget_remaining: project.budget - budgetUsed\n      }\n    });\n  }\n}\n\n// Check for overdue tasks\nconst overdueTasks = project.tasks?.filter(task => \n  task.status !== 'completed' && \n  new Date(task.due_date) < new Date()\n) || [];\n\nif (overdueTasks.length > 0) {\n  automatedActions.actions_needed.push({\n    type: 'overdue_task_alert',\n    description: `${overdueTasks.length} tasks are overdue`,\n    priority: 'high',\n    metadata: {\n      overdue_tasks: overdueTasks.map(task => ({\n        id: task.id,\n        title: task.title,\n        due_date: task.due_date,\n        assigned_to: task.assigned_to\n      }))\n    }\n  });\n}\n\nreturn [{ json: automatedActions }];"
+      },
+      "id": "analyze-project-status",
+      "name": "Analyze Project Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [940, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3002/api/time-tracking/project/{{ $json.project_id }}/{{ $json.new_status === 'active' ? 'start' : $json.new_status === 'completed' ? 'stop' : 'pause' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"automated_action\": true,\n  \"reason\": \"Project status changed to {{ $json.new_status }}\",\n  \"changed_by\": \"{{ $json.changed_by }}\",\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}",
+        "options": {}
+      },
+      "id": "update-time-tracking",
+      "name": "Update Time Tracking",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1160, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "api-key-auth",
+          "name": "API Key Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "needs-billing-update",
+              "leftValue": "={{ $json.billing_updates.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-billing-updates",
+      "name": "Needs Billing Updates?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1380, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3002/api/billing/project/{{ $('Analyze Project Status').item.json.project_id }}/status-update",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"new_status\": \"{{ $('Analyze Project Status').item.json.new_status }}\",\n  \"old_status\": \"{{ $('Analyze Project Status').item.json.old_status }}\",\n  \"billing_actions\": {{ JSON.stringify($('Analyze Project Status').item.json.billing_updates) }},\n  \"auto_process\": true,\n  \"generate_invoice\": {{ $('Analyze Project Status').item.json.new_status === 'completed' || $('Analyze Project Status').item.json.new_status === 'cancelled' }},\n  \"stop_recurring\": {{ $('Analyze Project Status').item.json.new_status === 'completed' || $('Analyze Project Status').item.json.new_status === 'cancelled' }}\n}",
+        "options": {}
+      },
+      "id": "process-billing-updates",
+      "name": "Process Billing Updates",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1600, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "api-key-auth",
+          "name": "API Key Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3002/api/integrations/slack/channel/create",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"channel_name\": \"project-{{ $('Analyze Project Status').item.json.project_name.toLowerCase().replace(/[^a-z0-9]/g, '-') }}\",\n  \"purpose\": \"Project communication for {{ $('Analyze Project Status').item.json.project_name }} ({{ $('Analyze Project Status').item.json.client.name }})\",\n  \"invite_users\": {{ JSON.stringify($('Get Project Details').item.json.project.team_members.map(member => member.slack_user_id).filter(Boolean)) }},\n  \"project_id\": \"{{ $('Analyze Project Status').item.json.project_id }}\",\n  \"client_name\": \"{{ $('Analyze Project Status').item.json.client.name }}\"\n}",
+        "options": {}
+      },
+      "id": "create-slack-channel",
+      "name": "Create Project Slack Channel",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1160, 400],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "api-key-auth",
+          "name": "API Key Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3002/api/notifications/bulk-send",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"notifications\": {{ JSON.stringify($('Analyze Project Status').item.json.notifications) }},\n  \"project_id\": \"{{ $('Analyze Project Status').item.json.project_id }}\",\n  \"event_type\": \"project_status_change\",\n  \"automated\": true,\n  \"template_variables\": {\n    \"project_name\": \"{{ $('Analyze Project Status').item.json.project_name }}\",\n    \"client_name\": \"{{ $('Analyze Project Status').item.json.client.name }}\",\n    \"new_status\": \"{{ $('Analyze Project Status').item.json.new_status }}\",\n    \"project_url\": \"https://portal.agency.com/projects/{{ $('Analyze Project Status').item.json.project_id }}\"\n  }\n}",
+        "options": {}
+      },
+      "id": "send-notifications",
+      "name": "Send Status Notifications",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1380, 400],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "api-key-auth",
+          "name": "API Key Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-overdue-tasks",
+              "leftValue": "={{ $json.actions_needed.filter(action => action.type === 'overdue_task_alert').length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-overdue-tasks",
+      "name": "Has Overdue Tasks?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1160, 600]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process overdue tasks and create escalation actions\nconst projectData = $('Analyze Project Status').first().json;\nconst overdueAction = projectData.actions_needed.find(action => action.type === 'overdue_task_alert');\n\nif (!overdueAction) {\n  return [];\n}\n\nconst overdueTasks = overdueAction.metadata.overdue_tasks;\nconst escalationActions = [];\n\nfor (const task of overdueTasks) {\n  const daysOverdue = Math.floor((Date.now() - new Date(task.due_date).getTime()) / (24 * 60 * 60 * 1000));\n  \n  let escalationLevel = 'medium';\n  if (daysOverdue > 7) escalationLevel = 'high';\n  if (daysOverdue > 14) escalationLevel = 'critical';\n  \n  escalationActions.push({\n    task_id: task.id,\n    task_title: task.title,\n    assigned_to: task.assigned_to,\n    days_overdue: daysOverdue,\n    escalation_level: escalationLevel,\n    project_id: projectData.project_id,\n    project_name: projectData.project_name,\n    client_name: projectData.client.name,\n    action: daysOverdue > 14 ? 'reassign_and_escalate' : daysOverdue > 7 ? 'manager_escalation' : 'reminder_notification'\n  });\n}\n\nreturn escalationActions.map(action => ({ json: action }));"
+      },
+      "id": "process-overdue-tasks",
+      "name": "Process Overdue Tasks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1380, 600]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3002/api/tasks/{{ $json.task_id }}/escalate",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"escalation_type\": \"{{ $json.action }}\",\n  \"escalation_level\": \"{{ $json.escalation_level }}\",\n  \"days_overdue\": {{ $json.days_overdue }},\n  \"automated\": true,\n  \"reason\": \"Task is {{ $json.days_overdue }} days overdue\",\n  \"notify_manager\": {{ $json.escalation_level !== 'medium' }},\n  \"notify_client\": {{ $json.escalation_level === 'critical' }},\n  \"reassign_task\": {{ $json.action === 'reassign_and_escalate' }}\n}",
+        "options": {}
+      },
+      "id": "escalate-overdue-task",
+      "name": "Escalate Overdue Task",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1600, 600],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "api-key-auth",
+          "name": "API Key Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "is-completion",
+              "leftValue": "={{ $json.new_status }}",
+              "rightValue": "completed",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-project-completion",
+      "name": "Project Completed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1160, 800]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3002/api/reports/project/{{ $('Analyze Project Status').item.json.project_id }}/completion-report",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"report_type\": \"project_completion\",\n  \"include_sections\": [\n    \"project_summary\",\n    \"timeline_analysis\",\n    \"budget_breakdown\",\n    \"team_performance\",\n    \"deliverables_completed\",\n    \"client_feedback\",\n    \"lessons_learned\"\n  ],\n  \"auto_send_to_client\": true,\n  \"auto_send_to_team\": true,\n  \"generate_pdf\": true,\n  \"include_time_logs\": true,\n  \"include_invoicing_summary\": true\n}",
+        "options": {}
+      },
+      "id": "generate-completion-report",
+      "name": "Generate Completion Report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1380, 800],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "api-key-auth",
+          "name": "API Key Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3002/api/client-feedback/survey/send",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"project_id\": \"{{ $('Analyze Project Status').item.json.project_id }}\",\n  \"client_id\": \"{{ $('Analyze Project Status').item.json.client_id }}\",\n  \"survey_type\": \"project_completion\",\n  \"questions\": [\n    {\n      \"type\": \"rating\",\n      \"question\": \"How satisfied are you with the overall project outcome?\",\n      \"scale\": 5\n    },\n    {\n      \"type\": \"rating\",\n      \"question\": \"How would you rate our communication throughout the project?\",\n      \"scale\": 5\n    },\n    {\n      \"type\": \"rating\",\n      \"question\": \"How likely are you to recommend our services?\",\n      \"scale\": 10\n    },\n    {\n      \"type\": \"text\",\n      \"question\": \"What did we do well on this project?\"\n    },\n    {\n      \"type\": \"text\",\n      \"question\": \"What could we improve for future projects?\"\n    },\n    {\n      \"type\": \"boolean\",\n      \"question\": \"Would you like to discuss future projects with us?\"\n    }\n  ],\n  \"custom_message\": \"Thank you for trusting us with your {{ $('Analyze Project Status').item.json.project_name }} project. Your feedback helps us improve our services.\",\n  \"expire_days\": 14,\n  \"send_reminders\": true\n}",
+        "options": {}
+      },
+      "id": "send-client-survey",
+      "name": "Send Client Satisfaction Survey",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1600, 800],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "api-key-auth",
+          "name": "API Key Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3002/api/analytics/project/{{ $('Analyze Project Status').item.json.project_id }}/status-change",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"event_type\": \"project_status_automation\",\n  \"project_id\": \"{{ $('Analyze Project Status').item.json.project_id }}\",\n  \"old_status\": \"{{ $('Analyze Project Status').item.json.old_status }}\",\n  \"new_status\": \"{{ $('Analyze Project Status').item.json.new_status }}\",\n  \"automated_actions_count\": {{ $('Analyze Project Status').item.json.actions_needed.length }},\n  \"notifications_sent\": {{ $('Analyze Project Status').item.json.notifications.length }},\n  \"billing_updates\": {{ $('Analyze Project Status').item.json.billing_updates.length }},\n  \"timestamp\": \"{{ new Date().toISOString() }}\",\n  \"success_rate\": 100\n}",
+        "options": {}
+      },
+      "id": "update-project-analytics",
+      "name": "Update Project Analytics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1820, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "api-key-auth",
+          "name": "API Key Auth"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Project Status Webhook": {
+      "main": [
+        [
+          {
+            "node": "Check Event Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Event Type": {
+      "main": [
+        [
+          {
+            "node": "Get Project Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Project Details": {
+      "main": [
+        [
+          {
+            "node": "Analyze Project Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Project Status": {
+      "main": [
+        [
+          {
+            "node": "Update Time Tracking",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create Project Slack Channel",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Status Notifications",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Has Overdue Tasks?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Project Completed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Time Tracking": {
+      "main": [
+        [
+          {
+            "node": "Needs Billing Updates?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs Billing Updates?": {
+      "main": [
+        [
+          {
+            "node": "Process Billing Updates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Billing Updates": {
+      "main": [
+        [
+          {
+            "node": "Update Project Analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Overdue Tasks?": {
+      "main": [
+        [
+          {
+            "node": "Process Overdue Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Overdue Tasks": {
+      "main": [
+        [
+          {
+            "node": "Escalate Overdue Task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Project Completed?": {
+      "main": [
+        [
+          {
+            "node": "Generate Completion Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Completion Report": {
+      "main": [
+        [
+          {
+            "node": "Send Client Satisfaction Survey",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York"
+  },
+  "versionId": "project-management-v1.5.0",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "id": "project-management-automation",
+  "tags": [
+    {
+      "createdAt": "2024-12-19T00:00:00.000Z",
+      "updatedAt": "2024-12-19T00:00:00.000Z",
+      "id": "3",
+      "name": "project-management"
+    },
+    {
+      "createdAt": "2024-12-19T00:00:00.000Z",
+      "updatedAt": "2024-12-19T00:00:00.000Z",
+      "id": "2",
+      "name": "automation"
+    }
+  ]
+}

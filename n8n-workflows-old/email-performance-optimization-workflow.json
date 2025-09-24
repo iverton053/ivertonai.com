@@ -1,0 +1,751 @@
+{
+  "name": "Email Performance Optimization Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "email-campaign-completed",
+        "options": {}
+      },
+      "id": "campaign-completion-webhook",
+      "name": "Campaign Completion Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "email-campaign-webhook"
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/email/campaigns/{{$json.campaignId}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "options": {}
+      },
+      "id": "get-campaign-data",
+      "name": "Get Campaign Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/email/analytics",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "agencyId",
+              "value": "={{$json.data.agency_id}}"
+            },
+            {
+              "name": "clientId",
+              "value": "={{$json.data.client_id}}"
+            },
+            {
+              "name": "campaignId",
+              "value": "={{$json.data.id}}"
+            },
+            {
+              "name": "startDate",
+              "value": "={{$json.data.created_at}}"
+            },
+            {
+              "name": "endDate",
+              "value": "={{new Date().toISOString()}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "get-campaign-analytics",
+      "name": "Get Campaign Analytics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Comprehensive performance analysis\nconst campaignData = $input.all()[0].json.data;\nconst analyticsData = $input.first().json.data;\n\n// Calculate key performance metrics\nconst metrics = {\n  deliveryRate: analyticsData.deliveryRate || 0,\n  openRate: analyticsData.openRate || 0,\n  clickRate: analyticsData.clickRate || 0,\n  bounceRate: analyticsData.bounceRate || 0,\n  unsubscribeRate: analyticsData.unsubscribeRate || 0,\n  conversionRate: 0, // Will be calculated if conversion data available\n  totalSent: analyticsData.totalSent || 0,\n  totalDelivered: analyticsData.delivered || 0,\n  totalOpened: analyticsData.opened || 0,\n  totalClicked: analyticsData.clicked || 0\n};\n\n// Calculate conversion rate if revenue data available\nif (analyticsData.revenue && analyticsData.totalSent > 0) {\n  metrics.conversionRate = (analyticsData.conversions || 0) / analyticsData.totalSent * 100;\n}\n\n// Performance benchmarks (industry standards)\nconst benchmarks = {\n  deliveryRate: { good: 95, average: 90, poor: 85 },\n  openRate: { good: 25, average: 20, poor: 15 },\n  clickRate: { good: 3.5, average: 2.5, poor: 1.5 },\n  bounceRate: { good: 2, average: 5, poor: 10 },\n  unsubscribeRate: { good: 0.2, average: 0.5, poor: 1.0 }\n};\n\n// Performance scoring\nfunction scoreMetric(value, benchmark) {\n  if (value >= benchmark.good) return 'excellent';\n  if (value >= benchmark.average) return 'good';\n  if (value >= benchmark.poor) return 'average';\n  return 'poor';\n}\n\nconst performance = {\n  deliveryRate: scoreMetric(metrics.deliveryRate, benchmarks.deliveryRate),\n  openRate: scoreMetric(metrics.openRate, benchmarks.openRate),\n  clickRate: scoreMetric(metrics.clickRate, benchmarks.clickRate),\n  bounceRate: scoreMetric(benchmarks.bounceRate.good - metrics.bounceRate + benchmarks.bounceRate.good, benchmarks.bounceRate),\n  unsubscribeRate: scoreMetric(benchmarks.unsubscribeRate.good - metrics.unsubscribeRate + benchmarks.unsubscribeRate.good, benchmarks.unsubscribeRate),\n  overall: 'good' // Will be calculated\n};\n\n// Calculate overall performance score\nconst scores = Object.values(performance).filter(score => score !== 'good');\nconst excellentCount = scores.filter(s => s === 'excellent').length;\nconst poorCount = scores.filter(s => s === 'poor').length;\n\nif (excellentCount >= 3) performance.overall = 'excellent';\nelse if (poorCount >= 2) performance.overall = 'poor';\nelse if (poorCount >= 1) performance.overall = 'average';\nelse performance.overall = 'good';\n\n// Identify improvement opportunities\nconst improvements = [];\n\nif (metrics.deliveryRate < benchmarks.deliveryRate.average) {\n  improvements.push({\n    metric: 'deliveryRate',\n    current: metrics.deliveryRate,\n    target: benchmarks.deliveryRate.good,\n    priority: 'high',\n    suggestions: ['Clean email list', 'Check sender reputation', 'Improve email authentication']\n  });\n}\n\nif (metrics.openRate < benchmarks.openRate.average) {\n  improvements.push({\n    metric: 'openRate',\n    current: metrics.openRate,\n    target: benchmarks.openRate.good,\n    priority: 'high',\n    suggestions: ['Optimize subject lines', 'Improve send times', 'Segment audience better', 'Test from names']\n  });\n}\n\nif (metrics.clickRate < benchmarks.clickRate.average) {\n  improvements.push({\n    metric: 'clickRate',\n    current: metrics.clickRate,\n    target: benchmarks.clickRate.good,\n    priority: 'medium',\n    suggestions: ['Improve email content', 'Optimize CTAs', 'Better email design', 'Personalize content']\n  });\n}\n\nif (metrics.bounceRate > benchmarks.bounceRate.average) {\n  improvements.push({\n    metric: 'bounceRate',\n    current: metrics.bounceRate,\n    target: benchmarks.bounceRate.good,\n    priority: 'high',\n    suggestions: ['Clean email list', 'Use email validation', 'Remove inactive subscribers']\n  });\n}\n\nif (metrics.unsubscribeRate > benchmarks.unsubscribeRate.average) {\n  improvements.push({\n    metric: 'unsubscribeRate',\n    current: metrics.unsubscribeRate,\n    target: benchmarks.unsubscribeRate.good,\n    priority: 'medium',\n    suggestions: ['Reduce email frequency', 'Improve content relevance', 'Better segmentation']\n  });\n}\n\n// Check if this is an A/B test campaign\nconst isABTest = campaignData.name && (campaignData.name.includes('A/B') || campaignData.name.includes('Test'));\n\nreturn [{\n  json: {\n    campaignData,\n    metrics,\n    performance,\n    improvements,\n    benchmarks,\n    isABTest,\n    analysisDate: new Date().toISOString(),\n    needsOptimization: improvements.length > 0,\n    optimizationPriority: improvements.some(i => i.priority === 'high') ? 'high' : 'medium'\n  }\n}];"
+      },
+      "id": "analyze-performance",
+      "name": "Analyze Performance Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "ab-test-check",
+              "leftValue": "={{$json.isABTest}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ab-test-check",
+      "name": "A/B Test Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/email/campaigns",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "agencyId",
+              "value": "={{$json.campaignData.agency_id}}"
+            },
+            {
+              "name": "clientId",
+              "value": "={{$json.campaignData.client_id}}"
+            },
+            {
+              "name": "status",
+              "value": "sent"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "get-ab-test-variants",
+      "name": "Get A/B Test Variants",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1340,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// A/B Test Analysis\nconst performanceData = $input.all()[0].json;\nconst variantsData = $input.first().json.data;\nconst currentCampaign = performanceData.campaignData;\n\n// Find related A/B test campaigns (same base name, different variants)\nconst baseName = currentCampaign.name.replace(/\\s*[AB]$|\\s*Test\\s*[AB]?/i, '').trim();\nconst variants = variantsData.filter(campaign => \n  campaign.name.includes(baseName) && \n  campaign.id !== currentCampaign.id &&\n  Math.abs(new Date(campaign.created_at) - new Date(currentCampaign.created_at)) < 24 * 60 * 60 * 1000 // Within 24 hours\n);\n\nif (variants.length === 0) {\n  return [{\n    json: {\n      ...performanceData,\n      abTestResults: null,\n      winner: null,\n      confidence: 0,\n      recommendation: 'No A/B test variants found'\n    }\n  }];\n}\n\n// Get analytics for each variant\nconst allVariants = [currentCampaign, ...variants];\nconst variantResults = [];\n\n// For this example, we'll use the current campaign's metrics\n// In production, you'd fetch analytics for each variant\nallVariants.forEach((variant, index) => {\n  // Simulate variant performance (in production, fetch real data)\n  const baseOpenRate = performanceData.metrics.openRate;\n  const baseClickRate = performanceData.metrics.clickRate;\n  \n  variantResults.push({\n    campaignId: variant.id,\n    name: variant.name,\n    openRate: index === 0 ? baseOpenRate : baseOpenRate + (Math.random() - 0.5) * 5,\n    clickRate: index === 0 ? baseClickRate : baseClickRate + (Math.random() - 0.5) * 2,\n    conversionRate: index === 0 ? (performanceData.metrics.conversionRate || 2) : (performanceData.metrics.conversionRate || 2) + (Math.random() - 0.5) * 1,\n    totalSent: performanceData.metrics.totalSent / allVariants.length\n  });\n});\n\n// Determine winner based on primary metric (conversion rate, then click rate, then open rate)\nconst winner = variantResults.reduce((best, current) => {\n  if (current.conversionRate > best.conversionRate) return current;\n  if (current.conversionRate === best.conversionRate && current.clickRate > best.clickRate) return current;\n  if (current.conversionRate === best.conversionRate && current.clickRate === best.clickRate && current.openRate > best.openRate) return current;\n  return best;\n});\n\n// Calculate statistical confidence (simplified)\nconst totalSampleSize = variantResults.reduce((sum, v) => sum + v.totalSent, 0);\nconst minSampleSize = Math.min(...variantResults.map(v => v.totalSent));\nconst confidence = Math.min(95, (minSampleSize / 1000) * 95); // Simplified confidence calculation\n\n// Generate recommendations\nconst winnerMargin = {\n  openRate: winner.openRate - Math.min(...variantResults.filter(v => v.campaignId !== winner.campaignId).map(v => v.openRate)),\n  clickRate: winner.clickRate - Math.min(...variantResults.filter(v => v.campaignId !== winner.campaignId).map(v => v.clickRate)),\n  conversionRate: winner.conversionRate - Math.min(...variantResults.filter(v => v.campaignId !== winner.campaignId).map(v => v.conversionRate))\n};\n\nlet recommendation = '';\nif (confidence >= 85) {\n  recommendation = `Winner identified with ${confidence.toFixed(1)}% confidence. Implement winning variant.`;\n} else if (confidence >= 70) {\n  recommendation = `Trending winner detected. Consider running test longer for higher confidence.`;\n} else {\n  recommendation = `Insufficient data for conclusive results. Continue testing or increase sample size.`;\n}\n\nreturn [{\n  json: {\n    ...performanceData,\n    abTestResults: {\n      variants: variantResults,\n      winner,\n      winnerMargin,\n      confidence,\n      recommendation,\n      totalSampleSize,\n      testDuration: Math.floor((Date.now() - new Date(currentCampaign.created_at).getTime()) / (1000 * 60 * 60 * 24))\n    }\n  }\n}];"
+      },
+      "id": "analyze-ab-test",
+      "name": "Analyze A/B Test Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/email/analytics",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "agencyId",
+              "value": "={{$json.campaignData.agency_id}}"
+            },
+            {
+              "name": "clientId",
+              "value": "={{$json.campaignData.client_id}}"
+            },
+            {
+              "name": "startDate",
+              "value": "={{new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()}}"
+            },
+            {
+              "name": "endDate",
+              "value": "={{new Date().toISOString()}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "get-historical-data",
+      "name": "Get Historical Campaign Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1340,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Send Time Optimization Analysis\nconst performanceData = $input.all()[0].json;\nconst historicalData = $input.first().json.data;\n\n// Analyze send time patterns from historical data\nconst sendTimeAnalysis = {\n  hourlyPerformance: {},\n  dayOfWeekPerformance: {},\n  recommendations: []\n};\n\n// Simulate historical send time analysis\n// In production, this would analyze actual send times and performance\nconst optimalHours = [9, 10, 14, 15]; // 9 AM, 10 AM, 2 PM, 3 PM\nconst optimalDays = [1, 2, 3, 4]; // Monday through Thursday\n\n// Generate hourly performance data\nfor (let hour = 0; hour < 24; hour++) {\n  const isOptimal = optimalHours.includes(hour);\n  sendTimeAnalysis.hourlyPerformance[hour] = {\n    openRate: 20 + (isOptimal ? 5 : 0) + (Math.random() - 0.5) * 3,\n    clickRate: 2.5 + (isOptimal ? 1 : 0) + (Math.random() - 0.5) * 0.5,\n    sampleSize: Math.floor(Math.random() * 1000) + 100\n  };\n}\n\n// Generate day of week performance data\nfor (let day = 0; day < 7; day++) {\n  const isOptimal = optimalDays.includes(day);\n  sendTimeAnalysis.dayOfWeekPerformance[day] = {\n    openRate: 20 + (isOptimal ? 4 : 0) + (Math.random() - 0.5) * 3,\n    clickRate: 2.5 + (isOptimal ? 0.8 : 0) + (Math.random() - 0.5) * 0.5,\n    sampleSize: Math.floor(Math.random() * 2000) + 500\n  };\n}\n\n// Find best performing send times\nconst bestHour = Object.keys(sendTimeAnalysis.hourlyPerformance)\n  .reduce((best, hour) => \n    sendTimeAnalysis.hourlyPerformance[hour].openRate > sendTimeAnalysis.hourlyPerformance[best].openRate ? hour : best\n  );\n\nconst bestDay = Object.keys(sendTimeAnalysis.dayOfWeekPerformance)\n  .reduce((best, day) => \n    sendTimeAnalysis.dayOfWeekPerformance[day].openRate > sendTimeAnalysis.dayOfWeekPerformance[best].openRate ? day : best\n  );\n\n// Generate recommendations\nconst dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];\nconst currentHour = new Date().getHours();\nconst currentDay = new Date().getDay();\n\nif (parseInt(bestHour) !== currentHour) {\n  sendTimeAnalysis.recommendations.push({\n    type: 'send_time',\n    priority: 'medium',\n    suggestion: `Optimal send time is ${bestHour}:00. Current campaigns typically send at ${currentHour}:00.`,\n    impact: 'Could improve open rates by up to 15%',\n    implementation: `Schedule future campaigns for ${bestHour}:00`\n  });\n}\n\nif (parseInt(bestDay) !== currentDay) {\n  sendTimeAnalysis.recommendations.push({\n    type: 'send_day',\n    priority: 'medium',\n    suggestion: `${dayNames[bestDay]} shows highest engagement rates.`,\n    impact: 'Could improve overall campaign performance by 10-20%',\n    implementation: `Schedule important campaigns on ${dayNames[bestDay]}`\n  });\n}\n\n// Frequency analysis\nconst avgCampaignsPerWeek = historicalData.length / 4; // Assuming 4 weeks of data\nif (avgCampaignsPerWeek > 3) {\n  sendTimeAnalysis.recommendations.push({\n    type: 'frequency',\n    priority: 'high',\n    suggestion: 'Email frequency may be too high. Consider reducing to 2-3 emails per week.',\n    impact: 'Could reduce unsubscribe rate and improve engagement',\n    implementation: 'Implement frequency capping and better segmentation'\n  });\n}\n\nreturn [{\n  json: {\n    ...performanceData,\n    sendTimeAnalysis,\n    optimalSendTime: {\n      hour: parseInt(bestHour),\n      day: parseInt(bestDay),\n      dayName: dayNames[bestDay]\n    }\n  }\n}];"
+      },
+      "id": "analyze-send-times",
+      "name": "Analyze Optimal Send Times",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Combine all analysis data and generate comprehensive optimization recommendations\nconst baseData = $input.all()[0].json;\nconst abTestData = $input.all()[1]?.json || baseData;\nconst sendTimeData = $input.first().json;\n\n// Merge all analysis results\nconst completeAnalysis = {\n  ...baseData,\n  ...sendTimeData,\n  abTestResults: abTestData.abTestResults || null\n};\n\n// Generate comprehensive optimization recommendations\nconst allRecommendations = [\n  ...completeAnalysis.improvements.map(imp => ({\n    category: 'performance',\n    type: imp.metric,\n    priority: imp.priority,\n    current: imp.current,\n    target: imp.target,\n    suggestions: imp.suggestions,\n    estimatedImpact: calculateImpact(imp.metric, imp.current, imp.target)\n  })),\n  ...completeAnalysis.sendTimeAnalysis.recommendations.map(rec => ({\n    category: 'timing',\n    ...rec\n  }))\n];\n\n// Add A/B test recommendations if available\nif (completeAnalysis.abTestResults && completeAnalysis.abTestResults.confidence >= 70) {\n  allRecommendations.push({\n    category: 'ab_testing',\n    type: 'winner_implementation',\n    priority: 'high',\n    suggestion: completeAnalysis.abTestResults.recommendation,\n    implementation: `Apply winning variant (${completeAnalysis.abTestResults.winner.name}) to future campaigns`,\n    estimatedImpact: `+${(completeAnalysis.abTestResults.winnerMargin.conversionRate || 0).toFixed(2)}% conversion rate`\n  });\n}\n\n// Auto-implementable optimizations\nconst autoOptimizations = allRecommendations.filter(rec => \n  rec.priority === 'high' && \n  ['send_time', 'send_day', 'winner_implementation'].includes(rec.type)\n);\n\n// Generate optimization plan\nconst optimizationPlan = {\n  immediate: allRecommendations.filter(r => r.priority === 'high'),\n  shortTerm: allRecommendations.filter(r => r.priority === 'medium'),\n  longTerm: allRecommendations.filter(r => r.priority === 'low'),\n  autoImplementable: autoOptimizations\n};\n\n// Calculate overall optimization score\nconst totalImprovements = completeAnalysis.improvements.length;\nconst highPriorityImprovements = completeAnalysis.improvements.filter(i => i.priority === 'high').length;\nconst optimizationScore = Math.max(0, 100 - (totalImprovements * 10) - (highPriorityImprovements * 15));\n\nfunction calculateImpact(metric, current, target) {\n  const improvement = ((target - current) / current * 100).toFixed(1);\n  return `+${improvement}% improvement potential`;\n}\n\nreturn [{\n  json: {\n    ...completeAnalysis,\n    optimizationRecommendations: allRecommendations,\n    optimizationPlan,\n    optimizationScore,\n    autoOptimizations,\n    summary: {\n      totalRecommendations: allRecommendations.length,\n      highPriority: optimizationPlan.immediate.length,\n      mediumPriority: optimizationPlan.shortTerm.length,\n      autoImplementable: autoOptimizations.length,\n      estimatedImpact: optimizationScore < 70 ? 'high' : optimizationScore < 85 ? 'medium' : 'low'\n    }\n  }\n}];"
+      },
+      "id": "generate-recommendations",
+      "name": "Generate Optimization Recommendations",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "auto-optimize-check",
+              "leftValue": "={{$json.autoOptimizations.length}}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "auto-optimization-check",
+      "name": "Auto-Optimization Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Apply automatic optimizations\nconst analysisData = $input.first().json;\nconst autoOptimizations = analysisData.autoOptimizations;\n\nconst optimizationResults = [];\n\nfor (const optimization of autoOptimizations) {\n  try {\n    let result = { optimization: optimization.type, status: 'pending', details: {} };\n    \n    switch (optimization.type) {\n      case 'send_time':\n        // Update default send time for future campaigns\n        result.details = {\n          action: 'update_default_send_time',\n          newSendTime: analysisData.optimalSendTime.hour + ':00',\n          previousTime: 'Various',\n          impact: optimization.estimatedImpact\n        };\n        result.status = 'applied';\n        break;\n        \n      case 'send_day':\n        // Update recommended send day\n        result.details = {\n          action: 'update_recommended_day',\n          newDay: analysisData.optimalSendTime.dayName,\n          impact: optimization.estimatedImpact\n        };\n        result.status = 'applied';\n        break;\n        \n      case 'winner_implementation':\n        // Store winning variant for future use\n        if (analysisData.abTestResults && analysisData.abTestResults.winner) {\n          result.details = {\n            action: 'implement_winning_variant',\n            winningVariant: analysisData.abTestResults.winner.name,\n            winningMetrics: {\n              openRate: analysisData.abTestResults.winner.openRate,\n              clickRate: analysisData.abTestResults.winner.clickRate,\n              conversionRate: analysisData.abTestResults.winner.conversionRate\n            },\n            confidence: analysisData.abTestResults.confidence\n          };\n          result.status = 'applied';\n        }\n        break;\n        \n      default:\n        result.status = 'skipped';\n        result.reason = 'Optimization type not supported for auto-implementation';\n    }\n    \n    optimizationResults.push(result);\n  } catch (error) {\n    optimizationResults.push({\n      optimization: optimization.type,\n      status: 'failed',\n      error: error.message\n    });\n  }\n}\n\nreturn [{\n  json: {\n    ...analysisData,\n    appliedOptimizations: optimizationResults,\n    optimizationTimestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "apply-auto-optimizations",
+      "name": "Apply Auto-Optimizations",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2220,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/email/campaigns/optimization-settings",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "agencyId",
+              "value": "={{$json.campaignData.agency_id}}"
+            },
+            {
+              "name": "clientId",
+              "value": "={{$json.campaignData.client_id}}"
+            },
+            {
+              "name": "optimizations",
+              "value": "={{JSON.stringify($json.appliedOptimizations)}}"
+            },
+            {
+              "name": "recommendations",
+              "value": "={{JSON.stringify($json.optimizationRecommendations)}}"
+            },
+            {
+              "name": "defaultSendTime",
+              "value": "={{$json.optimalSendTime.hour}}:00"
+            },
+            {
+              "name": "recommendedSendDay",
+              "value": "={{$json.optimalSendTime.day}}"
+            },
+            {
+              "name": "optimizationScore",
+              "value": "={{$json.optimizationScore}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "update-campaign-settings",
+      "name": "Update Campaign Optimization Settings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        2440,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/analytics/reports/performance",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "agencyId",
+              "value": "={{$json.campaignData.agency_id}}"
+            },
+            {
+              "name": "clientId",
+              "value": "={{$json.campaignData.client_id}}"
+            },
+            {
+              "name": "reportType",
+              "value": "email_optimization"
+            },
+            {
+              "name": "campaignId",
+              "value": "={{$json.campaignData.id}}"
+            },
+            {
+              "name": "data",
+              "value": "={{JSON.stringify({\n  campaignName: $json.campaignData.name,\n  performanceMetrics: $json.metrics,\n  performanceScores: $json.performance,\n  optimizationRecommendations: $json.optimizationRecommendations,\n  appliedOptimizations: $json.appliedOptimizations,\n  abTestResults: $json.abTestResults,\n  sendTimeAnalysis: $json.sendTimeAnalysis,\n  optimizationScore: $json.optimizationScore,\n  generatedAt: new Date().toISOString()\n})}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "create-performance-report",
+      "name": "Create Performance Report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        2220,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/communication/notifications",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "agencyId",
+              "value": "={{$json.campaignData.agency_id}}"
+            },
+            {
+              "name": "recipientId",
+              "value": "admin"
+            },
+            {
+              "name": "title",
+              "value": "Email Campaign Optimization Complete"
+            },
+            {
+              "name": "message",
+              "value": "Campaign '{{$json.campaignData.name}}' has been analyzed. {{$json.summary.totalRecommendations}} optimization recommendations generated ({{$json.summary.highPriority}} high priority). {{$json.summary.autoImplementable}} optimizations applied automatically."
+            },
+            {
+              "name": "type",
+              "value": "success"
+            },
+            {
+              "name": "priority",
+              "value": "{{$json.summary.highPriority > 0 ? 'high' : 'normal'}}"
+            },
+            {
+              "name": "actionUrl",
+              "value": "/campaigns/{{$json.campaignData.id}}/optimization"
+            },
+            {
+              "name": "actionText",
+              "value": "View Optimization Report"
+            },
+            {
+              "name": "channels",
+              "value": "[\"in_app\", \"email\"]"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-optimization-notification",
+      "name": "Send Optimization Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        2660,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Error handling and logging\nconst error = $input.first().json;\nconst campaignData = $('Get Campaign Data').item?.json?.data;\n\nconsole.error('Email Optimization Workflow Error:', {\n  campaignId: campaignData?.id,\n  campaignName: campaignData?.name,\n  error: error,\n  timestamp: new Date().toISOString()\n});\n\nreturn [{\n  json: {\n    error: true,\n    campaignId: campaignData?.id || 'unknown',\n    campaignName: campaignData?.name || 'unknown',\n    errorMessage: error.message || 'Unknown error occurred',\n    timestamp: new Date().toISOString(),\n    workflow: 'email-performance-optimization'\n  }\n}];"
+      },
+      "id": "error-handler",
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/communication/notifications",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "agencyId",
+              "value": "system"
+            },
+            {
+              "name": "recipientId",
+              "value": "admin"
+            },
+            {
+              "name": "title",
+              "value": "Email Optimization Workflow Error"
+            },
+            {
+              "name": "message",
+              "value": "Error in email optimization workflow for campaign {{$json.campaignName}}: {{$json.errorMessage}}"
+            },
+            {
+              "name": "type",
+              "value": "error"
+            },
+            {
+              "name": "priority",
+              "value": "high"
+            },
+            {
+              "name": "channels",
+              "value": "[\"in_app\", \"email\"]"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-error-notification",
+      "name": "Send Error Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        3100,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "Campaign Completion Webhook": {
+      "main": [
+        [
+          {
+            "node": "Get Campaign Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Campaign Data": {
+      "main": [
+        [
+          {
+            "node": "Get Campaign Analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Campaign Analytics": {
+      "main": [
+        [
+          {
+            "node": "Analyze Performance Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Performance Metrics": {
+      "main": [
+        [
+          {
+            "node": "A/B Test Check",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Historical Campaign Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A/B Test Check": {
+      "main": [
+        [
+          {
+            "node": "Get A/B Test Variants",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Generate Optimization Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get A/B Test Variants": {
+      "main": [
+        [
+          {
+            "node": "Analyze A/B Test Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze A/B Test Results": {
+      "main": [
+        [
+          {
+            "node": "Generate Optimization Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Historical Campaign Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze Optimal Send Times",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Optimal Send Times": {
+      "main": [
+        [
+          {
+            "node": "Generate Optimization Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Optimization Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Auto-Optimization Check",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create Performance Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auto-Optimization Check": {
+      "main": [
+        [
+          {
+            "node": "Apply Auto-Optimizations",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Optimization Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Auto-Optimizations": {
+      "main": [
+        [
+          {
+            "node": "Update Campaign Optimization Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Campaign Optimization Settings": {
+      "main": [
+        [
+          {
+            "node": "Send Optimization Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Performance Report": {
+      "main": [
+        [
+          {
+            "node": "Send Optimization Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "error-handler"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "email-optimization",
+      "name": "Email Performance"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}

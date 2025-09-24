@@ -1,0 +1,932 @@
+{
+  "name": "competitor_website_techstack",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "tech-stack-detector",
+        "options": {}
+      },
+      "id": "2a2fdbb4-88ca-47e9-84a7-1c0df2a37fd7",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -832,
+        224
+      ],
+      "webhookId": "e10273f7-901e-4297-81d7-d8e0b3beb6c0"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse and validate webhook input\nconst webhookData = $input.all()[0].json;\n\n// Extract competitor domains (can be single domain or array)\nlet domains = [];\nif (typeof webhookData.competitorDomain === 'string') {\n  domains = [webhookData.competitorDomain];\n} else if (Array.isArray(webhookData.competitorDomain)) {\n  domains = webhookData.competitorDomain;\n}\n\nconst industry = webhookData.industry || webhookData.niche || 'General';\n\n// Create individual items for each domain\nconst outputItems = domains.map(domain => ({\n  json: {\n    domain: domain.replace(/^https?:\\/\\//, '').replace(/\\/.*$/, ''), // Clean domain\n    industry: industry,\n    originalInput: webhookData\n  }\n}));\n\nreturn outputItems;"
+      },
+      "id": "e192c5b7-8378-4299-b765-5910007de2b1",
+      "name": "Input Processor",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -576,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://www.googleapis.com/pagespeedonline/v5/runPagespeed",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "url",
+              "value": "=https://{{ $json.domain }}"
+            },
+            {
+              "name": "key",
+              "value": "AIzaSyBh_eXhUD1_X8gqkZF-IZdWWhnW1sWszXE"
+            },
+            {
+              "name": "strategy",
+              "value": "desktop"
+            },
+            {
+              "name": "category",
+              "value": "performance"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 45000
+        }
+      },
+      "id": "c98db7dc-09e1-4df0-a0b2-709d8b64ea72",
+      "name": "PageSpeed Insights API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        208,
+        592
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process and normalize all API responses\nconst items = $input.all();\nconst processedData = [];\n\nfor (const item of items) {\n  const data = item.json;\n  \n  // Extract domain info from input processor\n  const domain = data.domain || data.url || 'unknown';\n  const industry = data.industry || 'General';\n  \n  // Initialize result object\n  let result = {\n    domain: domain,\n    industry: industry,\n    timestamp: new Date().toISOString(),\n    technologies: [],\n    cms: null,\n    analytics: [],\n    adNetworks: [],\n    ecommerce: [],\n    seoMetrics: {},\n    domainInfo: {},\n    socialMetadata: {},\n    performanceMetrics: {}\n  };\n  \n  // Process Wappalyzer data\n  if (data.technologies || (data.body && data.body.includes && data.body.includes('technologies'))) {\n    let wappalyzerData = [];\n    \n    if (data.technologies) {\n      wappalyzerData = data.technologies;\n    } else if (data.body) {\n      try {\n        const parsed = JSON.parse(data.body);\n        wappalyzerData = parsed.technologies || [];\n      } catch (e) {\n        wappalyzerData = [];\n      }\n    }\n    \n    for (const tech of wappalyzerData) {\n      const techInfo = {\n        name: tech.name,\n        category: tech.categories && tech.categories[0] ? tech.categories[0].name : 'Other',\n        version: tech.version || null,\n        confidence: tech.confidence || 100,\n        source: 'wappalyzer'\n      };\n      \n      result.technologies.push(techInfo);\n      \n      // Categorize technologies\n      const category = techInfo.category.toLowerCase();\n      \n      if (category.includes('cms') || category.includes('content management')) {\n        result.cms = techInfo;\n      } else if (category.includes('analytics')) {\n        result.analytics.push(techInfo);\n      } else if (category.includes('advertising') || category.includes('ad network')) {\n        result.adNetworks.push(techInfo);\n      } else if (category.includes('ecommerce')) {\n        result.ecommerce.push(techInfo);\n      }\n    }\n  }\n  \n  // Process DataForSEO data\n  if (data.tasks && data.tasks[0] && data.tasks[0].result) {\n    const seoData = data.tasks[0].result[0];\n    \n    if (seoData && seoData.technologies) {\n      for (const tech of seoData.technologies) {\n        result.technologies.push({\n          name: tech.technology,\n          category: tech.category || 'Other',\n          source: 'dataforseo'\n        });\n      }\n    }\n    \n    if (seoData) {\n      result.seoMetrics = {\n        organicKeywords: seoData.organic_keywords || 0,\n        paidKeywords: seoData.paid_keywords || 0,\n        organicTraffic: seoData.organic_traffic || 0,\n        paidTraffic: seoData.paid_traffic || 0\n      };\n    }\n  }\n  \n  // Process WhoisXML data\n  if (data.WhoisRecord) {\n    const whoisData = data.WhoisRecord;\n    result.domainInfo = {\n      registrar: whoisData.registrarName,\n      createdDate: whoisData.createdDate,\n      updatedDate: whoisData.updatedDate,\n      expiresDate: whoisData.expiresDate,\n      nameServers: whoisData.nameServers && whoisData.nameServers.hostNames ? whoisData.nameServers.hostNames : []\n    };\n  }\n  \n  // Process OpenGraph data (from HTML scraping)\n  if (data.body && typeof data.body === 'string') {\n    const html = data.body;\n    \n    // Extract OpenGraph meta tags\n    const ogTitleMatch = html.match(/<meta property=\"og:title\" content=\"([^\"]+)\"/);\n    const ogDescMatch = html.match(/<meta property=\"og:description\" content=\"([^\"]+)\"/);\n    const ogImageMatch = html.match(/<meta property=\"og:image\" content=\"([^\"]+)\"/);\n    const ogTypeMatch = html.match(/<meta property=\"og:type\" content=\"([^\"]+)\"/);\n    \n    result.socialMetadata = {\n      title: ogTitleMatch ? ogTitleMatch[1] : null,\n      description: ogDescMatch ? ogDescMatch[1] : null,\n      image: ogImageMatch ? ogImageMatch[1] : null,\n      type: ogTypeMatch ? ogTypeMatch[1] : null\n    };\n    \n    // Check for common technologies in HTML\n    const htmlTechs = [];\n    if (html.includes('google-analytics.com') || html.includes('gtag') || html.includes('ga(')) {\n      htmlTechs.push({ name: 'Google Analytics', category: 'Analytics', source: 'html_analysis' });\n    }\n    if (html.includes('facebook.net') || html.includes('fbq')) {\n      htmlTechs.push({ name: 'Facebook Pixel', category: 'Analytics', source: 'html_analysis' });\n    }\n    if (html.includes('jquery')) {\n      htmlTechs.push({ name: 'jQuery', category: 'JavaScript Library', source: 'html_analysis' });\n    }\n    \n    result.technologies = result.technologies.concat(htmlTechs);\n  }\n  \n  // Process PageSpeed data\n  if (data.lighthouseResult) {\n    const lighthouse = data.lighthouseResult;\n    \n    result.performanceMetrics = {\n      performanceScore: lighthouse.categories && lighthouse.categories.performance ? lighthouse.categories.performance.score * 100 : 0,\n      seoScore: lighthouse.categories && lighthouse.categories.seo ? lighthouse.categories.seo.score * 100 : 0,\n      firstContentfulPaint: lighthouse.audits && lighthouse.audits['first-contentful-paint'] ? lighthouse.audits['first-contentful-paint'].numericValue : 0,\n      largestContentfulPaint: lighthouse.audits && lighthouse.audits['largest-contentful-paint'] ? lighthouse.audits['largest-contentful-paint'].numericValue : 0,\n      cumulativeLayoutShift: lighthouse.audits && lighthouse.audits['cumulative-layout-shift'] ? lighthouse.audits['cumulative-layout-shift'].numericValue : 0,\n      speedIndex: lighthouse.audits && lighthouse.audits['speed-index'] ? lighthouse.audits['speed-index'].numericValue : 0\n    };\n  }\n  \n  // Deduplicate technologies\n  const uniqueTechs = [];\n  const seenTechs = new Set();\n  \n  for (const tech of result.technologies) {\n    const key = tech.name.toLowerCase() + '-' + tech.category.toLowerCase();\n    if (!seenTechs.has(key)) {\n      seenTechs.add(key);\n      uniqueTechs.push(tech);\n    }\n  }\n  \n  result.technologies = uniqueTechs;\n  \n  processedData.push({ json: result });\n}\n\nreturn processedData;"
+      },
+      "id": "ef27df6b-d4ee-4271-8c02-cfeba1f976de",
+      "name": "Data Processor & Normalizer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        912,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Aggregate data for dashboard visualization\nconst allData = $input.all().map(item => item.json);\n\n// Initialize dashboard data structure\nconst dashboardData = {\n  summary: {\n    totalDomains: allData.length,\n    industry: allData[0] ? allData[0].industry : 'General',\n    analysisTimestamp: new Date().toISOString(),\n    totalTechnologies: 0,\n    uniqueTechnologies: 0\n  },\n  \n  // CMS Distribution Data\n  cmsDistribution: {},\n  \n  // Analytics Tools Distribution\n  analyticsDistribution: {},\n  \n  // Ad Networks Distribution\n  adNetworksDistribution: {},\n  \n  // Technology Categories Distribution\n  categoryDistribution: {},\n  \n  // Performance Metrics Averages\n  performanceAverages: {\n    performanceScore: 0,\n    seoScore: 0,\n    firstContentfulPaint: 0,\n    largestContentfulPaint: 0\n  },\n  \n  // Individual domain details\n  domainDetails: [],\n  \n  // Technology popularity ranking\n  technologyRanking: {},\n  \n  // SEO metrics summary\n  seoSummary: {\n    avgOrganicKeywords: 0,\n    avgPaidKeywords: 0,\n    avgOrganicTraffic: 0,\n    avgPaidTraffic: 0\n  }\n};\n\nconst uniqueTechSet = new Set();\n\n// Process each domain's data\nfor (const domainData of allData) {\n  dashboardData.domainDetails.push(domainData);\n  \n  // Count CMS usage\n  if (domainData.cms) {\n    const cmsName = domainData.cms.name;\n    dashboardData.cmsDistribution[cmsName] = (dashboardData.cmsDistribution[cmsName] || 0) + 1;\n  } else {\n    dashboardData.cmsDistribution['Unknown/Custom'] = (dashboardData.cmsDistribution['Unknown/Custom'] || 0) + 1;\n  }\n  \n  // Count analytics tools\n  for (const analytics of domainData.analytics) {\n    dashboardData.analyticsDistribution[analytics.name] = (dashboardData.analyticsDistribution[analytics.name] || 0) + 1;\n  }\n  \n  // Count ad networks\n  for (const adNetwork of domainData.adNetworks) {\n    dashboardData.adNetworksDistribution[adNetwork.name] = (dashboardData.adNetworksDistribution[adNetwork.name] || 0) + 1;\n  }\n  \n  // Count technology categories and individual technologies\n  for (const tech of domainData.technologies) {\n    uniqueTechSet.add(tech.name);\n    dashboardData.categoryDistribution[tech.category] = (dashboardData.categoryDistribution[tech.category] || 0) + 1;\n    dashboardData.technologyRanking[tech.name] = (dashboardData.technologyRanking[tech.name] || 0) + 1;\n  }\n  \n  dashboardData.summary.totalTechnologies += domainData.technologies.length;\n  \n  // Aggregate performance metrics\n  if (domainData.performanceMetrics) {\n    dashboardData.performanceAverages.performanceScore += domainData.performanceMetrics.performanceScore || 0;\n    dashboardData.performanceAverages.seoScore += domainData.performanceMetrics.seoScore || 0;\n    dashboardData.performanceAverages.firstContentfulPaint += domainData.performanceMetrics.firstContentfulPaint || 0;\n    dashboardData.performanceAverages.largestContentfulPaint += domainData.performanceMetrics.largestContentfulPaint || 0;\n  }\n  \n  // Aggregate SEO metrics\n  if (domainData.seoMetrics) {\n    dashboardData.seoSummary.avgOrganicKeywords += domainData.seoMetrics.organicKeywords || 0;\n    dashboardData.seoSummary.avgPaidKeywords += domainData.seoMetrics.paidKeywords || 0;\n    dashboardData.seoSummary.avgOrganicTraffic += domainData.seoMetrics.organicTraffic || 0;\n    dashboardData.seoSummary.avgPaidTraffic += domainData.seoMetrics.paidTraffic || 0;\n  }\n}\n\n// Calculate averages\nconst domainCount = allData.length;\nif (domainCount > 0) {\n  dashboardData.performanceAverages.performanceScore = dashboardData.performanceAverages.performanceScore / domainCount;\n  dashboardData.performanceAverages.seoScore = dashboardData.performanceAverages.seoScore / domainCount;\n  dashboardData.performanceAverages.firstContentfulPaint = dashboardData.performanceAverages.firstContentfulPaint / domainCount;\n  dashboardData.performanceAverages.largestContentfulPaint = dashboardData.performanceAverages.largestContentfulPaint / domainCount;\n  \n  dashboardData.seoSummary.avgOrganicKeywords = dashboardData.seoSummary.avgOrganicKeywords / domainCount;\n  dashboardData.seoSummary.avgPaidKeywords = dashboardData.seoSummary.avgPaidKeywords / domainCount;\n  dashboardData.seoSummary.avgOrganicTraffic = dashboardData.seoSummary.avgOrganicTraffic / domainCount;\n  dashboardData.seoSummary.avgPaidTraffic = dashboardData.seoSummary.avgPaidTraffic / domainCount;\n}\n\n// Set unique technologies count\ndashboardData.summary.uniqueTechnologies = uniqueTechSet.size;\n\n// Sort technology ranking by usage\nconst sortedTechRanking = {};\nObject.keys(dashboardData.technologyRanking)\n  .sort((a, b) => dashboardData.technologyRanking[b] - dashboardData.technologyRanking[a])\n  .forEach(key => {\n    sortedTechRanking[key] = dashboardData.technologyRanking[key];\n  });\ndashboardData.technologyRanking = sortedTechRanking;\n\n// Create visualization-ready data structures\ndashboardData.visualizations = {\n  // Stacked bar chart data for CMS distribution\n  cmsChart: {\n    type: 'stackedBar',\n    data: Object.keys(dashboardData.cmsDistribution).map(cms => {\n      const count = dashboardData.cmsDistribution[cms];\n      return {\n        cms: cms,\n        count: count,\n        percentage: Number(((count / domainCount) * 100).toFixed(1))\n      };\n    })\n  },\n  \n  // Pie chart data for analytics tools\n  analyticsChart: {\n    type: 'pie',\n    data: Object.keys(dashboardData.analyticsDistribution).map(tool => {\n      const count = dashboardData.analyticsDistribution[tool];\n      return {\n        tool: tool,\n        count: count,\n        percentage: Number(((count / domainCount) * 100).toFixed(1))\n      };\n    })\n  },\n  \n  // Technology category distribution\n  categoryChart: {\n    type: 'horizontalBar',\n    data: Object.keys(dashboardData.categoryDistribution)\n      .sort((a, b) => dashboardData.categoryDistribution[b] - dashboardData.categoryDistribution[a])\n      .slice(0, 15)\n      .map(category => {\n        return {\n          category: category,\n          count: dashboardData.categoryDistribution[category]\n        };\n      })\n  },\n  \n  // Performance comparison chart\n  performanceChart: {\n    type: 'multiBar',\n    data: allData.map(domain => {\n      return {\n        domain: domain.domain,\n        performanceScore: domain.performanceMetrics ? (domain.performanceMetrics.performanceScore || 0) : 0,\n        seoScore: domain.performanceMetrics ? (domain.performanceMetrics.seoScore || 0) : 0\n      };\n    })\n  },\n  \n  // Technology adoption heatmap\n  technologyHeatmap: {\n    type: 'heatmap',\n    data: Object.keys(dashboardData.technologyRanking)\n      .slice(0, 20)\n      .map(tech => {\n        const count = dashboardData.technologyRanking[tech];\n        return {\n          technology: tech,\n          adoptionRate: Number(((count / domainCount) * 100).toFixed(1)),\n          count: count\n        };\n      })\n  }\n};\n\nreturn [{ json: dashboardData }];"
+      },
+      "id": "1acef070-11c8-45d7-9c73-d46227247fe9",
+      "name": "Dashboard Data Aggregator",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1104,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "a1b8ee85-c370-47ab-945e-4ba9aa8d63e0",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1312,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "numberInputs": 4
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        704,
+        208
+      ],
+      "id": "2f8ddf44-4b31-4b37-9c90-ac51432e2dbd",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "url": "https://api.builtwith.com/free1/api.json",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": " 17a7dae5-8c61-43fe-beb8-7eeb05c85503"
+            },
+            {
+              "name": "lookup",
+              "value": "={{ $json.domain }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        208,
+        -32
+      ],
+      "id": "a5860283-4940-49fa-aca1-5883176969ec",
+      "name": "BuiltWith API"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.dataforseo.com/v3/domain_analytics/technologies/domain_technologies/live",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "=[\n  {\n    \"target\": \"{{ $json.domain }}\",\n    \"limit\": 1000\n  }\n]",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        208,
+        160
+      ],
+      "id": "69c6d41d-8dbf-4e4a-9957-7d1fc739074b",
+      "name": "DataForSEO API",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "EeaHfnsplZdFASQ8",
+          "name": "Unnamed credential 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=http://api.scraperapi.com/",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "api_key",
+              "value": "1bddf7531e9f0f2c5c8dc197bf3d06ad"
+            },
+            {
+              "name": "url",
+              "value": "=https://{{ $json.domain }}"
+            },
+            {
+              "name": "render",
+              "value": "true"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 45000
+        }
+      },
+      "id": "1cfb3004-35ca-4693-b8f5-9f74e6d05dda",
+      "name": "ScraperAPI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        208,
+        384
+      ]
+    }
+  ],
+  "pinData": {
+    "Webhook Trigger": [
+      {
+        "json": {
+          "competitorDomain": "zaubacorp.com",
+          "industry": "Digital marketing agency"
+        }
+      }
+    ],
+    "BuiltWith API": [
+      {
+        "json": {
+          "first": 1415055600,
+          "last": 1755327600,
+          "domain": "zaubacorp.com",
+          "groups": [
+            {
+              "name": "cms",
+              "live": 0,
+              "dead": 2,
+              "latest": 1737619200,
+              "oldest": 1415055600,
+              "categories": [
+                {
+                  "live": 0,
+                  "dead": 1,
+                  "latest": 1737619200,
+                  "oldest": 1415055600,
+                  "name": "open-source"
+                }
+              ]
+            },
+            {
+              "name": "javascript",
+              "live": 2,
+              "dead": 18,
+              "latest": 1743490800,
+              "oldest": 1415055600,
+              "categories": [
+                {
+                  "live": 1,
+                  "dead": 2,
+                  "latest": 1743490800,
+                  "oldest": 1415055600,
+                  "name": "javascript-library"
+                },
+                {
+                  "live": 0,
+                  "dead": 6,
+                  "latest": 1737619200,
+                  "oldest": 1415055600,
+                  "name": "jquery-plugin"
+                },
+                {
+                  "live": 0,
+                  "dead": 2,
+                  "latest": 1737619200,
+                  "oldest": 1415055600,
+                  "name": "compatibility"
+                },
+                {
+                  "live": 0,
+                  "dead": 1,
+                  "latest": 1737619200,
+                  "oldest": 1736928000,
+                  "name": "framework"
+                },
+                {
+                  "live": 0,
+                  "dead": 1,
+                  "latest": 1737619200,
+                  "oldest": 1655449200,
+                  "name": "ui"
+                }
+              ]
+            },
+            {
+              "name": "Web Server",
+              "live": 0,
+              "dead": 3,
+              "latest": 1699689600,
+              "oldest": 1415055600,
+              "categories": []
+            },
+            {
+              "name": "CDN",
+              "live": 0,
+              "dead": 1,
+              "latest": 1737619200,
+              "oldest": 1415055600,
+              "categories": []
+            },
+            {
+              "name": "cdn",
+              "live": 3,
+              "dead": 5,
+              "latest": 1754031600,
+              "oldest": 1415055600,
+              "categories": []
+            },
+            {
+              "name": "hosting",
+              "live": 3,
+              "dead": 10,
+              "latest": 1754031600,
+              "oldest": 1417305600,
+              "categories": [
+                {
+                  "live": 2,
+                  "dead": 1,
+                  "latest": 1754031600,
+                  "oldest": 1417305600,
+                  "name": "us-hosting"
+                },
+                {
+                  "live": 1,
+                  "dead": 2,
+                  "latest": 1754031600,
+                  "oldest": 1417305600,
+                  "name": "cloud-hosting"
+                },
+                {
+                  "live": 1,
+                  "dead": 2,
+                  "latest": 1754031600,
+                  "oldest": 1417305600,
+                  "name": "cloud-paas"
+                },
+                {
+                  "live": 0,
+                  "dead": 3,
+                  "latest": 1699689600,
+                  "oldest": 1694847600,
+                  "name": "canadian-hosting"
+                },
+                {
+                  "live": 0,
+                  "dead": 2,
+                  "latest": 1720508400,
+                  "oldest": 1698044400,
+                  "name": "server-location"
+                }
+              ]
+            },
+            {
+              "name": "mobile",
+              "live": 4,
+              "dead": 0,
+              "latest": 1743490800,
+              "oldest": 1418079600,
+              "categories": []
+            },
+            {
+              "name": "analytics",
+              "live": 5,
+              "dead": 5,
+              "latest": 1743490800,
+              "oldest": 1418079600,
+              "categories": [
+                {
+                  "live": 2,
+                  "dead": 1,
+                  "latest": 1743490800,
+                  "oldest": 1418079600,
+                  "name": "application-performance"
+                },
+                {
+                  "live": 3,
+                  "dead": 1,
+                  "latest": 1743490800,
+                  "oldest": 1418079600,
+                  "name": "audience-measurement"
+                },
+                {
+                  "live": 1,
+                  "dead": 0,
+                  "latest": 1743490800,
+                  "oldest": 1418079600,
+                  "name": "visitor-count-tracking"
+                },
+                {
+                  "live": 0,
+                  "dead": 1,
+                  "latest": 1448582400,
+                  "oldest": 1439424000,
+                  "name": "conversion-optimization"
+                },
+                {
+                  "live": 0,
+                  "dead": 1,
+                  "latest": 1448582400,
+                  "oldest": 1439424000,
+                  "name": "site-optimization"
+                }
+              ]
+            },
+            {
+              "name": "shop",
+              "live": 0,
+              "dead": 1,
+              "latest": 1421276400,
+              "oldest": 1418079600,
+              "categories": [
+                {
+                  "live": 0,
+                  "dead": 1,
+                  "latest": 1421276400,
+                  "oldest": 1418079600,
+                  "name": "open-source"
+                }
+              ]
+            },
+            {
+              "name": "mx",
+              "live": 5,
+              "dead": 1,
+              "latest": 1754031600,
+              "oldest": 1421276400,
+              "categories": [
+                {
+                  "live": 1,
+                  "dead": 1,
+                  "latest": 1754031600,
+                  "oldest": 1421276400,
+                  "name": "transactional-email"
+                },
+                {
+                  "live": 1,
+                  "dead": 0,
+                  "latest": 1754031600,
+                  "oldest": 1421276400,
+                  "name": "business-email-hosting"
+                },
+                {
+                  "live": 1,
+                  "dead": 0,
+                  "latest": 1754031600,
+                  "oldest": 1699948800,
+                  "name": "dmarc"
+                }
+              ]
+            },
+            {
+              "name": "ns",
+              "live": 2,
+              "dead": 1,
+              "latest": 1754031600,
+              "oldest": 1421276400,
+              "categories": [
+                {
+                  "live": 0,
+                  "dead": 1,
+                  "latest": 1699689600,
+                  "oldest": 1421276400,
+                  "name": "enterprise-dns"
+                }
+              ]
+            },
+            {
+              "name": "widgets",
+              "live": 9,
+              "dead": 7,
+              "latest": 1755327600,
+              "oldest": 1420671600,
+              "categories": [
+                {
+                  "live": 0,
+                  "dead": 2,
+                  "latest": 1737619200,
+                  "oldest": 1420671600,
+                  "name": "captcha"
+                },
+                {
+                  "live": 1,
+                  "dead": 0,
+                  "latest": 1743490800,
+                  "oldest": 1712818800,
+                  "name": "privacy-compliance"
+                },
+                {
+                  "live": 1,
+                  "dead": 0,
+                  "latest": 1743490800,
+                  "oldest": 1713855600,
+                  "name": "tag-management"
+                }
+              ]
+            },
+            {
+              "name": "ssl",
+              "live": 1,
+              "dead": 4,
+              "latest": 1754031600,
+              "oldest": 1421276400,
+              "categories": [
+                {
+                  "live": 0,
+                  "dead": 1,
+                  "latest": 1578351600,
+                  "oldest": 1421276400,
+                  "name": "root-authority"
+                },
+                {
+                  "live": 0,
+                  "dead": 1,
+                  "latest": 1578351600,
+                  "oldest": 1559516400,
+                  "name": "extended-validation"
+                }
+              ]
+            },
+            {
+              "name": "ads",
+              "live": 6,
+              "dead": 3,
+              "latest": 1754031600,
+              "oldest": 1421712000,
+              "categories": [
+                {
+                  "live": 2,
+                  "dead": 0,
+                  "latest": 1743490800,
+                  "oldest": 1590015600,
+                  "name": "ads-txt"
+                },
+                {
+                  "live": 0,
+                  "dead": 1,
+                  "latest": 1737619200,
+                  "oldest": 1655449200,
+                  "name": "contextual-advertising"
+                }
+              ]
+            },
+            {
+              "name": "Server",
+              "live": 1,
+              "dead": 3,
+              "latest": 1754031600,
+              "oldest": 1439420400,
+              "categories": []
+            },
+            {
+              "name": "framework",
+              "live": 0,
+              "dead": 3,
+              "latest": 1740816000,
+              "oldest": 1439420400,
+              "categories": []
+            },
+            {
+              "name": "feeds",
+              "live": 0,
+              "dead": 1,
+              "latest": 1737619200,
+              "oldest": 1449702000,
+              "categories": []
+            },
+            {
+              "name": "copyright",
+              "live": 0,
+              "dead": 2,
+              "latest": 1737619200,
+              "oldest": 1519167600,
+              "categories": []
+            },
+            {
+              "name": "link",
+              "live": 0,
+              "dead": 6,
+              "latest": 1737619200,
+              "oldest": 1420671600,
+              "categories": []
+            },
+            {
+              "name": "cdns",
+              "live": 1,
+              "dead": 2,
+              "latest": 1754031600,
+              "oldest": 1552863600,
+              "categories": [
+                {
+                  "live": 0,
+                  "dead": 1,
+                  "latest": 1699689600,
+                  "oldest": 1563577200,
+                  "name": "edge-delivery-network"
+                }
+              ]
+            },
+            {
+              "name": "shipping",
+              "live": 0,
+              "dead": 2,
+              "latest": 1736064000,
+              "oldest": 1609455600,
+              "categories": []
+            },
+            {
+              "name": "payment",
+              "live": 3,
+              "dead": 2,
+              "latest": 1743490800,
+              "oldest": 1621839600,
+              "categories": [
+                {
+                  "live": 1,
+                  "dead": 0,
+                  "latest": 1743490800,
+                  "oldest": 1621839600,
+                  "name": "checkout-buttons"
+                },
+                {
+                  "live": 1,
+                  "dead": 0,
+                  "latest": 1743490800,
+                  "oldest": 1621839600,
+                  "name": "payments-processor"
+                },
+                {
+                  "live": 1,
+                  "dead": 1,
+                  "latest": 1743490800,
+                  "oldest": 1728889200,
+                  "name": "payment-acceptance"
+                },
+                {
+                  "live": 0,
+                  "dead": 1,
+                  "latest": 1698994800,
+                  "oldest": 1623481200,
+                  "name": "currency"
+                }
+              ]
+            },
+            {
+              "name": "Web Master",
+              "live": 1,
+              "dead": 0,
+              "latest": 1754031600,
+              "oldest": 1728889200,
+              "categories": []
+            },
+            {
+              "name": "mapping",
+              "live": 0,
+              "dead": 1,
+              "latest": 1737619200,
+              "oldest": 1660028400,
+              "categories": [
+                {
+                  "live": 0,
+                  "dead": 1,
+                  "latest": 1737619200,
+                  "oldest": 1660028400,
+                  "name": "maps"
+                }
+              ]
+            },
+            {
+              "name": "language",
+              "live": 0,
+              "dead": 1,
+              "latest": 1737619200,
+              "oldest": 1736064000,
+              "categories": []
+            }
+          ]
+        }
+      }
+    ],
+    "DataForSEO API": [
+      {
+        "json": {
+          "version": "0.1.20250812",
+          "status_code": 20000,
+          "status_message": "Ok.",
+          "time": "1.8508 sec.",
+          "cost": 0.01,
+          "tasks_count": 1,
+          "tasks_error": 0,
+          "tasks": [
+            {
+              "id": "08162039-1109-0483-0000-06ef0bbb8b2a",
+              "status_code": 20000,
+              "status_message": "Ok.",
+              "time": "1.7785 sec.",
+              "cost": 0.01,
+              "result_count": 1,
+              "path": [
+                "v3",
+                "domain_analytics",
+                "technologies",
+                "domain_technologies",
+                "live"
+              ],
+              "data": {
+                "api": "domain_analytics",
+                "function": "domain_technologies",
+                "se": "technologies",
+                "target": "zaubacorp.com"
+              },
+              "result": [
+                {
+                  "type": "domain_technology_item",
+                  "domain": "www.zaubacorp.com",
+                  "title": "ZaubaCorp - India's largest business research platform",
+                  "description": null,
+                  "meta_keywords": null,
+                  "domain_rank": 577,
+                  "last_visited": "2025-08-16 17:39:22 +00:00",
+                  "country_iso_code": "IN",
+                  "language_code": "en",
+                  "content_language_code": "en",
+                  "phone_numbers": null,
+                  "emails": null,
+                  "social_graph_urls": null,
+                  "technologies": {
+                    "web_development": {
+                      "ui_frameworks": [
+                        "Bootstrap"
+                      ],
+                      "javascript_libraries": [
+                        "jQuery"
+                      ]
+                    },
+                    "servers": {
+                      "cdn": [
+                        "Cloudflare"
+                      ]
+                    },
+                    "analytics": {
+                      "analytics": [
+                        "Cloudflare Browser Insights",
+                        "Google Analytics"
+                      ]
+                    },
+                    "marketing": {
+                      "rum": [
+                        "Cloudflare Browser Insights"
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "ScraperAPI": [
+      {
+        "json": {
+          "data": "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML+RDFa 1.0//EN\" \"http://www.w3.org/MarkUp/DTD/xhtml-rdfa-1.dtd\"><html lang=\"en\" dir=\"en\"><head profile=\"http://www.w3.org/1999/xhtml/vocab\">\n\n\n  \n    <meta charset=\"utf-8\">\n  \n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  \n    <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">\n  \n    <meta name=\"MobileOptimized\" content=\"width\">\n  \n    <meta name=\"HandheldFriendly\" content=\"true\">\n  \n    <meta name=\"robots\" content=\"index,follow\">\n  \n    <meta name=\"googlebot\" content=\"index,follow\">\n  \n\n  \n  <link rel=\"shortcut icon\" type=\"image/vnd.microsoft.icon\" href=\"/public/static/images/favicon.ico?UrGoWW\">\n  \n  <link rel=\"apple-touch-icon\" type=\"image/png\" href=\"/public/static/images/apple-touch-icon.png?UrGoWW\">\n  \n  <link rel=\"apple-touch-icon-precomposed\" type=\"image/png\" href=\"/public/static/images/apple-touch-icon-precomposed.png?UrGoWW\">\n  \n\n  \n    <link type=\"text/css\" rel=\"stylesheet\" href=\"/public/static/css/bootstrap.min.css?UrGoWW\" media=\"all\">\n  \n    <link type=\"text/css\" rel=\"stylesheet\" href=\"/public/static/css/style.min.css?UrGoWW\" media=\"all\">\n  \n    <link type=\"text/css\" rel=\"stylesheet\" href=\"/public/static/fonts/fonts.css?UrGoWW\" media=\"all\">\n  \n    <link type=\"text/css\" rel=\"stylesheet\" href=\"/public/static/css/own-custom.min.css?UrGoWW\" media=\"all\">\n  \n    <link type=\"text/css\" rel=\"stylesheet\" href=\"/public/static/css/bootstrap.min.css?UrGoWW\" media=\"all\">\n  \n    <link type=\"text/css\" rel=\"stylesheet\" href=\"/public/static/css/bootstrap-theme.min.css?UrGoWW\" media=\"all\">\n  \n\n  \n    <script src=\"/public/static/js/jquery.min.js?UrGoWW\"></script>\n  \n    <script src=\"/public/static/js/bootstrap.min.js?UrGoWW\"></script>\n  \n    <script src=\"/public/static/js/company.min.js?UrGoWW\"></script>\n  \n\n  \n  \n  \n\n  \n\n  <title>ZaubaCorp - India's largest business research platform</title>\n\n  \n  \n\n<script async=\"\" src=\"https://www.googletagmanager.com/gtag/js?id=G-VVR3BV80B8\"></script><script>\n  window.dataLayer = window.dataLayer || [];\n  function gtag(){dataLayer.push(arguments);}\n  gtag('js', new Date());\n\n  gtag('config', 'G-VVR3BV80B8');\n</script></head>\n\n\n\n\n\n<body class=\"html not-front not-logged-in no-sidebars page-node\">\n\n  \n\n\n\n<div class=\"container header-tip\">\n    <div class=\"pull-left\"> \n        <a href=\"/\"> \n            <img src=\"/public/static/images/logo-Zauba.png?UrGoWW\">\n        </a>\n    </div>\n\n    \n        <div class=\"pull-right\">\n            <a id=\"shct\" class=\"btn btn-primary\">\n                <span class=\"glyphicon glyphicon-shopping-cart\" aria-hidden=\"true\"></span> My Cart \n            </a>\n            <a href=\"/signin\" class=\"btn btn-primary\"> Sign In</a>\n            <a href=\"/signup\" title=\"Create a new user account.\" class=\"btn btn-success\"> Sign Up</a>\n        </div>\n    \n</div>\n\n<div class=\"search_content\">\n    <div class=\"main\">\n        <div class=\"banner-search-form\">\n            <div class=\"region region-search-box\">\n                <section id=\"block-customsearch-customsearchform\" class=\"block block-customsearch clearfix\">\n                    <form action=\"/search\" method=\"post\" id=\"mycustom-form\" accept-charset=\"UTF-8\">\n                        <div>\n                            <div style=\"clear:both\">\n                                <div id=\"edit-company-director\" class=\"form-radios search-filter\">\n                                    <div class=\"form-type-radio form-item-company-director form-item radio\"> \n                                        <input class=\"search-filter form-radio\" id=\"sf1\" type=\"radio\" name=\"cd\" value=\"company\" checked=\"checked\"> \n                                        <label for=\"sf1\">Company</label>\n                                    </div>\n                                    <div class=\"form-type-radio form-item-company-director form-item radio\"> \n                                        <input class=\"search-filter form-radio\" id=\"sf2\" type=\"radio\" name=\"cd\" value=\"director\"> \n                                        <label for=\"sf2\">Director</label>\n                                    </div>\n                                    <div class=\"form-type-radio form-item-company-director form-item radio\"> \n                                        <input class=\"search-filter form-radio\" id=\"sf3\" type=\"radio\" name=\"cd\" value=\"trademark\"> \n                                        <label for=\"sf3\">Trademark</label>\n                                    </div>\n                                    <div class=\"form-type-radio form-item-company-director form-item radio\"> \n                                        <input class=\"search-filter form-radio\" id=\"sf4\" type=\"radio\" name=\"cd\" value=\"company_by_address\"> \n                                        <label for=\"sf4\">Address</label>\n                                    </div>\n                                </div>\n                                <div class=\"form-type-textfield form-item-searchvalue form-item form-group\"> \n                                    <input placeholder=\"Enter company name or cin\" class=\"custom-search form-control form-text\" id=\"searchid\" autocomplete=\"off\" type=\"text\" name=\"searchvalue\" value=\"\" size=\"40\" maxlength=\"150\">\n                                </div>\n                                <div id=\"result\"></div>\n                                <button class=\"btn btn-primary form-submit\" type=\"submit\">Submit</button>\n                            </div>\n                        </div>\n                    </form>\n                </section>\n            </div>\n        </div>\n        <div class=\"browse\">\n            <a href=\"/companies-list\">Browse Companies by Activity, Age and Location</a>\n        </div>\n    </div>\n</div>\n\n\n  <main>\n    <div class=\"container\">\n      \n\n<div class=\"container cont-3\">\t\n\t<div class=\"basic-cont\">\n\t\t<div class=\"wraper container-fluid clearfix\">\n\t\t<div class=\"welcometext row\">\n\t\t\t<p> Zauba Corp helps you know financial performance of businesses you deal with </p>\n\t\t\t<br>\n\t\t\t<p> Access critical documents and information for facts based decision making </p>\n\t\t</div>\n\t\t<div class=\"column-1 row\">\n\t\t\t<div class=\"column-content\">\n\t\t\t<h2>Articles of  Association</h2>\n\t\t\t<p>The Articles of Association is a document that contains the purpose of the company as well as the duties and responsibilities of its members defined and recorded clearly. It is an important document which needs to be filed with the Registrar of Companies.</p>\n\t\t\t<p>Articles of association often identify the manner in which a company will issue stock shares, pay dividends and audit financial records and power of voting rights.</p>\n\t\t\t</div>\n\t\t</div>\n\t\t<div class=\"column-2\">\n\t\t\t<div class=\"left\"> <img src=\"/public/static/images/img02.png?UrGoWW\"> </div>\n\t\t\t<div class=\"right\">\n\t\t\t<div class=\"column-content\">\n\t\t\t\t<h2>Memorandum of Association</h2>\n\t\t\t\t<p>Memorandum of Association is a document that regulates a company's external activities and must be drawn up on the formation of a registered or incorporated company. As the company's charter it forms the company's constitution.</p>\n\t\t\t\t<p>The memorandum of association gives the company's name, names of its members (shareholders) and number of shares held by them, and location of its registered office. It also states the company's (1) objectives, (2) amount of authorized share capital, (3) whether liability of its members is limited by shares or by guaranty, and (4) what type of contracts the company is allowed to enter into.</p>\n\t\t\t\t<p>The memorandum is a public document and may be inspected by anyone, usually at the public office where it is lodged.</p>\n\t\t\t</div>\n\t\t\t</div>\n\t\t</div>\n\t\t<div class=\"column-3\">\n\t\t\t<div class=\"column-content\">\n\t\t\t<h2>Balance Sheet</h2>\n\t\t\t<p>Balance sheet is an accounting statement that summarises various assets, liabilities and equities held by a company on a specific date.</p>\n\t\t\t<p>Balance sheet is an important document for creditors, investors, customers and suppliers. All creditors and investors need to familiarize themselves with the assets, liabilities, and equity of a company. The balance sheet is the best place to find all financial information at one place.</p>\n\t\t\t</div>\n\t\t</div>\n\t\t<div class=\"column-4\">\n\t\t\t<div class=\"column-content\">\n\t\t\t<h2>Charge Documents</h2>\n\t\t\t<h2>(Loans and Mortgages)</h2>\n\t\t\t<p>Charge documents provide details of assets pledged as security to financial institutions. As a customer, supplier, investor or creditor, it is important to be aware of advances of a company. </p>\n\t\t\t</div>\n\t\t</div>\n\t\t<div class=\"column-5\">\n\t\t\t<div class=\"left-2\">\n\t\t\t<h3>Documents related </h3>\n\t\t\t<p>to appointment and<br>\n\t\t\t\tresignation<br>\n\t\t\t\tof <br>\n\t\t\t\tDirectors</p>\n\t\t\t</div>\n\t\t\t<div class=\"right-2\">\n\t\t\t<h3>All information, </h3>\n\t\t\t<p>documents and <br>\n\t\t\t\tforms filed with Registrar<br>\n\t\t\t\tof <br>\n\t\t\t\tCompanies</p>\n\t\t\t</div>\n\t\t</div>\n\t\t<div class=\"column-6\">\n\t\t\t<div class=\"column-content\">\n\t\t\t<h2>Who are we?</h2>\n\t\t\t<p>Zauba Corp is India's leading provider of commercial information and insight on businesses. The team behind Zauba Corp have one goal - to be your sole resource for critical information. We gather data from a number of official sources and third parties to give you all the information you need, in one easy to use website. </p>\n\t\t\t</div>\n\t\t</div>\n\t\t\n\t\t</div>\n\t</div>\n</div>\n\n\n    </div>\n  </main>\n  \n\n<footer>\n    <div class=\"container\">\n        <h5 class=\"pull-left\"> \n            <a href=\"https://www.zauba.com?utm_campaign=referral&amp;utm_medium=zaubacorp&amp;utm_source=footer\" target=\"_blank\">Import Export Data</a> \n            <br> \n            <a href=\"https://www.zaubacorp.com/faq\">FAQ</a> \\ <a href=\"https://www.zaubacorp.com/privacy-policy\">Privacy Policy</a> \\ <a href=\"https://www.zaubacorp.com/terms\">Terms of Use</a> \\ <a href=\"https://www.zaubacorp.com/refunds-cancellation\">Refunds &amp; Cancellation</a> \\ <a href=\"https://www.zaubacorp.com/contact-us\">Contact US</a> <br> © 2025 Zauba Technologies Private Limited. All rights reserved.\n        </h5>\n    </div>\n</footer>\n\n\n\n  \n\n<div id=\"strp\" class=\"modal fade\" tabindex=\"-1\" role=\"dialog\" aria-labelledby=\"myModalLabel\" aria-hidden=\"true\">\n    <div class=\"modal-dialog\">\n        <div class=\"modal-content\">\n            <form id=\"pfs\">\n                <div class=\"modal-header\">\n                    <button type=\"button\" class=\"close\" data-dismiss=\"modal\" aria-hidden=\"true\">×</button>\n                    <h4 class=\"modal-title\" id=\"ml\">Purchase Company Reports</h4>\n                </div>\n                <div id=\"mb\" class=\"modal-body\">\n                    <p>You have the following companies in your cart. To add more companies to cart, you may close this window and continue adding other companies to your cart.</p>\n                    <div id=\"lis\" class=\"table-responsive\">\n                    </div>\n                    \n                    <label for=\"email\" style=\" display: block; font-family: open_sansregular; color: #5a5a5a;\">Email ID</label>\n                    <input class=\"input-lg\" type=\"email\" style=\"border: 1px; border-style: solid; border-radius: 5px; border-color: rgb(230, 230, 230);margin-bottom: 10px;\" id=\"ems\">\n                    \n                    <div id=\"error-message\"></div>\n                    <div id=\"address-element\"></div>\n                    <div id=\"payment-element\"></div>\n                    <div id=\"payment-errors\" role=\"alert\"></div>\n                </div>\n                <div class=\"modal-footer\">\n                    <button id=\"p\" class=\"btn btn-success\">Continue</button>\n                </div>\n            </form>\n        </div>\n    </div>\n</div>\n\n\n<div id=\"niic\" class=\"modal fade\" tabindex=\"-1\" role=\"dialog\" aria-labelledby=\"myModalLabel\" aria-hidden=\"true\">\n    <div class=\"modal-dialog\">\n        <div class=\"modal-content\">\n            <div class=\"modal-header\">\n                <button type=\"button\" class=\"close\" data-dismiss=\"modal\" aria-hidden=\"true\">×</button>\n                <h4 class=\"modal-title\" id=\"ml\">Purchase Company Reports</h4>\n            </div>\n            <div class=\"modal-body\">\n                <p>Your cart is empty. You may add a company to your cart by clicking on \"Purchase Report\" on any company profile page.</p>\n            </div>\n            <div class=\"modal-footer\">\n                <button class=\"btn btn-success\" data-dismiss=\"modal\" aria-hidden=\"true\">Continue</button>\n            </div>\n        </div>\n    </div>\n</div>\n\n\n<div id=\"rzpy\" class=\"modal fade\" tabindex=\"-1\" role=\"dialog\" aria-labelledby=\"myModalLabel\" aria-hidden=\"true\">\n    <div class=\"modal-dialog\">\n        <div class=\"modal-content\">\n            <div class=\"modal-header\">\n                <button type=\"button\" class=\"close\" data-dismiss=\"modal\" aria-hidden=\"true\">×</button>\n                <h4 class=\"modal-title\" id=\"ml\">Purchase Company Report</h4>\n            </div>\n            <div class=\"modal-body\">\n                <p>You have the following companies in your cart. To add more companies to cart, you may close this window and continue adding other companies to your cart. </p>\n                <div id=\"lir\" class=\"table-responsive\">\n                </div>\n                \n                <label for=\"email\" style=\" display: block; font-family: open_sansregular; color: #5a5a5a;\">\n                    Email ID\n                </label>\n                <input class=\"input-lg\" type=\"email\" style=\" border: 1px; border-style: solid; border-radius: 5px;border-color: rgb(230, 230, 230);margin-bottom: 10px;\" id=\"emr\">\n                \n            </div>\n            <div id=\"mfr\" class=\"modal-footer\">\n                <button id=\"ps\" class=\"btn btn-success\">Continue</button>\n            </div>\n        </div>\n    </div>\n</div>\n\n\n<script>\n\n    jQuery(document).ready(function () {\n        $('#shct').click(function () {                \n            $.ajax({\n                url: '/add-to-cart',\n                type: 'POST',\n                data: {\n                    cart: true,\n                },\n                success: function (response) {\n                    atcr(response);\n                },\n                error: function (xhr, status, error) {\n                    console.log(xhr.responseText);\n                    alert(\"We were not able to add the report to your cart. This is usually a temporary issue. Please try again.\");\n                }\n            });\n        });\n\n        $(document).on('click', '.dfc', function () {\n            \n            var cin = $(this).data('cin');\n            \n            $('#strp').modal('hide');\n            $('#rzpy').modal('hide');\n\n            $.ajax({\n                url: '/remove-from-cart',\n                type: 'POST',\n                data: {\n                    cin: cin,\n                },\n                success: function (response) {\n                    atcr(response);\n                },\n                error: function (xhr, status, error) {\n                    console.log(xhr.responseText);\n                    alert(\"We were not able to add the report to your cart. This is usually a temporary issue. Please try again.\");\n                }\n            });\n        });\n\n    });\n\n    function sm() {\n        \n        $('#strp').modal('hide');\n\n        \n        $('#ss').modal('show');\n    }\n\n    handleRazorpayCheckout = async (response) => {\n        if (response.error) {\n            handleError(response.error);\n        } else {\n\n            var options = {\n                \"key\": \"rzp_live_73sGzE6ckIIn1l\", \n                \"amount\": response.amount,\n                \"currency\": response.currency,\n                \"order_id\": response.order_id,\n                \"receipt\": response.cart_id,\n                \"capture\": \"1\",\n                \"handler\": function (response) {\n                    console.log(response);\n                    \n                    sm();\n                },\n            };\n\n            razorpayInstance = new window.Razorpay(options);\n\n            razorpayInstance.on(\"payment.failed\", async (response) => {\n                console.log(response.error.description);\n            });\n\n            \n            $('#rzpy').modal('hide');\n\n            razorpayInstance.open();\n        } \n    }\n\n    function rp() {\n        submitBtn = document.getElementById('ps');\n        submitBtn.disabled = false;\n\n        submitBtn.addEventListener('click', async (event) => {\n\n            submitBtn.disabled = true;\n\n            emr = document.getElementById('emr')\n            var email = '';\n            if (emr != null) {\n                email = document.getElementById('emr').value;\n\n                if (email == '') {\n                    alert(\"Please enter your email id.\");\n                    submitBtn.disabled = false;\n                    return;\n                }\n            }\n\n            const res = await fetch(\"/razorpay-checkout\", {\n                method: \"POST\",\n                headers: { \"Content-Type\": \"application/json\" },\n                body: JSON.stringify({\n                    email: email,\n                }),\n            });\n\n            if (!res.ok) {\n                alert(\"We were not able to proceed to payment. This is generally a temporary issue. Please try again.\");\n                submitBtn.disabled = false;\n                return;\n            }\n\n            const data = await res.json();\n\n            handleRazorpayCheckout(data);\n        });\n    }\n\n    function sp() {\n\n        stripe = Stripe(\n            'pk_live_51ItTPbSH4pzE0WbH4e7xXPTsDdcmd99cXeK4EaUIpMeUntaG8WiG0gmnIMm1tcdKHRAeANCmiOJusy7faYO8yK0Q00caRJRQzs',\n            {\n                betas: ['custom_checkout_beta_5']\n            },\n        );\n\n        if (total_price == 0 || currency == '') {\n            location.reload();\n            return;\n        }\n\n        const options = {\n            mode: 'payment',\n            amount: total_price * 100,\n            currency: currency,\n            paymentMethodCreation: 'manual',\n            appearance: {\n                layout: {\n                    type: 'accordion',\n                    defaultCollapsed: false,\n                    radios: true,\n                    spacedAccordionItems: false\n                }\n            },\n        };\n\n        elements = stripe.elements(options);\n        paymentElementOptions = { layout: 'accordion' };\n\n        paymentElement = elements.create('payment', paymentElementOptions);\n        paymentElement.mount('#payment-element');\n\n        addressElement = elements.create(\"address\", {\n            mode: \"billing\",\n        });\n        addressElement.mount(\"#address-element\");\n\n        form = document.getElementById('pfs');\n        submitBtn = document.getElementById('p');\n        submitBtn.disabled = false;\n\n        handleError = (error_message) => {\n            alert(error_message);\n            submitBtn.disabled = false;\n        }\n\n        handleServerResponse = async (response) => {\n            if (response.error) {\n                handleError(response.error);\n            } else if (response.status === \"requires_action\") {\n                \n                const {\n                    error,\n                    paymentIntent\n                } = await stripe.handleNextAction({\n                    clientSecret: response.clientSecret\n                });\n\n                if (error) {\n                    handleError(error.message);\n                } else {\n                    sm();\n                }\n            } else {\n                sm();\n            }\n        }\n\n        form.addEventListener('submit', async (event) => {\n\n            event.preventDefault();\n\n            if (submitBtn.disabled) {\n                return;\n            }\n\n            submitBtn.disabled = true;\n\n            const { error: submitError } = await elements.submit();\n\n            if (submitError) {\n                handleError(submitError.message);\n                return;\n            }\n\n            const { error, confirmationToken } = await stripe.createConfirmationToken({\n                elements,\n                params: {\n                    return_url: 'https://localhost/order/123/complete'\n                }\n            });\n\n            if (error) {\n                handleError(error.message);\n                return;\n            }\n\n            ems = document.getElementById('ems')\n            var email = '';\n            if (ems != null) {\n                console.log(ems);\n                email = ems.value;\n\n                if (email == '') {\n                    alert(\"Please enter your email id.\");\n                    submitBtn.disabled = false;\n                    return;\n                }\n            }\n\n            \n            const res = await fetch(\"/stripe-checkout\", {\n                method: \"POST\",\n                headers: { \"Content-Type\": \"application/json\" },\n                body: JSON.stringify({\n                    confirmationTokenId: confirmationToken.id,\n                    email: email,\n                }),\n            });\n\n            \n            if (!res.ok) {\n                alert(\"We were not able to process your payment. This is generally a temporary issue. Please try again.\");\n                submitBtn.disabled = false;\n                return;\n            }\n\n            const data = await res.json();\n\n            handleServerResponse(data);\n        });\n\n    }\n\n    function atcr(response) {\n        if (response.error) {\n            alert(\"Something went wrong. Please try again.\");\n            return;\n        }\n\n        const table = document.createElement('table');\n        table.className = \"table table-striped\";\n        table.style = \"border-width: 0px;\";\n\n        total_price = 0;\n        currency = '';\n        currency_display = '';\n\n        if (response.Response.li == null) {\n            $('#niic').modal('show');\n            return;\n        }\n\n        response.Response.li.forEach((li) => {\n            const tr = document.createElement('tr');\n            const td1 = document.createElement('td');\n            const td2 = document.createElement('td');\n            const td3 = document.createElement('td');\n\n            td1.innerHTML = `${li.d}`;\n            if (li.cc == 'usd') {\n                li.cc = '$';\n                currency = 'usd';\n                currency_display = '$';\n            } else {\n                li.cc = '₹';\n                currency = 'inr';\n                currency_display = '₹';\n            }\n\n            td2.innerHTML = `${li.cc} ${li.p}`;\n\n            td3.innerHTML = `<a style=\"margin:10px;\" title=\"Remove report\" class=\"dfc\" data-cin=\"${li.c}\"> <svg class=\"text-danger\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 512 512\" width=\"1em\" height=\"1em\" fill=\"currentColor\"> <path d=\"M256 48a208 208 0 1 1 0 416 208 208 0 1 1 0-416zm0 464A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM175 175c-9.4 9.4-9.4 24.6 0 33.9l47 47-47 47c-9.4 9.4-9.4 24.6 0 33.9s24.6 9.4 33.9 0l47-47 47 47c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-47-47 47-47c9.4-9.4 9.4-24.6 0-33.9s-24.6-9.4-33.9 0l-47 47-47-47c-9.4-9.4-24.6-9.4-33.9 0z\"></path> </svg> </a>`;\n\n\n            tr.appendChild(td1);\n            tr.appendChild(td2);\n            tr.appendChild(td3);\n\n            table.appendChild(tr);\n\n            total_price += li.p;\n\n        });\n\n        if (currency == \"inr\") {\n            const tr_gst = document.createElement('tr');\n            const td1_gst = document.createElement('td');\n            const td2_gst = document.createElement('td');\n            const td3_gst = document.createElement('td');\n\n            td1_gst.innerHTML = `GST`;\n            gst = total_price * 0.18;\n            \n            gst = Math.round(gst * 100) / 100;\n            total_price += gst;\n            td2_gst.innerHTML = `${gst} (18%)`;\n            td3_gst.innerHTML = ``;\n\n            tr_gst.appendChild(td1_gst);\n            tr_gst.appendChild(td2_gst);\n            tr_gst.appendChild(td3_gst);\n\n            table.appendChild(tr_gst);\n        }\n\n        const tr = document.createElement('tr');\n        const td1 = document.createElement('td');\n        const td2 = document.createElement('td');\n        const td3 = document.createElement('td');\n\n        td1.innerHTML = `Total`;\n        td2.innerHTML = `${currency_display} ${total_price}`;\n        td3.innerHTML = ``;\n\n        tr.appendChild(td1);\n        tr.appendChild(td2);\n        tr.appendChild(td3);\n\n        table.appendChild(tr);\n\n        console.log(response);\n\n        if (response.Response.fi) {\n            \n            const script = document.createElement('script');\n            script.src = 'https://checkout.razorpay.com/v1/checkout.js';\n            script.async = false;\n            document.body.appendChild(script);\n\n            script.onload = () => {\n\n                const lir = document.getElementById('lir');\n                lir.innerHTML = '';\n                lir.appendChild(table);\n                rp();\n                $('#rzpy').modal('show');\n            }\n        } else {\n            \n            const script = document.createElement('script');\n            script.src = 'https://js.stripe.com/v3/';\n            script.async = false;\n            document.body.appendChild(script);\n\n            script.onload = () => {\n                const lis = document.getElementById('lis');\n                lis.innerHTML = '';\n                lis.appendChild(table);\n                sp();\n                $('#strp').modal('show');\n            }\n        }\n    }\n\n</script>\n\n\n\n\n<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML=\"window.__CF$cv$params={r:'970303c75e658691',t:'MTc1NTM2OTE1MA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);\";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><iframe height=\"1\" width=\"1\" style=\"position: absolute; top: 0px; left: 0px; border: none; visibility: hidden;\"></iframe><script defer=\"\" src=\"https://static.cloudflareinsights.com/beacon.min.js/vcd15cbe7772f49c399c6a5babf22c1241717689176015\" integrity=\"sha512-ZpsOmlRQV6y907TI0dKBHq9Md29nnaEIPlkf84rnaERnq6zvWvPUqr2ft8M1aS28oN72PdrCzSjY4U6VaAw1EQ==\" data-cf-beacon=\"{&quot;version&quot;:&quot;2024.11.0&quot;,&quot;token&quot;:&quot;c565937c57f94ca2b38dc4a18337ccca&quot;,&quot;server_timing&quot;:{&quot;name&quot;:{&quot;cfCacheStatus&quot;:true,&quot;cfEdge&quot;:true,&quot;cfExtPri&quot;:true,&quot;cfL4&quot;:true,&quot;cfOrigin&quot;:true,&quot;cfSpeedBrain&quot;:true},&quot;location_startswith&quot;:null}}\" crossorigin=\"anonymous\"></script>\n\n\n\n</body></html>"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Input Processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Input Processor": {
+      "main": [
+        [
+          {
+            "node": "ScraperAPI",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "PageSpeed Insights API",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "BuiltWith API",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "DataForSEO API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Data Processor & Normalizer": {
+      "main": [
+        [
+          {
+            "node": "Dashboard Data Aggregator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dashboard Data Aggregator": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Data Processor & Normalizer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PageSpeed Insights API": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "BuiltWith API": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DataForSEO API": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "ScraperAPI": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "9898a15f-a71d-46d0-a605-a29331c40e90",
+  "meta": {
+    "instanceId": "892ac801f9cd1033acf424fd4efdd9c93b5867f66fd44caab7b86f5d0099f7b2"
+  },
+  "id": "slqCjjc7Kid9KWrd",
+  "tags": []
+}

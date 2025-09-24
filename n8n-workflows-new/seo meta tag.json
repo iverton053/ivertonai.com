@@ -1,0 +1,413 @@
+{
+  "name": "seo meta tag",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "seo-audit",
+        "options": {}
+      },
+      "id": "beef8d85-3a5d-42de-8c3f-d8cbaba9cdfe",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        288,
+        256
+      ],
+      "webhookId": "d9174307-8e9c-485d-94fa-4316a6a9d538"
+    },
+    {
+      "parameters": {
+        "url": "=https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url={{ $json.website_url }}&strategy=mobile&key=AIzaSyBh_eXhUD1_X8gqkZF-IZdWWhnW1sWszXE",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "144766ad-1527-4215-9e92-bcfa16ef692d",
+      "name": "PageSpeed Mobile",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        496,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url={{ $json.website_url }}&strategy=desktop&key=AIzaSyBh_eXhUD1_X8gqkZF-IZdWWhnW1sWszXE",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "79db3a81-a31a-416b-b50d-2c150d538920",
+      "name": "PageSpeed Desktop",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        496,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.website_url }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "b4059cb1-e1d0-4bbb-9aa2-1d12208623f8",
+      "name": "Fetch HTML",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract all links from HTML content\nconst html = $input.all()[0].json.data || $input.all()[0].json.body || '';\nconst linkRegex = /href=[\"'](https?:\\/\\/[^\"'\\s>]+)[\"']/gi;\nconst links = new Set(); // Use Set to avoid duplicates\nlet match;\n\nwhile ((match = linkRegex.exec(html)) !== null) {\n  const url = match[1];\n  // Filter out obviously invalid URLs\n  if (url && !url.includes('javascript:') && !url.includes('mailto:') && !url.includes('tel:')) {\n    links.add(url);\n  }\n}\n\n// Convert to array and limit to first 10 links to avoid timeout\nconst linkArray = Array.from(links).slice(0, 10);\n\nreturn linkArray.map(url => ({ json: { url: url } }));"
+      },
+      "id": "f212714f-e2ad-443a-a659-18ae4117a7ec",
+      "name": "Extract Links",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        688,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "0e4efddb-9dbb-4d8f-b8e2-6a75203e2850",
+      "name": "Check Link Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1296,
+        416
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Filter and count broken links\nconst allItems = $input.all();\nconst brokenLinks = allItems.filter(item => {\n  const statusCode = item.json.statusCode || 200;\n  return statusCode >= 400;\n});\n\nconst brokenCount = brokenLinks.length;\nconst totalChecked = allItems.length;\n\nreturn [{\n  json: {\n    brokenLinksCount: brokenCount,\n    totalLinksChecked: totalChecked,\n    brokenLinks: brokenLinks.map(link => link.json.url || 'Unknown URL').slice(0, 5) // Limit to 5 examples\n  }\n}];"
+      },
+      "id": "c39093f8-7c14-4f34-8cc2-cecbf6e26fd6",
+      "name": "Process Broken Links",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1472,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get data from the previous nodes\nconst inputs = $input.all();\n\n// Check if we have the data we need\nif (!inputs || inputs.length < 2) {\n  return [{\n    json: {\n      error: \"Not enough data from PageSpeed tests\",\n      seoScore: 0,\n      avgLoadTime: 0,\n      mobileScore: 0,\n      desktopScore: 0\n    }\n  }];\n}\n\n// Get the data (first input = mobile, second = desktop)\nconst mobileData = inputs[0].json;\nconst desktopData = inputs[1].json;\n\n// Make sure the data exists\nif (!mobileData || !desktopData) {\n  return [{\n    json: {\n      error: \"PageSpeed data is missing\",\n      seoScore: 0,\n      avgLoadTime: 0,\n      mobileScore: 0,\n      desktopScore: 0\n    }\n  }];\n}\n\n// Get the lighthouse results\nconst mobile = mobileData.lighthouseResult;\nconst desktop = desktopData.lighthouseResult;\n\nif (!mobile || !desktop) {\n  return [{\n    json: {\n      error: \"Lighthouse results are missing\",\n      seoScore: 0,\n      avgLoadTime: 0,\n      mobileScore: 0,\n      desktopScore: 0\n    }\n  }];\n}\n\n// Helper: safely get category score as percentage\nfunction getCategoryScore(result, key) {\n  return result?.categories?.[key]?.score !== undefined\n    ? Math.round(result.categories[key].score * 100)\n    : 0;\n}\n\n// Calculate scores\nconst scores = {\n  seo: getCategoryScore(mobile, 'seo'),\n  performance: getCategoryScore(mobile, 'performance'),\n  accessibility: getCategoryScore(mobile, 'accessibility'),\n  bestPractices: getCategoryScore(mobile, 'best-practices'),\n  mobileScore: getCategoryScore(mobile, 'performance'),\n  desktopScore: getCategoryScore(desktop, 'performance')\n};\n\n// Calculate average load time from actual metrics\nconst mobileMetrics = mobile?.audits?.metrics?.details?.items?.[0] || {};\nconst desktopMetrics = desktop?.audits?.metrics?.details?.items?.[0] || {};\n\nconst mobileLoadTime = (mobileMetrics['largest-contentful-paint'] || mobileMetrics['first-contentful-paint'] || 0) / 1000;\nconst desktopLoadTime = (desktopMetrics['largest-contentful-paint'] || desktopMetrics['first-contentful-paint'] || 0) / 1000;\nconst avgLoadTime = Number(((mobileLoadTime + desktopLoadTime) / 2).toFixed(2));\n\n// Analyze SEO issues from audit results (safe checks)\nconst mobileAudits = mobile?.audits || {};\nconst detailedIssues = {\n  missingMetaDescription: mobileAudits['meta-description']?.score !== undefined\n    ? mobileAudits['meta-description'].score < 1\n    : false,\n  slowLoadingPages: scores.performance < 50,\n  missingAltTags: mobileAudits['image-alt']?.score !== undefined\n    ? mobileAudits['image-alt'].score < 1\n    : false,\n  h1TagOptimization: mobileAudits['heading-order']?.score !== undefined\n    ? mobileAudits['heading-order'].score < 1\n    : false,\n  imageCompression: (\n    (mobileAudits['uses-optimized-images']?.score !== undefined && mobileAudits['uses-optimized-images'].score < 1) ||\n    (mobileAudits['uses-webp-images']?.score !== undefined && mobileAudits['uses-webp-images'].score < 1) ||\n    (mobileAudits['efficient-animated-content']?.score !== undefined && mobileAudits['efficient-animated-content'].score < 1)\n  ),\n  brokenLinks: 0 // Placeholder - update later if you add a broken links check\n};\n\n// Count issues for breakdown\nconst auditResults = Object.values(mobileAudits);\nlet critical = 0;\nlet warning = 0;\nlet passed = 0;\nlet info = 0;\n\nauditResults.forEach(audit => {\n  if (audit?.score !== undefined && audit?.score !== null) {\n    if (audit.score === 0) {\n      critical++;\n    } else if (audit.score < 0.9) {\n      warning++;\n    } else {\n      passed++;\n    }\n  } else if (audit?.scoreDisplayMode === 'informative') {\n    info++;\n  }\n});\n\n// Return the results with real calculated values\nreturn [{\n  json: {\n    seoScore: scores.seo,\n    avgLoadTime: avgLoadTime || 0,\n    mobileScore: scores.mobileScore,\n    desktopScore: scores.desktopScore,\n    performanceMetrics: {\n      bestPractices: scores.bestPractices,\n      accessibility: scores.accessibility,\n      performance: scores.performance,\n      seo: scores.seo\n    },\n    detailedIssues: detailedIssues,\n    issuesBreakdown: {\n      critical: critical,\n      warning: warning,\n      passed: passed,\n      info: info\n    }\n  }\n}];"
+      },
+      "id": "52a72085-d059-482a-b8ff-50d2e4b36396",
+      "name": "Process SEO Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        256
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "f1eb4d56-edd3-450c-a2e8-b1f38a6de3fb",
+      "name": "Merge Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        1568,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Combine all results into final dashboard format\nconst allInputs = $input.all();\n\n// Validate inputs\nif (!allInputs || allInputs.length < 2) {\n  return [{\n    json: {\n      error: \"Missing required data inputs\",\n      timestamp: new Date().toISOString()\n    }\n  }];\n}\n\nconst seoData = allInputs[0].json;\nconst brokenLinksData = allInputs[1].json;\n\n// Validate SEO data\nif (!seoData || seoData.error) {\n  return [{\n    json: {\n      error: seoData?.error || \"SEO data is invalid\",\n      timestamp: new Date().toISOString()\n    }\n  }];\n}\n\n// Update broken links count in detailed issues\nconst updatedDetailedIssues = {\n  ...seoData.detailedIssues,\n  brokenLinks: brokenLinksData?.brokenLinksCount || 0\n};\n\n// Calculate overall health score based on multiple factors\nconst calculateOverallHealth = (seoScore, performanceMetrics, criticalIssues, brokenLinksCount) => {\n  // Weighted scoring system\n  const seoWeight = 0.3;\n  const performanceWeight = 0.25;\n  const accessibilityWeight = 0.2;\n  const bestPracticesWeight = 0.15;\n  const criticalIssuesWeight = 0.1;\n  \n  const weightedScore = (\n    (seoScore * seoWeight) +\n    (performanceMetrics.performance * performanceWeight) +\n    (performanceMetrics.accessibility * accessibilityWeight) +\n    (performanceMetrics.bestPractices * bestPracticesWeight)\n  );\n  \n  // Penalty for critical issues and broken links\n  const criticalPenalty = Math.min(criticalIssues * 5, 20); // Max 20 point penalty\n  const brokenLinksPenalty = Math.min(brokenLinksCount * 2, 15); // Max 15 point penalty\n  \n  const finalScore = Math.max(0, weightedScore - criticalPenalty - brokenLinksPenalty);\n  \n  if (finalScore >= 85) return 'Excellent';\n  if (finalScore >= 70) return 'Good';\n  if (finalScore >= 50) return 'Needs Improvement';\n  return 'Poor';\n};\n\n// Calculate performance grade\nconst getPerformanceGrade = (mobileScore, desktopScore) => {\n  const avgScore = (mobileScore + desktopScore) / 2;\n  if (avgScore >= 90) return 'A+';\n  if (avgScore >= 80) return 'A';\n  if (avgScore >= 70) return 'B';\n  if (avgScore >= 60) return 'C';\n  if (avgScore >= 50) return 'D';\n  return 'F';\n};\n\n// Generate recommendations based on issues\nconst generateRecommendations = (detailedIssues, performanceMetrics) => {\n  const recommendations = [];\n  \n  if (detailedIssues.missingMetaDescription) {\n    recommendations.push(\"Add meta descriptions to improve SEO visibility\");\n  }\n  \n  if (detailedIssues.slowLoadingPages) {\n    recommendations.push(\"Optimize page load speed for better user experience\");\n  }\n  \n  if (detailedIssues.missingAltTags) {\n    recommendations.push(\"Add alt text to images for better accessibility\");\n  }\n  \n  if (detailedIssues.h1TagOptimization) {\n    recommendations.push(\"Optimize heading structure (H1-H6 tags)\");\n  }\n  \n  if (detailedIssues.imageCompression) {\n    recommendations.push(\"Compress and optimize images to reduce load times\");\n  }\n  \n  if (detailedIssues.brokenLinks > 0) {\n    recommendations.push(`Fix ${detailedIssues.brokenLinks} broken links`);\n  }\n  \n  if (performanceMetrics.accessibility < 80) {\n    recommendations.push(\"Improve website accessibility for users with disabilities\");\n  }\n  \n  if (performanceMetrics.bestPractices < 80) {\n    recommendations.push(\"Follow web development best practices\");\n  }\n  \n  return recommendations;\n};\n\n// Create final dashboard response\nconst websiteUrl = $node[\"Webhook Trigger\"].json.website_url;\nconst timestamp = new Date().toISOString();\nconst criticalIssues = seoData.issuesBreakdown.critical;\nconst warningIssues = seoData.issuesBreakdown.warning;\nconst totalIssues = criticalIssues + warningIssues;\n\nconst dashboardData = {\n  website_url: websiteUrl,\n  timestamp: timestamp,\n  \n  // Main metrics\n  seoScore: seoData.seoScore,\n  avgLoadTime: seoData.avgLoadTime,\n  mobileScore: seoData.mobileScore,\n  desktopScore: seoData.desktopScore,\n  \n  // Performance grade\n  performanceGrade: getPerformanceGrade(seoData.mobileScore, seoData.desktopScore),\n  \n  // Issues breakdown for charts\n  issuesBreakdown: seoData.issuesBreakdown,\n  \n  // Performance metrics\n  performanceMetrics: seoData.performanceMetrics,\n  \n  // Detailed issues (updated with broken links)\n  detailedIssues: updatedDetailedIssues,\n  \n  // Broken links details\n  brokenLinksDetails: {\n    count: brokenLinksData?.brokenLinksCount || 0,\n    totalChecked: brokenLinksData?.totalLinksChecked || 0,\n    examples: brokenLinksData?.brokenLinks || [],\n    percentage: brokenLinksData?.totalLinksChecked > 0 ? \n      Math.round((brokenLinksData.brokenLinksCount / brokenLinksData.totalLinksChecked) * 100) : 0\n  },\n  \n  // Enhanced summary\n  summary: {\n    overallHealth: calculateOverallHealth(\n      seoData.seoScore, \n      seoData.performanceMetrics, \n      criticalIssues, \n      brokenLinksData?.brokenLinksCount || 0\n    ),\n    criticalIssues: criticalIssues,\n    warningIssues: warningIssues,\n    totalIssues: totalIssues,\n    passedAudits: seoData.issuesBreakdown.passed,\n    recommendations: generateRecommendations(updatedDetailedIssues, seoData.performanceMetrics)\n  },\n  \n  // Additional insights\n  insights: {\n    loadTimeCategory: seoData.avgLoadTime <= 2.5 ? 'Fast' : \n                     seoData.avgLoadTime <= 4.0 ? 'Average' : 'Slow',\n    mobileFriendly: seoData.mobileScore >= 70,\n    seoOptimized: seoData.seoScore >= 80,\n    accessibilityCompliant: seoData.performanceMetrics.accessibility >= 80,\n    followsBestPractices: seoData.performanceMetrics.bestPractices >= 80\n  }\n};\n\nreturn [{ json: dashboardData }];"
+      },
+      "id": "441e9790-d1a0-4c8c-a8b5-f016bf736da4",
+      "name": "Format Final Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1792,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1952,
+        464
+      ],
+      "id": "639379c9-fc0e-4aed-87d7-0ebbd516682d",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        704,
+        144
+      ],
+      "id": "283b45c3-7db3-481c-9513-0320a6b43e4c",
+      "name": "Merge",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cd47d879-070d-408a-9eb1-f1d2a0c67849",
+              "name": "cleanLink",
+              "value": "={{(() => {   const link = $json.link || '';   const invalidExtensions = ['.jpg', '.jpeg', '.png', '.woff', '.woff2', '.ttf', '.svg', '.gif', '.js', '.css', '.ico', '.pdf'];   return invalidExtensions.some(ext => link.toLowerCase().includes(ext)) ? undefined : link; })()}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        896,
+        560
+      ],
+      "id": "f941c634-edc7-4fa1-bb07-986cfe0e5a03",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "fa799c53-34a7-47b5-9ec7-474c57a34224",
+              "leftValue": "={{$json.cleanLink}}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1056,
+        576
+      ],
+      "id": "4afdf111-f053-4656-aac2-6876d13700dc",
+      "name": "If"
+    }
+  ],
+  "pinData": {
+    "Webhook Trigger": [
+      {
+        "json": {
+          "website_url": "https://websenor.com/"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Format Final Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Results": {
+      "main": [
+        [
+          {
+            "node": "Format Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process SEO Metrics": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Broken Links": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "PageSpeed Desktop",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch HTML",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "PageSpeed Mobile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Link Status": {
+      "main": [
+        [
+          {
+            "node": "Process Broken Links",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Links": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch HTML": {
+      "main": [
+        [
+          {
+            "node": "Extract Links",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PageSpeed Desktop": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "PageSpeed Mobile": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Process SEO Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Check Link Status",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process Broken Links",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "3426dc8b-6bfd-4888-975d-b24c2e6cbc3b",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "4449303a74121eea16a562b13bf56d7bf84f057d9cd2ad64d6c2afc9ccfe82ac"
+  },
+  "id": "gUJGaZlQF4C8x082",
+  "tags": []
+}

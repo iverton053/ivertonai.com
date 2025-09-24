@@ -1,0 +1,516 @@
+{
+  "name": "performance analytics workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// Initialize output array\nconst items = [];\n\n// Get the target_url from webhook input\nconst targetUrl = $json.target_url;\n\n// Check if target_url exists and is not empty\nif (!targetUrl || targetUrl.trim() === \"\") {\n  return [\n    {\n      json: {\n        status: \"error\",\n        message: \"Target URL is required. Please provide a valid URL.\"\n      }\n    }\n  ];\n}\n\n// If valid, pass the target_url forward\nitems.push({\n  json: {\n    target_url: targetUrl\n  }\n});\n\nreturn items;"
+      },
+      "id": "091133a0-a25c-41fb-a93f-4ea5d7f9bf86",
+      "name": "Input Validation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1504,
+        1408
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Input Validation').item.json.target_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 10000
+        }
+      },
+      "id": "2c835fb0-c5c5-4510-baa6-9ae38a37f54c",
+      "name": "URL Scraping Test",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        -1312,
+        1408
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.status }}",
+              "value2": "error"
+            }
+          ]
+        }
+      },
+      "id": "7a39fb11-240a-435f-8ec7-4e7e0d58b31f",
+      "name": "Check Validation",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -1456,
+        1616
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json.status}}",
+              "value2": 400
+            }
+          ]
+        }
+      },
+      "id": "d94fda71-7d2b-4e20-8d1d-358420006b48",
+      "name": "Check URL Validity",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -912,
+        1312
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://www.googleapis.com/pagespeedonline/v5/runPagespeed",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "url",
+              "value": "={{$('Input Validation').item.json.target_url}}"
+            },
+            {
+              "name": "strategy",
+              "value": "mobile"
+            },
+            {
+              "name": "category",
+              "value": "performance"
+            },
+            {
+              "name": "key",
+              "value": "AIzaSyD6wBcaf1qnFn10ffF_1RYSb4saVKjwXzs"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "a983f657-29dc-4043-9a21-fdb8cb9350ce",
+      "name": "PageSpeed Mobile",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        -704,
+        1200
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://www.googleapis.com/pagespeedonline/v5/runPagespeed",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "url",
+              "value": "={{$('Input Validation').item.json.target_url}}"
+            },
+            {
+              "name": "strategy",
+              "value": "desktop"
+            },
+            {
+              "name": "category",
+              "value": "performance"
+            },
+            {
+              "name": "key",
+              "value": "AIzaSyD6wBcaf1qnFn10ffF_1RYSb4saVKjwXzs"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "34292418-244b-4dc8-8313-f247d863f66a",
+      "name": "PageSpeed Desktop",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        -704,
+        1328
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process PageSpeed Mobile data\nconst processedData = {\n  source: 'pagespeed_mobile',\n  success: false,\n  data: {}\n};\n\n// Get the data from the input - it's an array, so get the first item\nconst data = $input.first().json;\n\nif (data && data.lighthouseResult) {\n  const lighthouse = data.lighthouseResult;\n  \n  processedData.success = true;\n  \n  const audits = lighthouse.audits;\n  \n  processedData.data = {\n    url: lighthouse.requestedUrl,\n    finalUrl: lighthouse.finalUrl,\n    timestamp: lighthouse.fetchTime,\n    lighthouseVersion: lighthouse.lighthouseVersion,\n    \n    // Performance score calculation\n    performanceScore: Math.round((lighthouse.categories?.performance?.score || 0) * 100),\n    \n    coreWebVitals: {\n      firstContentfulPaint: {\n        value: audits['first-contentful-paint']?.numericValue || 0,\n        displayValue: audits['first-contentful-paint']?.displayValue || 'N/A',\n        score: audits['first-contentful-paint']?.score || 0\n      },\n      largestContentfulPaint: {\n        value: audits['largest-contentful-paint']?.numericValue || 0,\n        displayValue: audits['largest-contentful-paint']?.displayValue || 'N/A',\n        score: audits['largest-contentful-paint']?.score || 0\n      },\n      cumulativeLayoutShift: {\n        value: audits['cumulative-layout-shift']?.numericValue || 0,\n        displayValue: audits['cumulative-layout-shift']?.displayValue || 'N/A',\n        score: audits['cumulative-layout-shift']?.score || 0\n      },\n      totalBlockingTime: {\n        value: audits['total-blocking-time']?.numericValue || 0,\n        displayValue: audits['total-blocking-time']?.displayValue || 'N/A',\n        score: audits['total-blocking-time']?.score || 0\n      },\n      speedIndex: {\n        value: audits['speed-index']?.numericValue || 0,\n        displayValue: audits['speed-index']?.displayValue || 'N/A',\n        score: audits['speed-index']?.score || 0\n      }\n    },\n    \n    performanceMetrics: {\n      interactive: {\n        value: audits['interactive']?.numericValue || 0,\n        displayValue: audits['interactive']?.displayValue || 'N/A',\n        score: audits['interactive']?.score || 0\n      },\n      maxPotentialFid: {\n        value: audits['max-potential-fid']?.numericValue || 0,\n        displayValue: audits['max-potential-fid']?.displayValue || 'N/A',\n        score: audits['max-potential-fid']?.score || 0\n      },\n      serverResponseTime: {\n        value: audits['server-response-time']?.numericValue || 0,\n        displayValue: audits['server-response-time']?.displayValue || 'N/A',\n        score: audits['server-response-time']?.score || 0\n      }\n    },\n    \n    opportunities: [],\n    diagnostics: [],\n    \n    resourceSummary: {\n      totalRequests: 0,\n      totalSize: 0,\n      breakdown: {}\n    },\n    \n    mobileOptimization: {\n      viewport: audits['viewport']?.score === 1,\n      textSize: true,\n      tapTargets: true\n    }\n  };\n  \n  // Extract opportunities\n  Object.keys(audits).forEach(key => {\n    const audit = audits[key];\n    if (audit.details && \n        audit.details.type === 'opportunity' && \n        (audit.details.overallSavingsMs > 0 || audit.numericValue > 0)) {\n      processedData.data.opportunities.push({\n        id: key,\n        title: audit.title,\n        description: audit.description,\n        score: audit.score,\n        potentialSavings: audit.details.overallSavingsMs || audit.numericValue || 0,\n        potentialSavingsBytes: audit.details.overallSavingsBytes || 0,\n        displayValue: audit.displayValue\n      });\n    }\n  });\n  \n  // Extract resource summary\n  if (audits['resource-summary']?.details?.items) {\n    const resourceItems = audits['resource-summary'].details.items;\n    resourceItems.forEach(item => {\n      if (item.resourceType === 'total') {\n        processedData.data.resourceSummary.totalRequests = item.requestCount;\n        processedData.data.resourceSummary.totalSize = item.transferSize;\n      } else {\n        processedData.data.resourceSummary.breakdown[item.resourceType] = {\n          requests: item.requestCount,\n          size: item.transferSize\n        };\n      }\n    });\n  }\n  \n  // Handle field data from loadingExperience (it's at the root level of data, not lighthouse)\n  if (data.loadingExperience) {\n    processedData.data.fieldData = {\n      overallCategory: data.loadingExperience.overall_category,\n      metrics: data.loadingExperience.metrics\n    };\n  }\n  \n  // Calculate performance grade\n  const score = processedData.data.performanceScore;\n  let grade = 'F';\n  if (score >= 90) grade = 'A';\n  else if (score >= 80) grade = 'B';\n  else if (score >= 70) grade = 'C';\n  else if (score >= 60) grade = 'D';\n  \n  processedData.data.performanceGrade = grade;\n  \n  processedData.data.opportunities.sort((a, b) => b.potentialSavings - a.potentialSavings);\n}\n\nreturn processedData;"
+      },
+      "id": "44a19547-f467-41fd-aed3-a4cbc0edec23",
+      "name": "Process PageSpeed Mobile",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -512,
+        1200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Robust PageSpeed Desktop Data Processor\nconst items = [];\n\ntry {\n    // Handle various input formats robustly\n    let data;\n    \n    if (!$json) {\n        throw new Error('No input data provided');\n    }\n    \n    // Handle array input (extract first element) or direct object\n    if (Array.isArray($json)) {\n        if ($json.length === 0) {\n            throw new Error('Input array is empty');\n        }\n        data = $json[0];\n    } else if (typeof $json === 'object') {\n        data = $json;\n    } else {\n        throw new Error('Input must be an object or array of objects');\n    }\n    \n    let processedData = {\n        json: {\n            source: 'pagespeed_desktop',\n            success: false,\n            error: null,\n            data: {}\n        }\n    };\n\n    // Validate essential structure\n    if (!data.lighthouseResult) {\n        processedData.json.error = 'Missing lighthouseResult in data';\n        processedData.json.success = false;\n        items.push(processedData);\n        return items;\n    }\n\n    const lighthouse = data.lighthouseResult;\n    \n    // Validate required lighthouse properties\n    if (!lighthouse.categories || !lighthouse.categories.performance) {\n        processedData.json.error = 'Missing performance category in lighthouse results';\n        processedData.json.success = false;\n        items.push(processedData);\n        return items;\n    }\n\n    processedData.json.success = true;\n    processedData.json.data = {\n        // Basic Info\n        url: lighthouse.finalUrl || lighthouse.requestedUrl || 'Unknown',\n        fetchTime: lighthouse.fetchTime || new Date().toISOString(),\n        lighthouseVersion: lighthouse.lighthouseVersion || 'Unknown',\n        formFactor: (lighthouse.configSettings && lighthouse.configSettings.formFactor) || 'unknown',\n        \n        // Performance Score - with fallbacks\n        performanceScore: lighthouse.categories.performance.score || 0,\n        performanceScoreDisplay: Math.round((lighthouse.categories.performance.score || 0) * 100),\n        \n        // Core Web Vitals - Desktop with robust error handling\n        coreWebVitals: {\n            // First Contentful Paint\n            fcp: extractAuditData(lighthouse, 'first-contentful-paint', \n                \"First Contentful Paint marks the time at which the first text or image is painted\"),\n            \n            // Largest Contentful Paint\n            lcp: extractAuditData(lighthouse, 'largest-contentful-paint', \n                \"Largest Contentful Paint marks the time at which the largest text or image is painted\"),\n            \n            // Total Blocking Time (replaces FID for lab data)\n            tbt: extractAuditData(lighthouse, 'total-blocking-time', \n                \"Sum of all time periods between FCP and Time to Interactive, when task length exceeded 50ms\"),\n            \n            // Cumulative Layout Shift\n            cls: extractAuditData(lighthouse, 'cumulative-layout-shift', \n                \"Cumulative Layout Shift measures the movement of visible elements within the viewport\"),\n            \n            // Speed Index\n            si: extractAuditData(lighthouse, 'speed-index', \n                \"Speed Index shows how quickly the contents of a page are visibly populated\")\n        },\n        \n        // Field Data (Real User Metrics) - Desktop specific with error handling\n        fieldData: data.loadingExperience ? {\n            overall_category: data.loadingExperience.overall_category || 'UNKNOWN',\n            metrics: {\n                // First Contentful Paint - Field\n                fcp_field: extractFieldMetric(data.loadingExperience, 'FIRST_CONTENTFUL_PAINT_MS'),\n                \n                // Largest Contentful Paint - Field\n                lcp_field: extractFieldMetric(data.loadingExperience, 'LARGEST_CONTENTFUL_PAINT_MS'),\n                \n                // Interaction to Next Paint - Field\n                inp_field: extractFieldMetric(data.loadingExperience, 'INTERACTION_TO_NEXT_PAINT'),\n                \n                // Cumulative Layout Shift - Field\n                cls_field: extractFieldMetric(data.loadingExperience, 'CUMULATIVE_LAYOUT_SHIFT_SCORE'),\n                \n                // Time to First Byte - Field\n                ttfb_field: extractFieldMetric(data.loadingExperience, 'EXPERIMENTAL_TIME_TO_FIRST_BYTE')\n            }\n        } : null,\n        \n        // Additional Performance Metrics with error handling\n        additionalMetrics: {\n            // Time to Interactive\n            tti: extractAuditData(lighthouse, 'interactive'),\n            \n            // Max Potential First Input Delay\n            maxPotentialFID: extractAuditData(lighthouse, 'max-potential-fid'),\n            \n            // First Meaningful Paint (if available)\n            fmp: extractAuditData(lighthouse, 'first-meaningful-paint')\n        },\n        \n        // Key Opportunities & Diagnostics for Desktop\n        opportunities: {\n            // Render Blocking Resources\n            renderBlockingResources: extractOpportunityData(lighthouse, 'render-blocking-resources'),\n            \n            // Unused JavaScript\n            unusedJavaScript: extractOpportunityData(lighthouse, 'unused-javascript'),\n            \n            // Unused CSS\n            unusedCSS: extractOpportunityData(lighthouse, 'unused-css-rules'),\n            \n            // Image Optimization\n            imageOptimization: extractOpportunityData(lighthouse, 'uses-optimized-images'),\n            \n            // Modern Image Formats\n            modernImageFormats: extractOpportunityData(lighthouse, 'modern-image-formats'),\n            \n            // Text Compression\n            textCompression: extractOpportunityData(lighthouse, 'uses-text-compression'),\n            \n            // Server Response Time\n            serverResponseTime: extractOpportunityData(lighthouse, 'server-response-time')\n        },\n        \n        // Resource Summary with error handling\n        resourceSummary: extractResourceSummary(lighthouse),\n        \n        // Network Details with fallbacks\n        networkDetails: {\n            rtt: safeGetValue(() => lighthouse.audits['network-rtt'].numericValue, 0),\n            throughput: safeGetValue(() => lighthouse.audits.diagnostics.details.items[0].throughput, 0),\n            serverResponseTime: safeGetValue(() => lighthouse.audits['server-response-time'].numericValue, 0)\n        },\n        \n        // Desktop-specific insights\n        desktopInsights: {\n            domSize: extractAuditData(lighthouse, 'dom-size'),\n            mainThreadWork: extractAuditData(lighthouse, 'mainthread-work-breakdown'),\n            totalByteWeight: extractAuditData(lighthouse, 'total-byte-weight'),\n            bootupTime: extractAuditData(lighthouse, 'bootup-time')\n        },\n        \n        // Environment & Settings with fallbacks\n        environment: lighthouse.environment ? {\n            networkUserAgent: lighthouse.environment.networkUserAgent || 'Unknown',\n            hostUserAgent: lighthouse.environment.hostUserAgent || 'Unknown',\n            benchmarkIndex: lighthouse.environment.benchmarkIndex || 0\n        } : {\n            networkUserAgent: 'Unknown',\n            hostUserAgent: 'Unknown',\n            benchmarkIndex: 0\n        },\n        \n        // Processing metadata\n        processedAt: new Date().toISOString(),\n        deviceType: 'desktop',\n        hasFieldData: !!data.loadingExperience,\n        hasOriginFieldData: !!data.originLoadingExperience\n    };\n\n    items.push(processedData);\n\n} catch (error) {\n    // Handle any unexpected errors gracefully\n    items.push({\n        json: {\n            source: 'pagespeed_desktop',\n            success: false,\n            error: error.message || 'Unknown processing error',\n            data: {},\n            processedAt: new Date().toISOString()\n        }\n    });\n}\n\n// Helper function to safely extract audit data\nfunction extractAuditData(lighthouse, auditId, description = '') {\n    try {\n        if (!lighthouse.audits || !lighthouse.audits[auditId]) {\n            return {\n                score: null,\n                numericValue: null,\n                displayValue: null,\n                description: description,\n                available: false\n            };\n        }\n        \n        const audit = lighthouse.audits[auditId];\n        return {\n            score: audit.score !== undefined ? audit.score : null,\n            numericValue: audit.numericValue !== undefined ? audit.numericValue : null,\n            displayValue: audit.displayValue || null,\n            description: audit.description || description,\n            available: true\n        };\n    } catch (e) {\n        return {\n            score: null,\n            numericValue: null,\n            displayValue: null,\n            description: description,\n            available: false,\n            error: e.message\n        };\n    }\n}\n\n// Helper function to safely extract opportunity data\nfunction extractOpportunityData(lighthouse, auditId) {\n    try {\n        if (!lighthouse.audits || !lighthouse.audits[auditId]) {\n            return {\n                score: null,\n                numericValue: null,\n                displayValue: null,\n                description: '',\n                available: false\n            };\n        }\n        \n        const audit = lighthouse.audits[auditId];\n        return {\n            score: audit.score !== undefined ? audit.score : null,\n            numericValue: audit.numericValue !== undefined ? audit.numericValue : null,\n            displayValue: audit.displayValue || (audit.numericValue === 0 ? '0 ms' : null),\n            description: audit.description || '',\n            available: true\n        };\n    } catch (e) {\n        return {\n            score: null,\n            numericValue: null,\n            displayValue: null,\n            description: '',\n            available: false,\n            error: e.message\n        };\n    }\n}\n\n// Helper function to safely extract field metrics\nfunction extractFieldMetric(loadingExperience, metricKey) {\n    try {\n        if (!loadingExperience.metrics || !loadingExperience.metrics[metricKey]) {\n            return null;\n        }\n        \n        const metric = loadingExperience.metrics[metricKey];\n        return {\n            percentile: metric.percentile !== undefined ? metric.percentile : null,\n            category: metric.category || 'UNKNOWN',\n            distributions: metric.distributions || []\n        };\n    } catch (e) {\n        return null;\n    }\n}\n\n// Helper function to safely extract resource summary\nfunction extractResourceSummary(lighthouse) {\n    try {\n        if (!lighthouse.audits || \n            !lighthouse.audits['resource-summary'] || \n            !lighthouse.audits['resource-summary'].details || \n            !lighthouse.audits['resource-summary'].details.items) {\n            return {};\n        }\n        \n        return lighthouse.audits['resource-summary'].details.items.reduce((acc, item) => {\n            acc[item.resourceType] = {\n                requestCount: item.requestCount || 0,\n                transferSize: item.transferSize || 0\n            };\n            return acc;\n        }, {});\n    } catch (e) {\n        return {};\n    }\n}\n\n// Helper function to safely get nested values\nfunction safeGetValue(getter, defaultValue = null) {\n    try {\n        const value = getter();\n        return value !== undefined ? value : defaultValue;\n    } catch (e) {\n        return defaultValue;\n    }\n}\n\nreturn items;"
+      },
+      "id": "d9862147-d9c4-4997-9a48-8ed00de94d9e",
+      "name": "Process PageSpeed Desktop",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -512,
+        1328
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * SerpAPI Data Extractor\n * Dynamically extracts and structures data from SerpAPI Google search results\n */\n\nfunction extractSerpApiData(serpApiResponse) {\n    // Handle both array input and direct object\n    const data = Array.isArray(serpApiResponse) ? serpApiResponse[0] : serpApiResponse;\n    \n    if (!data) {\n        throw new Error('No data provided');\n    }\n\n    const extractedData = {\n        metadata: extractMetadata(data),\n        searchInfo: extractSearchInformation(data),\n        knowledgeGraph: extractKnowledgeGraph(data),\n        relatedQuestions: extractRelatedQuestions(data),\n        organicResults: extractOrganicResults(data),\n        sitelinks: extractSitelinks(data),\n        pagination: extractPagination(data),\n        insights: generateInsights(data)\n    };\n\n    return {\n        success: true,\n        timestamp: new Date().toISOString(),\n        source: 'serpapi',\n        data: extractedData\n    };\n}\n\n/**\n * Extract search metadata\n */\nfunction extractMetadata(data) {\n    const metadata = data.search_metadata || {};\n    return {\n        searchId: metadata.id,\n        status: metadata.status,\n        createdAt: metadata.created_at,\n        processedAt: metadata.processed_at,\n        totalTime: metadata.total_time_taken,\n        googleUrl: metadata.google_url\n    };\n}\n\n/**\n * Extract search information\n */\nfunction extractSearchInformation(data) {\n    const searchInfo = data.search_information || {};\n    const searchParams = data.search_parameters || {};\n    \n    return {\n        query: searchInfo.query_displayed || searchParams.q,\n        totalResults: searchInfo.total_results,\n        timeTaken: searchInfo.time_taken_displayed,\n        location: searchParams.location_used,\n        language: searchParams.hl,\n        device: searchParams.device,\n        organicResultsState: searchInfo.organic_results_state\n    };\n}\n\n/**\n * Extract knowledge graph data\n */\nfunction extractKnowledgeGraph(data) {\n    const kg = data.knowledge_graph;\n    if (!kg) return null;\n\n    return {\n        title: kg.title,\n        entityType: kg.entity_type,\n        description: kg.description,\n        image: kg.image,\n        owner: kg.owner,\n        source: kg.source ? {\n            name: kg.source.name,\n            link: kg.source.link\n        } : null,\n        ownerLinks: kg.owner_links || []\n    };\n}\n\n/**\n * Extract related questions\n */\nfunction extractRelatedQuestions(data) {\n    const questions = data.related_questions || [];\n    \n    return questions.map(q => ({\n        question: q.question,\n        type: q.type,\n        snippet: q.snippet,\n        title: q.title,\n        link: q.link,\n        date: q.date,\n        displayedLink: q.displayed_link,\n        sourceLogo: q.source_logo\n    }));\n}\n\n/**\n * Extract and structure organic results\n */\nfunction extractOrganicResults(data) {\n    const results = data.organic_results || [];\n    \n    return results.map(result => ({\n        position: result.position,\n        title: result.title,\n        link: result.link,\n        displayedLink: result.displayed_link,\n        snippet: result.snippet,\n        snippetHighlightedWords: result.snippet_highlighted_words || [],\n        favicon: result.favicon,\n        date: result.date,\n        source: result.source,\n        sitelinks: extractResultSitelinks(result.sitelinks),\n        // Additional metadata\n        domain: extractDomain(result.link),\n        hasRichSnippet: !!result.rich_snippet,\n        hasVideo: !!result.video,\n        hasImage: !!result.thumbnail\n    }));\n}\n\n/**\n * Extract sitelinks from individual results\n */\nfunction extractResultSitelinks(sitelinks) {\n    if (!sitelinks || !sitelinks.list) return [];\n    \n    return sitelinks.list.map(link => ({\n        title: link.title,\n        link: link.link,\n        answerCount: link.answer_count,\n        date: link.date\n    }));\n}\n\n/**\n * Extract pagination information\n */\nfunction extractPagination(data) {\n    const pagination = data.pagination || {};\n    const serpaPagination = data.serpapi_pagination || {};\n    \n    return {\n        current: pagination.current || serpaPagination.current,\n        next: pagination.next,\n        nextLink: serpaPagination.next_link,\n        otherPages: Object.keys(pagination.other_pages || {}).map(page => ({\n            page: parseInt(page),\n            link: pagination.other_pages[page]\n        }))\n    };\n}\n\n/**\n * Extract sitelinks (if any at root level)\n */\nfunction extractSitelinks(data) {\n    const sitelinks = data.sitelinks;\n    if (!sitelinks) return [];\n    \n    return sitelinks.map(link => ({\n        title: link.title,\n        link: link.link,\n        snippet: link.snippet\n    }));\n}\n\n/**\n * Generate insights from the data\n */\nfunction generateInsights(data) {\n    const organicResults = data.organic_results || [];\n    const totalResults = data.search_information?.total_results || 0;\n    const kg = data.knowledge_graph;\n    \n    // Analyze domains in top results\n    const domainAnalysis = analyzeDomains(organicResults);\n    \n    // Check for brand presence\n    const brandPresence = analyzeBrandPresence(organicResults, kg);\n    \n    // Content type analysis\n    const contentTypes = analyzeContentTypes(organicResults);\n    \n    return {\n        totalIndexedPages: totalResults,\n        topResultsAnalysis: {\n            totalResults: organicResults.length,\n            averageSnippetLength: calculateAverageSnippetLength(organicResults),\n            domainsRepresented: domainAnalysis.uniqueDomains,\n            mostFrequentDomain: domainAnalysis.mostFrequent\n        },\n        brandPresence: brandPresence,\n        contentTypes: contentTypes,\n        hasKnowledgeGraph: !!kg,\n        hasRelatedQuestions: !!(data.related_questions && data.related_questions.length > 0),\n        searchCompetitiveness: calculateCompetitiveness(totalResults, organicResults.length)\n    };\n}\n\n/**\n * Analyze domains in organic results\n */\nfunction analyzeDomains(results) {\n    const domains = results.map(r => extractDomain(r.link)).filter(Boolean);\n    const domainCounts = {};\n    \n    domains.forEach(domain => {\n        domainCounts[domain] = (domainCounts[domain] || 0) + 1;\n    });\n    \n    const mostFrequent = Object.keys(domainCounts).reduce((a, b) => \n        domainCounts[a] > domainCounts[b] ? a : b, '');\n    \n    return {\n        uniqueDomains: Object.keys(domainCounts).length,\n        mostFrequent: mostFrequent,\n        distribution: domainCounts\n    };\n}\n\n/**\n * Analyze brand presence\n */\nfunction analyzeBrandPresence(results, knowledgeGraph) {\n    const queryDomain = extractDomain(results[0]?.link || '');\n    const topResult = results[0];\n    \n    return {\n        hasOfficialSite: topResult && extractDomain(topResult.link) === queryDomain,\n        hasKnowledgeGraph: !!knowledgeGraph,\n        brandRanking: results.findIndex(r => extractDomain(r.link) === queryDomain) + 1 || null,\n        competitorCount: results.filter(r => extractDomain(r.link) !== queryDomain).length\n    };\n}\n\n/**\n * Analyze content types in results\n */\nfunction analyzeContentTypes(results) {\n    const types = {\n        articles: 0,\n        videos: 0,\n        images: 0,\n        forums: 0,\n        ecommerce: 0,\n        social: 0,\n        other: 0\n    };\n    \n    results.forEach(result => {\n        const title = (result.title || '').toLowerCase();\n        const domain = extractDomain(result.link).toLowerCase();\n        \n        if (result.video || title.includes('video')) {\n            types.videos++;\n        } else if (domain.includes('reddit') || domain.includes('stackoverflow') || \n                  domain.includes('forum') || title.includes('discussion')) {\n            types.forums++;\n        } else if (domain.includes('amazon') || domain.includes('shop') || \n                  title.includes('buy') || title.includes('price')) {\n            types.ecommerce++;\n        } else if (domain.includes('facebook') || domain.includes('twitter') || \n                  domain.includes('linkedin') || domain.includes('instagram')) {\n            types.social++;\n        } else if (title.includes('article') || title.includes('blog') || \n                  title.includes('news') || title.includes('guide')) {\n            types.articles++;\n        } else {\n            types.other++;\n        }\n    });\n    \n    return types;\n}\n\n/**\n * Calculate average snippet length\n */\nfunction calculateAverageSnippetLength(results) {\n    if (results.length === 0) return 0;\n    \n    const totalLength = results.reduce((sum, result) => \n        sum + (result.snippet ? result.snippet.length : 0), 0);\n    \n    return Math.round(totalLength / results.length);\n}\n\n/**\n * Calculate search competitiveness\n */\nfunction calculateCompetitiveness(totalResults, organicResultsCount) {\n    if (totalResults > 1000000) return 'High';\n    if (totalResults > 100000) return 'Medium';\n    if (totalResults > 10000) return 'Low';\n    return 'Very Low';\n}\n\n/**\n * Extract domain from URL\n */\nfunction extractDomain(url) {\n    if (!url) return '';\n    try {\n        return new URL(url).hostname.replace('www.', '');\n    } catch (e) {\n        return '';\n    }\n}\n\n// Usage examples:\n\n// Example 1: Process the provided data\nconst serpApiData = [/* your SerpAPI data array */];\ntry {\n    const structuredData = extractSerpApiData(serpApiData);\n    console.log('Structured Data:', JSON.stringify(structuredData, null, 2));\n} catch (error) {\n    console.error('Error processing data:', error.message);\n}\n\n// Example 2: For n8n workflow (your specific use case)\nfunction processForN8N(inputData) {\n    try {\n        const processed = extractSerpApiData(inputData);\n        \n        // Return in n8n format\n        return [{\n            json: {\n                source: 'serpapi',\n                success: true,\n                data: processed.data,\n                metadata: {\n                    processedAt: processed.timestamp,\n                    totalResults: processed.data.searchInfo.totalResults,\n                    query: processed.data.searchInfo.query\n                }\n            }\n        }];\n    } catch (error) {\n        return [{\n            json: {\n                source: 'serpapi',\n                success: false,\n                error: error.message,\n                data: {}\n            }\n        }];\n    }\n}\n\n// N8N WORKFLOW CODE - Use this directly in your Code node:\n// ========================================================\n\n// Initialize items array for n8n\nconst items = [];\nconst data = $json;\n\ntry {\n    // Handle array input (extract first element) or direct object\n    let inputData;\n    if (Array.isArray(data)) {\n        if (data.length === 0) {\n            throw new Error('Input array is empty');\n        }\n        inputData = data[0];\n    } else if (typeof data === 'object' && data !== null) {\n        inputData = data;\n    } else {\n        throw new Error('Input must be an object or array of objects');\n    }\n\n    // Process the data\n    const processedData = {\n        source: 'serpapi',\n        success: false,\n        data: {}\n    };\n\n    // Extract search information\n    const searchInfo = inputData.search_information || {};\n    const searchParams = inputData.search_parameters || {};\n    const organicResults = inputData.organic_results || [];\n    const knowledgeGraph = inputData.knowledge_graph || null;\n    const relatedQuestions = inputData.related_questions || [];\n\n    if (organicResults.length > 0 || knowledgeGraph) {\n        processedData.success = true;\n        \n        // Basic search metrics\n        processedData.data = {\n            query: searchInfo.query_displayed || searchParams.q || '',\n            totalResults: searchInfo.total_results || 0,\n            organicResultsCount: organicResults.length,\n            \n            // Knowledge graph info\n            hasKnowledgeGraph: !!knowledgeGraph,\n            entityInfo: knowledgeGraph ? {\n                title: knowledgeGraph.title || '',\n                description: knowledgeGraph.description || '',\n                owner: knowledgeGraph.owner || ''\n            } : null,\n            \n            // Organic results analysis\n            topResults: organicResults.slice(0, 10).map((result, index) => ({\n                position: result.position || index + 1,\n                title: result.title || 'Untitled',\n                link: result.link || '',\n                snippet: result.snippet || '',\n                domain: extractDomainSimple(result.link || ''),\n                hasDate: !!result.date,\n                hasSitelinks: !!(result.sitelinks && result.sitelinks.list)\n            })),\n            \n            // SEO insights\n            seoMetrics: {\n                brandPresence: checkBrandPresence(organicResults, searchParams.q || ''),\n                competitorCount: Math.min(organicResults.length, 10),\n                avgSnippetLength: calculateAvgSnippetLength(organicResults),\n                topDomains: getTopDomains(organicResults),\n                hasRelatedQuestions: relatedQuestions.length > 0,\n                relatedQuestionsCount: relatedQuestions.length\n            },\n            \n            // Traffic estimation (simplified)\n            trafficEstimate: {\n                estimatedClicks: Math.max(0, Math.floor((searchInfo.total_results || 0) * 0.0001)),\n                searchVolume: estimateSearchVolume(searchInfo.total_results || 0),\n                competition: categorizeCompetition(searchInfo.total_results || 0)\n            }\n        };\n    } else {\n        processedData.success = false;\n        processedData.data = {\n            error: 'No organic results or knowledge graph found',\n            query: searchParams.q || '',\n            totalResults: searchInfo.total_results || 0\n        };\n    }\n\n    items.push({\n        json: processedData\n    });\n\n} catch (error) {\n    // Error handling\n    items.push({\n        json: {\n            source: 'serpapi',\n            success: false,\n            error: error.message,\n            data: {\n                processedAt: new Date().toISOString()\n            }\n        }\n    });\n}\n\n// Helper functions\nfunction extractDomainSimple(url) {\n    if (!url) return '';\n    try {\n        const urlObj = new URL(url);\n        return urlObj.hostname.replace('www.', '');\n    } catch (e) {\n        // Fallback for malformed URLs\n        const matches = url.match(/https?:\\/\\/(?:www\\.)?([^\\/]+)/);\n        return matches ? matches[1] : '';\n    }\n}\n\nfunction checkBrandPresence(results, query) {\n    if (!results.length || !query) return false;\n    \n    // Extract domain from query if it's a URL\n    let targetDomain = '';\n    if (query.includes('://')) {\n        targetDomain = extractDomainSimple(query);\n    } else {\n        targetDomain = query.toLowerCase().replace(/[^\\w.-]/g, '');\n    }\n    \n    if (!targetDomain) return false;\n    \n    // Check if first result is from the target domain\n    const firstResult = results[0];\n    const firstDomain = extractDomainSimple(firstResult.link || '');\n    \n    return firstDomain.includes(targetDomain) || targetDomain.includes(firstDomain);\n}\n\nfunction calculateAvgSnippetLength(results) {\n    if (!results.length) return 0;\n    const total = results.reduce((sum, r) => sum + (r.snippet ? r.snippet.length : 0), 0);\n    return Math.round(total / results.length);\n}\n\nfunction getTopDomains(results) {\n    const domains = {};\n    results.forEach(r => {\n        const domain = extractDomainSimple(r.link || '');\n        if (domain) {\n            domains[domain] = (domains[domain] || 0) + 1;\n        }\n    });\n    \n    return Object.entries(domains)\n        .sort(([,a], [,b]) => b - a)\n        .slice(0, 5)\n        .map(([domain, count]) => ({ domain, count }));\n}\n\nfunction estimateSearchVolume(totalResults) {\n    if (totalResults > 100000000) return 'Very High';\n    if (totalResults > 10000000) return 'High';\n    if (totalResults > 1000000) return 'Medium';\n    if (totalResults > 100000) return 'Low';\n    return 'Very Low';\n}\n\nfunction categorizeCompetition(totalResults) {\n    if (totalResults > 50000000) return 'Very High';\n    if (totalResults > 5000000) return 'High';\n    if (totalResults > 500000) return 'Medium';\n    if (totalResults > 50000) return 'Low';\n    return 'Very Low';\n}\n\n// Return the items array for n8n\nreturn items;"
+      },
+      "id": "5cfe13d4-9e0a-43cb-a7de-19d83ad53f81",
+      "name": "Process SerpAPI",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -496,
+        1504
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const targetUrl = $('Input Validation').first().json?.target_url || 'Unknown URL';\nconst items = $input.all();\n\nconst result = {\n  target_url: targetUrl,\n  analysis_timestamp: new Date().toISOString(),\n  summary: {\n    performance_mobile: null,\n    performance_desktop: null,\n    seo_analysis: null,\n    status: \"processing\"\n  },\n  data: {}\n};\n\nitems.forEach(item => {\n  const json = item.json;\n  const source = json.source;\n  \n  try {\n    if (!json.success) {\n      throw new Error(json.error || 'Unknown error occurred');\n    }\n    \n    switch (source) {\n      case 'pagespeed_mobile':\n        result.data.mobile = {\n          performance_score: json.data.performanceScore,\n          grade: json.data.performanceGrade,\n          lighthouse_version: json.data.lighthouseVersion,\n          \n          core_web_vitals: {\n            first_contentful_paint: {\n              value: json.data.coreWebVitals.firstContentfulPaint?.value,\n              display: json.data.coreWebVitals.firstContentfulPaint?.displayValue,\n              score: json.data.coreWebVitals.firstContentfulPaint?.score\n            },\n            largest_contentful_paint: {\n              value: json.data.coreWebVitals.largestContentfulPaint?.value,\n              display: json.data.coreWebVitals.largestContentfulPaint?.displayValue,\n              score: json.data.coreWebVitals.largestContentfulPaint?.score\n            },\n            cumulative_layout_shift: {\n              value: json.data.coreWebVitals.cumulativeLayoutShift?.value,\n              display: json.data.coreWebVitals.cumulativeLayoutShift?.displayValue,\n              score: json.data.coreWebVitals.cumulativeLayoutShift?.score\n            },\n            total_blocking_time: {\n              value: json.data.coreWebVitals.totalBlockingTime?.value,\n              display: json.data.coreWebVitals.totalBlockingTime?.displayValue,\n              score: json.data.coreWebVitals.totalBlockingTime?.score\n            },\n            speed_index: {\n              value: json.data.coreWebVitals.speedIndex?.value,\n              display: json.data.coreWebVitals.speedIndex?.displayValue,\n              score: json.data.coreWebVitals.speedIndex?.score\n            }\n          },\n          \n          performance_metrics: {\n            interactive: {\n              value: json.data.performanceMetrics?.interactive?.value,\n              display: json.data.performanceMetrics?.interactive?.displayValue,\n              score: json.data.performanceMetrics?.interactive?.score\n            },\n            max_potential_fid: {\n              value: json.data.performanceMetrics?.maxPotentialFid?.value,\n              display: json.data.performanceMetrics?.maxPotentialFid?.displayValue,\n              score: json.data.performanceMetrics?.maxPotentialFid?.score\n            },\n            server_response_time: {\n              value: json.data.performanceMetrics?.serverResponseTime?.value,\n              display: json.data.performanceMetrics?.serverResponseTime?.displayValue,\n              score: json.data.performanceMetrics?.serverResponseTime?.score\n            }\n          },\n          \n          field_data: {\n            overall_category: json.data.fieldData?.overallCategory,\n            cls_category: json.data.fieldData?.metrics?.CUMULATIVE_LAYOUT_SHIFT_SCORE?.category,\n            fcp_category: json.data.fieldData?.metrics?.FIRST_CONTENTFUL_PAINT_MS?.category,\n            lcp_category: json.data.fieldData?.metrics?.LARGEST_CONTENTFUL_PAINT_MS?.category,\n            inp_category: json.data.fieldData?.metrics?.INTERACTION_TO_NEXT_PAINT?.category,\n            ttfb_category: json.data.fieldData?.metrics?.EXPERIMENTAL_TIME_TO_FIRST_BYTE?.category\n          },\n          \n          mobile_optimization: json.data.mobileOptimization,\n          \n          resource_summary: {\n            total_requests: json.data.resourceSummary?.totalRequests,\n            total_size: json.data.resourceSummary?.totalSize,\n            breakdown: json.data.resourceSummary?.breakdown\n          },\n          \n          opportunities: json.data.opportunities?.map(opp => ({\n            id: opp.id,\n            title: opp.title,\n            score: opp.score,\n            potential_savings: opp.potentialSavings,\n            display_value: opp.displayValue\n          })) || [],\n          \n          timestamp: json.data.timestamp\n        };\n        result.summary.performance_mobile = \"success\";\n        break;\n        \n      case 'pagespeed_desktop':\n        result.data.desktop = {\n          performance_score: json.data.performanceScoreDisplay || json.data.performanceScore * 100,\n          lighthouse_version: json.data.lighthouseVersion,\n          form_factor: json.data.formFactor,\n          fetch_time: json.data.fetchTime,\n          \n          core_web_vitals: {\n            first_contentful_paint: {\n              score: json.data.coreWebVitals.fcp?.score,\n              value: json.data.coreWebVitals.fcp?.numericValue,\n              display: json.data.coreWebVitals.fcp?.displayValue,\n              description: json.data.coreWebVitals.fcp?.description\n            },\n            largest_contentful_paint: {\n              score: json.data.coreWebVitals.lcp?.score,\n              value: json.data.coreWebVitals.lcp?.numericValue,\n              display: json.data.coreWebVitals.lcp?.displayValue,\n              description: json.data.coreWebVitals.lcp?.description\n            },\n            total_blocking_time: {\n              score: json.data.coreWebVitals.tbt?.score,\n              value: json.data.coreWebVitals.tbt?.numericValue,\n              display: json.data.coreWebVitals.tbt?.displayValue,\n              description: json.data.coreWebVitals.tbt?.description\n            },\n            cumulative_layout_shift: {\n              score: json.data.coreWebVitals.cls?.score,\n              value: json.data.coreWebVitals.cls?.numericValue,\n              display: json.data.coreWebVitals.cls?.displayValue,\n              description: json.data.coreWebVitals.cls?.description\n            },\n            speed_index: {\n              score: json.data.coreWebVitals.si?.score,\n              value: json.data.coreWebVitals.si?.numericValue,\n              display: json.data.coreWebVitals.si?.displayValue,\n              description: json.data.coreWebVitals.si?.description\n            }\n          },\n          \n          field_data: {\n            overall_category: json.data.fieldData?.overall_category,\n            fcp_field: {\n              percentile: json.data.fieldData?.metrics?.fcp_field?.percentile,\n              category: json.data.fieldData?.metrics?.fcp_field?.category\n            },\n            lcp_field: {\n              percentile: json.data.fieldData?.metrics?.lcp_field?.percentile,\n              category: json.data.fieldData?.metrics?.lcp_field?.category\n            },\n            inp_field: {\n              percentile: json.data.fieldData?.metrics?.inp_field?.percentile,\n              category: json.data.fieldData?.metrics?.inp_field?.category\n            },\n            cls_field: {\n              percentile: json.data.fieldData?.metrics?.cls_field?.percentile,\n              category: json.data.fieldData?.metrics?.cls_field?.category\n            },\n            ttfb_field: {\n              percentile: json.data.fieldData?.metrics?.ttfb_field?.percentile,\n              category: json.data.fieldData?.metrics?.ttfb_field?.category\n            }\n          },\n          \n          additional_metrics: {\n            time_to_interactive: {\n              score: json.data.additionalMetrics?.tti?.score,\n              value: json.data.additionalMetrics?.tti?.numericValue,\n              display: json.data.additionalMetrics?.tti?.displayValue\n            },\n            max_potential_fid: {\n              score: json.data.additionalMetrics?.maxPotentialFID?.score,\n              value: json.data.additionalMetrics?.maxPotentialFID?.numericValue,\n              display: json.data.additionalMetrics?.maxPotentialFID?.displayValue\n            }\n          },\n          \n          opportunities: {\n            render_blocking_resources: {\n              score: json.data.opportunities?.renderBlockingResources?.score,\n              savings: json.data.opportunities?.renderBlockingResources?.numericValue,\n              display: json.data.opportunities?.renderBlockingResources?.displayValue\n            },\n            unused_javascript: {\n              score: json.data.opportunities?.unusedJavaScript?.score,\n              savings: json.data.opportunities?.unusedJavaScript?.numericValue,\n              display: json.data.opportunities?.unusedJavaScript?.displayValue\n            },\n            unused_css: {\n              score: json.data.opportunities?.unusedCSS?.score,\n              savings: json.data.opportunities?.unusedCSS?.numericValue,\n              display: json.data.opportunities?.unusedCSS?.displayValue\n            },\n            image_optimization: {\n              score: json.data.opportunities?.imageOptimization?.score,\n              savings: json.data.opportunities?.imageOptimization?.numericValue,\n              display: json.data.opportunities?.imageOptimization?.displayValue\n            },\n            server_response_time: {\n              score: json.data.opportunities?.serverResponseTime?.score,\n              value: json.data.opportunities?.serverResponseTime?.numericValue,\n              display: json.data.opportunities?.serverResponseTime?.displayValue\n            }\n          },\n          \n          resource_summary: json.data.resourceSummary,\n          \n          network_details: json.data.networkDetails,\n          \n          desktop_insights: {\n            dom_size: {\n              score: json.data.desktopInsights?.domSize?.score,\n              value: json.data.desktopInsights?.domSize?.numericValue,\n              display: json.data.desktopInsights?.domSize?.displayValue\n            },\n            main_thread_work: {\n              score: json.data.desktopInsights?.mainThreadWork?.score,\n              value: json.data.desktopInsights?.mainThreadWork?.numericValue,\n              display: json.data.desktopInsights?.mainThreadWork?.displayValue\n            },\n            total_byte_weight: {\n              score: json.data.desktopInsights?.totalByteWeight?.score,\n              value: json.data.desktopInsights?.totalByteWeight?.numericValue,\n              display: json.data.desktopInsights?.totalByteWeight?.displayValue\n            }\n          },\n          \n          has_field_data: json.data.hasFieldData,\n          processed_at: json.data.processedAt\n        };\n        result.summary.performance_desktop = \"success\";\n        break;\n        \n      case 'serpapi':\n        result.data.seo = {\n          search_query: json.data.query,\n          total_results: json.data.totalResults,\n          organic_results_count: json.data.organicResultsCount,\n          has_knowledge_graph: json.data.hasKnowledgeGraph,\n          \n          entity_info: json.data.entityInfo ? {\n            title: json.data.entityInfo.title,\n            description: json.data.entityInfo.description,\n            owner: json.data.entityInfo.owner\n          } : null,\n          \n          top_results: json.data.topResults?.map(result => ({\n            position: result.position,\n            title: result.title,\n            link: result.link,\n            snippet: result.snippet,\n            domain: result.domain,\n            has_date: result.hasDate,\n            has_sitelinks: result.hasSitelinks\n          })) || [],\n          \n          seo_metrics: {\n            brand_presence: json.data.seoMetrics?.brandPresence,\n            competitor_count: json.data.seoMetrics?.competitorCount,\n            avg_snippet_length: json.data.seoMetrics?.avgSnippetLength,\n            top_domains: json.data.seoMetrics?.topDomains,\n            has_related_questions: json.data.seoMetrics?.hasRelatedQuestions,\n            related_questions_count: json.data.seoMetrics?.relatedQuestionsCount\n          },\n          \n          traffic_estimate: {\n            estimated_clicks: json.data.trafficEstimate?.estimatedClicks,\n            search_volume: json.data.trafficEstimate?.searchVolume,\n            competition: json.data.trafficEstimate?.competition\n          },\n          \n          ranking_analysis: {\n            target_url_position: json.data.topResults?.find(r => r.link.includes(targetUrl.replace(/^https?:\\/\\//, '').replace(/\\/$/, '')))?.position || null,\n            competitors_above: json.data.topResults?.filter(r => r.position < (json.data.topResults?.find(r => r.link.includes(targetUrl.replace(/^https?:\\/\\//, '').replace(/\\/$/, '')))?.position || 999)).length || 0,\n            same_domain_results: json.data.topResults?.filter(r => r.domain === targetUrl.replace(/^https?:\\/\\//, '').replace(/\\/$/, '')).length || 0\n          }\n        };\n        result.summary.seo_analysis = \"success\";\n        break;\n    }\n  } catch (error) {\n    console.error(`Error processing ${source}:`, error.message);\n    result.summary[source === 'pagespeed_mobile' ? 'performance_mobile' : \n                   source === 'pagespeed_desktop' ? 'performance_desktop' : \n                   'seo_analysis'] = \"error\";\n    result.data[source === 'pagespeed_mobile' ? 'mobile' : \n               source === 'pagespeed_desktop' ? 'desktop' : 'seo'] = {\n      error: `Failed to process data: ${error.message}`,\n      source: source,\n      timestamp: new Date().toISOString()\n    };\n  }\n});\n\n// Set overall status\nconst hasErrors = Object.values(result.summary).includes(\"error\");\nconst hasSuccess = Object.values(result.summary).includes(\"success\");\nresult.summary.status = hasErrors && hasSuccess ? \"partial_success\" : \n                       hasSuccess ? \"success\" : \"error\";\n\n// Add analysis metadata - FIXED COUNTING\nconst sourceStatuses = [result.summary.performance_mobile, result.summary.performance_desktop, result.summary.seo_analysis];\nconst successCount = sourceStatuses.filter(s => s === \"success\").length;\nconst errorCount = sourceStatuses.filter(s => s === \"error\").length;\n\nresult.metadata = {\n  sources_processed: items.length,\n  successful_sources: successCount,\n  failed_sources: errorCount,\n  processing_time: new Date().toISOString()\n};\n\nreturn [result];"
+      },
+      "id": "0ea0586d-2a6c-4462-b5b8-e21fe41c0afb",
+      "name": "Final Data Processing",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -112,
+        1360
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "c7339f37-717e-498d-971f-1785a6b7b712",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        96,
+        1360
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "c5fb4ab8-d984-4518-8088-9bbe2b8df56d",
+      "name": "Respond Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        -1104,
+        1600
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": false,\n  \"error\": true,\n  \"message\": \"URL is not accessible or invalid\",\n  \"status\": \"url_error\",\n  \"timestamp\": \"{{new Date().toISOString()}}\"\n}",
+        "options": {}
+      },
+      "id": "7f2bc26c-1723-4d49-85a9-8842f2bfa93f",
+      "name": "Respond URL Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        -960,
+        1472
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "performance-analytics",
+        "options": {}
+      },
+      "id": "b1ef07e6-ee64-477a-b2a9-bc4b7b46c055",
+      "name": "Webhook Trigger1",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -1712,
+        1408
+      ],
+      "webhookId": "performance-analytics-webhook"
+    },
+    {
+      "parameters": {
+        "url": "https://serpapi.com/search.json",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "serpApi",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={\n  \"engine\": \"google\",\n  \"q\": \"{{ $('Input Validation').item.json.target_url }}\",\n  \"location\": \"India\",\n  \"gl\": \"in\",\n  \"hl\": \"en\"\n}",
+        "options": {}
+      },
+      "id": "4f407fe0-0159-4935-9d28-d53c02443893",
+      "name": "SERP API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        -704,
+        1504
+      ],
+      "credentials": {
+        "serpApi": {
+          "id": "dQdz6076sCgDua3x",
+          "name": "SerpAPI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "numberInputs": 3
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -304,
+        1344
+      ],
+      "id": "2ed34948-97e3-456e-9d75-ff07c1d83c41",
+      "name": "Merge"
+    }
+  ],
+  "pinData": {
+    "Webhook Trigger1": [
+      {
+        "json": {
+          "target_url": "https://example.com"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Input Validation": {
+      "main": [
+        [
+          {
+            "node": "Check Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "URL Scraping Test": {
+      "main": [
+        [
+          {
+            "node": "Check URL Validity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Validation": {
+      "main": [
+        [
+          {
+            "node": "Respond Error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "URL Scraping Test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check URL Validity": {
+      "main": [
+        [
+          {
+            "node": "PageSpeed Mobile",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "PageSpeed Desktop",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "SERP API",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond URL Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PageSpeed Mobile": {
+      "main": [
+        [
+          {
+            "node": "Process PageSpeed Mobile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PageSpeed Desktop": {
+      "main": [
+        [
+          {
+            "node": "Process PageSpeed Desktop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process PageSpeed Mobile": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process PageSpeed Desktop": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Final Data Processing": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Trigger1": {
+      "main": [
+        [
+          {
+            "node": "Input Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond URL Error": {
+      "main": [
+        []
+      ]
+    },
+    "SERP API": {
+      "main": [
+        [
+          {
+            "node": "Process SerpAPI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process SerpAPI": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Final Data Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "d33371ec-a1e8-4d47-821c-1ab1b69c15f5",
+  "meta": {
+    "instanceId": "4449303a74121eea16a562b13bf56d7bf84f057d9cd2ad64d6c2afc9ccfe82ac"
+  },
+  "id": "C8LsHZwKztqeZSWJ",
+  "tags": [
+    {
+      "createdAt": "2025-09-16T20:49:29.349Z",
+      "updatedAt": "2025-09-16T20:49:29.349Z",
+      "id": "K5SrQjIDDa9F5MoP",
+      "name": "performance-analytics"
+    }
+  ]
+}

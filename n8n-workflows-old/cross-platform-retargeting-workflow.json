@@ -1,0 +1,247 @@
+{
+  "name": "Cross-Platform Retargeting Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lead-temperature-change",
+        "options": {
+          "noResponseBody": false
+        }
+      },
+      "name": "Lead Temperature Change Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "id": "temperature-change-webhook"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 */6 * * *"
+            }
+          ]
+        }
+      },
+      "name": "Cold Lead Detection Scheduler",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        240,
+        500
+      ],
+      "id": "cold-lead-scheduler"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "manual-retargeting",
+        "options": {
+          "noResponseBody": false
+        }
+      },
+      "id": "b2c3d4e5-f6g7-8901-bcde-234567890123",
+      "name": "Manual Retargeting Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [260, 500]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lead-score-change",
+        "options": {
+          "noResponseBody": false
+        }
+      },
+      "id": "c3d4e5f6-g7h8-9012-cdef-345678901234",
+      "name": "Lead Score Change Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [260, 700]
+    },
+    {
+      "parameters": {
+        "url": "={{$parameter.crmApiUrl}}/leads/cold-leads",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "qs": {
+            "inactivityDays": "30",
+            "minLeadScore": "60",
+            "maxLeadScore": "100",
+            "excludeStages": "customer,unqualified",
+            "includeStages": "sales_qualified_lead,opportunity,marketing_qualified_lead",
+            "limit": "500"
+          }
+        }
+      },
+      "id": "d4e5f6g7-h8i9-0123-defg-456789012345",
+      "name": "Get Cold Leads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [480, 400],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "crm-api-key",
+          "name": "CRM API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json.leads.length}}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "e5f6g7h8-i9j0-1234-efgh-567890123456",
+      "name": "Has Cold Leads?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [700, 400]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "f6g7h8i9-j0k1-2345-fghi-678901234567",
+      "name": "Split Cold Leads",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [920, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{$parameter.enrichmentApiUrl}}/enrich/retargeting",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"leadId\": \"{{$json.id}}\",\n  \"email\": \"{{$json.email}}\",\n  \"company\": \"{{$json.company}}\",\n  \"jobTitle\": \"{{$json.job_title}}\",\n  \"industry\": \"{{$json.industry}}\",\n  \"companySize\": \"{{$json.company_size}}\",\n  \"lastActivity\": \"{{$json.last_activity_date}}\",\n  \"behaviorData\": {\n    \"pageViews\": {{$json.page_views}},\n    \"emailOpens\": {{$json.email_opens}},\n    \"contentDownloads\": {{$json.content_downloads}},\n    \"demoRequested\": {{$json.demo_requested}},\n    \"proposalViewed\": {{$json.proposal_viewed}},\n    \"pricingPageViews\": {{$json.pricing_page_views}}\n  },\n  \"socialProfiles\": {\n    \"linkedin\": \"{{$json.linkedin_url}}\",\n    \"facebook\": \"{{$json.facebook_profile}}\",\n    \"twitter\": \"{{$json.twitter_handle}}\"\n  },\n  \"sources\": [\"clearbit\", \"fullcontact\", \"apollo\"]\n}",
+        "options": {
+          "headers": {
+            "Authorization": "Bearer {{$parameter.enrichmentApiKey}}",
+            "Content-Type": "application/json"
+          }
+        }
+      },
+      "id": "g7h8i9j0-k1l2-3456-ghij-789012345678",
+      "name": "Enrich Lead Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1140, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.retargeting_eligibility}}",
+              "operation": "equal",
+              "value2": "eligible"
+            }
+          ],
+          "number": [
+            {
+              "value1": "={{$json.estimated_value}}",
+              "operation": "largerEqual",
+              "value2": 5000
+            }
+          ]
+        }
+      },
+      "id": "h8i9j0k1-l2m3-4567-hijk-890123456789",
+      "name": "Eligible for Retargeting?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1360, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json.estimated_value}}",
+              "operation": "largerEqual",
+              "value2": 50000
+            },
+            {
+              "value1": "={{$json.lead_score}}",
+              "operation": "largerEqual",
+              "value2": 80
+            }
+          ],
+          "string": [
+            {
+              "value1": "={{$json.company_size}}",
+              "operation": "equal",
+              "value2": "enterprise"
+            }
+          ]
+        }
+      },
+      "id": "i9j0k1l2-m3n4-5678-ijkl-901234567890",
+      "name": "High-Value Lead?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1580, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://graph.facebook.com/v18.0/{{$parameter.facebookAdAccountId}}/customaudiences",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"name\": \"High-Value Cold Leads - {{$now.toISOString().split('T')[0]}}\",\n  \"subtype\": \"CUSTOM\",\n  \"description\": \"Enterprise leads who went cold after high engagement\",\n  \"customer_file_source\": \"USER_PROVIDED_ONLY\",\n  \"access_token\": \"{{$parameter.facebookAccessToken}}\"\n}",
+        "options": {
+          "headers": {
+            "Content-Type": "application/json"
+          }
+        }
+      },
+      "id": "j0k1l2m3-n4o5-6789-jklm-012345678901",
+      "name": "Create Facebook Custom Audience",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1800, 200]
+    },
+    {
+      "parameters": {
+        "url": "https://graph.facebook.com/v18.0/{{$json.id}}/users",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"payload\": {\n    \"schema\": [\"EMAIL\", \"FN\", \"LN\", \"COMPANY\"],\n    \"data\": [[\n      \"{{$json.email.toLowerCase()}}\",\n      \"{{$json.first_name.toLowerCase()}}\",\n      \"{{$json.last_name.toLowerCase()}}\",\n      \"{{$json.company.toLowerCase()}}\"\n    ]]\n  },\n  \"access_token\": \"{{$parameter.facebookAccessToken}}\"\n}",
+        "options": {
+          "headers": {
+            "Content-Type": "application/json"
+          }
+        }
+      },
+      "id": "k1l2m3n4-o5p6-7890-klmn-123456789012",
+      "name": "Add to Facebook Audience",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [2020, 200]
+    },
+    {
+      "parameters": {
+        "url": "https://googleads.googleapis.com/v14/customers/{{$parameter.googleAdsCustomerId}}/userLists",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"operations\": [{\n    \"create\": {\n      \"name\": \"Cold Leads Remarketing - {{$now.toISOString().split('T')[0]}}\",\n      \"description\": \"High-value leads for remarketing campaigns\",\n      \"membershipLifeSpan\": 30,\n      \"membershipStatus\": \"OPEN\",\n      \"crmBasedUserList\": {\n        \"uploadKeyType\": \"CONTACT_INFO\",\n        \"dataSourceType\": \"FIRST_PARTY\"\n      }\n    }\n  }]\n}",
+        "options": {
+          "headers": {
+            "Authorization": "Bearer {{$parameter.googleAdsAccessToken}}",\n            "Content-Type": "application/json",\n            "developer-token": "{{$parameter.googleAdsDeveloperToken}}"\n          }\n        }\n      },\n      "id": "l2m3n4o5-p6q7-8901-lmno-234567890123",\n      "name": "Create Google Remarketing List",\n      "type": "n8n-nodes-base.httpRequest",\n      "typeVersion": 3,\n      "position": [1800, 400]\n    },\n    {\n      "parameters": {\n        "url": "https://googleads.googleapis.com/v14/customers/{{$parameter.googleAdsCustomerId}}/offlineUserDataJobs",\n        "sendBody": true,\n        "specifyBody": "json",\n        "jsonBody": "={\n  \"operations\": [{\n    \"create\": {\n      \"type\": \"CUSTOMER_MATCH_USER_LIST\",\n      \"customerMatchUserListMetadata\": {\n        \"userList\": \"{{$json.results[0].resourceName}}\"\n      }\n    }\n  }]\n}",\n        "options": {\n          "headers": {\n            "Authorization": "Bearer {{$parameter.googleAdsAccessToken}}",\n            "Content-Type": "application/json",\n            "developer-token": "{{$parameter.googleAdsDeveloperToken}}"\n          }\n        }\n      },\n      "id": "m3n4o5p6-q7r8-9012-mnop-345678901234",\n      "name": "Start Google Upload Job",\n      "type": "n8n-nodes-base.httpRequest",\n      "typeVersion": 3,\n      "position": [2020, 400]\n    },\n    {\n      "parameters": {\n        "url": "https://api.linkedin.com/v2/audienceTemplate",\n        "sendBody": true,\n        "specifyBody": "json",\n        "jsonBody": "={\n  \"name\": \"B2B Cold Leads Retargeting - {{$now.toISOString().split('T')[0]}}\",\n  \"description\": \"Professional retargeting for cold B2B leads\",\n  \"type\": \"USER_UPLOADED\",\n  \"uploadType\": \"EMAIL\",\n  \"account\": \"urn:li:sponsoredAccount:{{$parameter.linkedinAdAccountId}}\"\n}",\n        "options": {\n          "headers": {\n            "Authorization": "Bearer {{$parameter.linkedinAccessToken}}",\n            "Content-Type": "application/json",\n            "X-Restli-Protocol-Version": "2.0.0"\n          }\n        }\n      },\n      "id": "n4o5p6q7-r8s9-0123-nopq-456789012345",\n      "name": "Create LinkedIn Audience",\n      "type": "n8n-nodes-base.httpRequest",\n      "typeVersion": 3,\n      "position": [1800, 600]\n    },\n    {\n      "parameters": {\n        "url": "https://api.linkedin.com/v2/audienceTemplate/{{$json.id}}/members",\n        "sendBody": true,\n        "specifyBody": "json",\n        "jsonBody": "={\n  \"members\": [\n    {\n      \"email\": \"{{$json.email}}\",\n      \"firstName\": \"{{$json.first_name}}\",\n      \"lastName\": \"{{$json.last_name}}\",\n      \"companyName\": \"{{$json.company}}\"\n    }\n  ]\n}",\n        "options": {\n          "headers": {\n            "Authorization": "Bearer {{$parameter.linkedinAccessToken}}",\n            "Content-Type": "application/json",\n            "X-Restli-Protocol-Version": "2.0.0"\n          }\n        }\n      },\n      "id": "o5p6q7r8-s9t0-1234-opqr-567890123456",\n      "name": "Add to LinkedIn Audience",\n      "type": "n8n-nodes-base.httpRequest",\n      "typeVersion": 3,\n      "position": [2020, 600]\n    },\n    {\n      "parameters": {\n        "url": "={{$parameter.crmApiUrl}}/email-campaigns/retargeting",\n        "sendBody": true,\n        "specifyBody": "json",\n        "jsonBody": "={\n  \"campaignName\": \"Win-Back Campaign - {{$json.company}}\",\n  \"templateType\": \"winback_personalized\",\n  \"recipient\": {\n    \"email\": \"{{$json.email}}\",\n    \"firstName\": \"{{$json.first_name}}\",\n    \"lastName\": \"{{$json.last_name}}\",\n    \"company\": \"{{$json.company}}\",\n    \"jobTitle\": \"{{$json.job_title}}\"\n  },\n  \"personalization\": {\n    \"lastInteraction\": \"{{$json.last_touchpoint}}\",\n    \"daysSinceLastActivity\": {{$json.days_inactive}},\n    \"originalSource\": \"{{$json.original_source}}\",\n    \"estimatedValue\": {{$json.estimated_value}},\n    \"mainPainPoint\": \"{{$json.primary_pain_point}}\",\n    \"industry\": \"{{$json.industry}}\",\n    \"companySize\": \"{{$json.company_size}}\",\n    \"competitorMentioned\": \"{{$json.competitor_mentioned}}\",\n    \"objections\": {{$json.known_objections}}\n  },\n  \"schedule\": {\n    \"sendImmediately\": false,\n    \"delayHours\": 2,\n    \"timezone\": \"{{$json.timezone}}\",\n    \"workingHoursOnly\": true\n  },\n  \"tracking\": {\n    \"campaignId\": \"retargeting_{{$json.id}}\",\n    \"utmSource\": \"email_retargeting\",\n    \"utmMedium\": \"winback\",\n    \"utmCampaign\": \"cold_lead_reactivation\"\n  }\n}",\n        "options": {\n          "headers": {\n            "Authorization": "Bearer {{$parameter.crmApiKey}}",\n            "Content-Type": "application/json"\n          }\n        }\n      },\n      "id": "p6q7r8s9-t0u1-2345-pqrs-678901234567",\n      "name": "Create Email Retargeting",\n      "type": "n8n-nodes-base.httpRequest",\n      "typeVersion": 3,\n      "position": [1800, 800]\n    },\n    {\n      "parameters": {\n        "unit": "hours",\n        "amount": 4\n      },\n      "id": "q7r8s9t0-u1v2-3456-qrst-789012345678",\n      "name": "Wait for Audience Sync",\n      "type": "n8n-nodes-base.wait",\n      "typeVersion": 1,\n      "position": [2240, 400]\n    },\n    {\n      "parameters": {\n        "url": "https://graph.facebook.com/v18.0/act_{{$parameter.facebookAdAccountId}}/campaigns",\n        "sendBody": true,\n        "specifyBody": "json",\n        "jsonBody": "={\n  \"name\": \"Retargeting - {{$json.company}} - {{$json.industry}}\",\n  \"objective\": \"CONVERSIONS\",\n  \"status\": \"ACTIVE\",\n  \"buying_type\": \"STANDARD\",\n  \"daily_budget\": {{$json.estimated_value > 50000 ? 100 : 50}},\n  \"bid_strategy\": \"LOWEST_COST_WITH_BID_CAP\",\n  \"bid_amount\": {{$json.estimated_value > 50000 ? 15 : 8}},\n  \"access_token\": \"{{$parameter.facebookAccessToken}}\"\n}",\n        "options": {\n          "headers": {\n            "Content-Type": "application/json"\n          }\n        }\n      },\n      "id": "r8s9t0u1-v2w3-4567-rstu-890123456789",\n      "name": "Create Facebook Campaign",\n      "type": "n8n-nodes-base.httpRequest",\n      "typeVersion": 3,\n      "position": [2460, 200]\n    },\n    {\n      "parameters": {\n        "url": "https://graph.facebook.com/v18.0/{{$json.id}}/adsets",\n        "sendBody": true,\n        "specifyBody": "json",\n        "jsonBody": "={\n  \"name\": \"AdSet - {{$json.lead_company}} Retargeting\",\n  \"optimization_goal\": \"CONVERSIONS\",\n  \"billing_event\": \"IMPRESSIONS\",\n  \"daily_budget\": {{$json.estimated_value > 50000 ? 100 : 50}},\n  \"campaign_id\": \"{{$json.id}}\",\n  \"targeting\": {\n    \"custom_audiences\": [{\n      \"id\": \"{{$json.facebook_audience_id}}\"\n    }],\n    \"age_min\": 25,\n    \"age_max\": 65,\n    \"genders\": [1, 2],\n    \"interests\": [\n      {\"id\": \"6003139266461\", \"name\": \"Business and industry\"},\n      {\"id\": \"6004037010016\", \"name\": \"Technology\"}\n    ]\n  },\n  \"status\": \"ACTIVE\",\n  \"access_token\": \"{{$parameter.facebookAccessToken}}\"\n}",\n        "options": {\n          "headers": {\n            "Content-Type": "application/json"\n          }\n        }\n      },\n      "id": "s9t0u1v2-w3x4-5678-stuv-901234567890",\n      "name": "Create Facebook AdSet",\n      "type": "n8n-nodes-base.httpRequest",\n      "typeVersion": 3,\n      "position": [2680, 200]\n    },\n    {\n      "parameters": {\n        "url": "https://graph.facebook.com/v18.0/{{$json.id}}/ads",\n        "sendBody": true,\n        "specifyBody": "json",\n        "jsonBody": "={\n  \"name\": \"Retargeting Ad - {{$json.lead_first_name}} {{$json.lead_last_name}}\",\n  \"adset_id\": \"{{$json.id}}\",\n  \"creative\": {\n    \"object_story_spec\": {\n      \"page_id\": \"{{$parameter.facebookPageId}}\",\n      \"link_data\": {\n        \"message\": \"{{$json.lead_first_name}}, still thinking about {{$json.solution_name}}?\",\n        \"name\": \"See how {{$json.similar_company}} achieved 40% cost savings\",\n        \"description\": \"Get the complete case study and see if it applies to {{$json.lead_company}}\",\n        \"link\": \"{{$parameter.baseUrl}}/retargeting-offer?lead={{$json.lead_id}}&utm_source=facebook&utm_medium=retargeting\",\n        \"call_to_action\": {\n          \"type\": \"LEARN_MORE\"\n        },\n        \"picture\": \"{{$parameter.baseUrl}}/assets/retargeting-creative-{{$json.industry}}.jpg\"\n      }\n    }\n  },\n  \"status\": \"ACTIVE\",\n  \"access_token\": \"{{$parameter.facebookAccessToken}}\"\n}",\n        "options": {\n          "headers": {\n            "Content-Type": "application/json"\n          }\n        }\n      },\n      "id": "t0u1v2w3-x4y5-6789-tuvw-012345678901",\n      "name": "Create Facebook Ad",\n      "type": "n8n-nodes-base.httpRequest",\n      "typeVersion": 3,\n      "position": [2900, 200]\n    },\n    {\n      "parameters": {\n        "url": "https://googleads.googleapis.com/v14/customers/{{$parameter.googleAdsCustomerId}}/campaigns",\n        "sendBody": true,\n        "specifyBody": "json",\n        "jsonBody": "={\n  \"operations\": [{\n    \"create\": {\n      \"name\": \"Display Retargeting - {{$json.lead_company}}\",\n      \"advertisingChannelType\": \"DISPLAY\",\n      \"status\": \"ENABLED\",\n      \"campaignBudget\": {\n        \"amountMicros\": {{($json.estimated_value > 50000 ? 75 : 40) * 1000000}},\n        \"deliveryMethod\": \"STANDARD\"\n      },\n      \"biddingStrategy\": {\n        \"targetCpa\": {\n          \"targetCpaMicros\": {{($json.estimated_value > 50000 ? 25 : 15) * 1000000}}\n        }\n      },\n      \"networkSettings\": {\n        \"targetGoogleSearch\": false,\n        \"targetSearchNetwork\": false,\n        \"targetContentNetwork\": true,\n        \"targetPartnerSearchNetwork\": false\n      }\n    }\n  }]\n}",\n        "options": {\n          "headers": {\n            "Authorization": "Bearer {{$parameter.googleAdsAccessToken}}",\n            "Content-Type": "application/json",\n            "developer-token": "{{$parameter.googleAdsDeveloperToken}}"\n          }\n        }\n      },\n      "id": "u1v2w3x4-y5z6-7890-uvwx-123456789012",\n      "name": "Create Google Display Campaign",\n      "type": "n8n-nodes-base.httpRequest",\n      "typeVersion": 3,\n      "position": [2460, 400]\n    },\n    {\n      "parameters": {\n        "url": "https://api.linkedin.com/v2/adCampaignsV2",\n        "sendBody": true,\n        "specifyBody": "json",\n        "jsonBody": "={\n  \"name\": \"LinkedIn Retargeting - {{$json.lead_company}}\",\n  \"account\": \"urn:li:sponsoredAccount:{{$parameter.linkedinAdAccountId}}\",\n  \"type\": \"SPONSORED_CONTENT\",\n  \"costType\": \"CPM\",\n  \"dailyBudget\": {\n    \"amount\": {{$json.estimated_value > 50000 ? \"60.00\" : \"30.00\"}},\n    \"currencyCode\": \"USD\"\n  },\n  \"unitCost\": {\n    \"amount\": {{$json.estimated_value > 50000 ? \"18.00\" : \"12.00\"}},\n    \"currencyCode\": \"USD\"\n  },\n  \"campaignGroup\": \"urn:li:sponsoredCampaignGroup:{{$parameter.linkedinCampaignGroupId}}\",\n  \"status\": \"ACTIVE\",\n  \"targeting\": {\n    \"includedTargetingFacets\": {\n      \"audiences\": [\n        \"urn:li:audience:{{$json.linkedin_audience_id}}\"\n      ]\n    }\n  }\n}",\n        "options": {\n          "headers": {\n            "Authorization": "Bearer {{$parameter.linkedinAccessToken}}",\n            "Content-Type": "application/json",\n            "X-Restli-Protocol-Version": "2.0.0"\n          }\n        }\n      },\n      "id": "v2w3x4y5-z6a7-8901-vwxy-234567890123",\n      "name": "Create LinkedIn Campaign",\n      "type": "n8n-nodes-base.httpRequest",\n      "typeVersion": 3,\n      "position": [2460, 600]\n    },\n    {\n      "parameters": {\n        "sendTo": "={{$json.email}}",\n        "subject": "={{$json.first_name}}, we miss you at {{$json.company}} 👋",\n        "emailFormat": "html",\n        "html": "=<!DOCTYPE html>\n<html>\n<head>\n  <style>\n    .container { max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif; }\n    .header { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); padding: 30px; text-align: center; color: white; }\n    .content { padding: 30px; background: #ffffff; }\n    .missed-section { background: #fff3cd; border: 1px solid #ffeaa7; padding: 20px; border-radius: 8px; margin: 20px 0; }\n    .offer-box { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 25px; border-radius: 8px; text-align: center; margin: 25px 0; }\n    .cta-button { background: #ffffff; color: #667eea; padding: 15px 35px; text-decoration: none; border-radius: 25px; display: inline-block; margin: 20px 0; font-weight: bold; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }\n    .footer { background: #f8f9fa; padding: 20px; text-align: center; color: #6c757d; }\n    .progress-bar { background: #e9ecef; height: 8px; border-radius: 4px; margin: 15px 0; }\n    .progress-fill { background: #667eea; height: 8px; border-radius: 4px; width: {{$json.engagement_percentage}}%; }\n  </style>\n</head>\n<body>\n  <div class=\"container\">\n    <div class=\"header\">\n      <h1>{{$json.first_name}}, we noticed you're not here anymore!</h1>\n      <p>You were {{$json.engagement_percentage}}% of the way to your solution</p>\n      <div class=\"progress-bar\">\n        <div class=\"progress-fill\"></div>\n      </div>\n    </div>\n    <div class=\"content\">\n      <div class=\"missed-section\">\n        <h3>🤔 What happened?</h3>\n        <p>You were showing great interest in solving <strong>{{$json.primary_pain_point}}</strong> for {{$json.company}}.</p>\n        <p>Your last interaction: <strong>{{$json.last_touchpoint}}</strong> ({{$json.days_inactive}} days ago)</p>\n      </div>\n      \n      <h3>Since you've been away, here's what's new:</h3>\n      <ul>\n        <li>🚀 3 new {{$json.industry}} companies achieved 40%+ cost savings</li>\n        <li>📊 New ROI calculator specifically for {{$json.company_size}} companies</li>\n        <li>⚡ 50% faster implementation process (now just 2 weeks)</li>\n        <li>🎯 Custom {{$json.industry}} integration templates</li>\n      </ul>\n      \n      <div class=\"offer-box\">\n        <h2>🎁 Exclusive \"Welcome Back\" Offer</h2>\n        <p>Since you've already invested time learning about our solution:</p>\n        <ul style=\"text-align: left; margin: 20px 0;\">\n          <li>✅ Skip the standard demo - get a personalized {{$json.company}} workspace</li>\n          <li>✅ Free implementation consultation (usually $2,500)</li>\n          <li>✅ Priority onboarding if you decide to move forward</li>\n          <li>✅ Direct line to our {{$json.industry}} specialist</li>\n        </ul>\n        <p><strong>Available for 7 days only</strong></p>\n        \n        <a href=\"{{$parameter.baseUrl}}/welcome-back?lead={{$json.id}}&token={{$json.tracking_token}}&utm_source=email&utm_medium=winback&utm_campaign=cold_lead\" class=\"cta-button\">\n          Claim Your Exclusive Access\n        </a>\n      </div>\n      \n      <p>{{$json.first_name}}, I understand priorities change. If this isn't the right time for {{$json.company}}, no worries at all.</p>\n      \n      <p>But if you're still looking to solve {{$json.primary_pain_point}}, I'd hate for you to miss out on what we've built specifically for {{$json.industry}} companies like yours.</p>\n      \n      <p><strong>Quick question:</strong> What's the biggest thing preventing {{$json.company}} from moving forward right now?</p>\n      \n      <p>Simply hit reply and let me know. I read every response personally.</p>\n      \n      <p>Best regards,<br>\n      {{$json.assigned_sales_rep_name}}<br>\n      {{$json.assigned_sales_rep_title}}<br>\n      📞 {{$json.assigned_sales_rep_phone}}<br>\n      📧 {{$json.assigned_sales_rep_email}}</p>\n      \n      <hr style=\"margin: 30px 0; border: none; border-top: 1px solid #eee;\">\n      <p style=\"font-size: 12px; color: #666;\">P.S. If you're no longer the right person for this at {{$json.company}}, could you forward this to whoever handles {{$json.solution_category}}? I'd really appreciate it! 🙏</p>\n    </div>\n    <div class=\"footer\">\n      <p>© 2024 Your Company | <a href=\"{{$parameter.baseUrl}}/unsubscribe?token={{$json.unsubscribe_token}}\">Unsubscribe</a></p>\n      <p>You're receiving this because you showed interest in our {{$json.solution_category}} solution</p>\n    </div>\n  </div>\n</body>\n</html>",\n        "options": {\n          "ccEmail": "={{$json.assigned_sales_rep_email}}",\n          "appendAttribution": false\n        }\n      },\n      "id": "w3x4y5z6-a7b8-9012-wxyz-345678901234",\n      "name": "Send Winback Email",\n      "type": "n8n-nodes-base.emailSend",\n      "typeVersion": 2,\n      "position": [2680, 800],\n      "credentials": {\n        "smtp": {\n          "id": "email-smtp",\n          "name": "SMTP Email"\n        }\n      }\n    },\n    {\n      "parameters": {\n        "url": "={{$parameter.crmApiUrl}}/contacts/{{$json.lead_id}}/activities",\n        "sendBody": true,\n        "specifyBody": "json",\n        "jsonBody": "={\n  \"activity\": {\n    \"type\": \"retargeting_campaign_launched\",\n    \"campaign_name\": \"Cross-Platform Retargeting\",\n    \"platforms\": {{$json.active_platforms}},\n    \"budget_allocated\": {{$json.total_budget}},\n    \"estimated_reach\": {{$json.estimated_impressions}},\n    \"campaign_duration\": \"30 days\",\n    \"timestamp\": \"{{$now}}\"\n  },\n  \"scoreUpdate\": {\n    \"retargeting_engagement\": 5,\n    \"overall_engagement\": 2\n  },\n  \"nextActions\": [\n    \"Monitor campaign performance\",\n    \"Track reactivation metrics\",\n    \"Adjust budgets based on platform performance\",\n    \"Schedule follow-up for high-engagement leads\"\n  ]\n}",\n        "options": {\n          "headers": {\n            "Authorization": "Bearer {{$parameter.crmApiKey}}",\n            "Content-Type": "application/json"\n          }\n        }\n      },\n      "id": "x4y5z6a7-b8c9-0123-xyza-456789012345",\n      "name": "Update Lead Activity",\n      "type": "n8n-nodes-base.httpRequest",\n      "typeVersion": 3,\n      "position": [3120, 400]\n    },\n    {\n      "parameters": {\n        "authentication": "oAuth2",\n        "select": "channel",\n        "channelId": {\n          "__rl": true,\n          "value": "C1234567890",\n          "mode": "list"\n        },\n        "text": "=🎯 *Cross-Platform Retargeting Campaign Launched!*\n\n*Lead Details:*\n• *Name:* {{$json.lead_first_name}} {{$json.lead_last_name}}\n• *Company:* {{$json.lead_company}} ({{$json.company_size}})\n• *Title:* {{$json.job_title}}\n• *Estimated Value:* ${{$json.estimated_value.toLocaleString()}}\n• *Days Inactive:* {{$json.days_inactive}}\n• *Last Touchpoint:* {{$json.last_touchpoint}}\n\n*Campaign Strategy:*\n• *Facebook:* Custom audience + conversion campaign\n• *Google:* Display remarketing + search ads\n• *LinkedIn:* Professional retargeting for B2B\n• *Email:* Personalized winback sequence\n\n*Budget Allocation:*\n• *Total Daily Budget:* ${{$json.total_daily_budget}}\n• *Campaign Duration:* 30 days\n• *Expected Reach:* {{$json.estimated_reach.toLocaleString()}} impressions\n\n*Assigned Rep:* <@{{$json.assigned_sales_rep_slack_id}}>\n\n<{{$parameter.crmUrl}}/contacts/{{$json.lead_id}}|View Lead Profile> | <{{$parameter.campaignDashboardUrl}}|Monitor Campaigns>",\n        "otherOptions": {\n          "includeLinkToWorkflow": true\n        }\n      },\n      "id": "y5z6a7b8-c9d0-1234-yzab-567890123456",\n      "name": "Notify Marketing Team",\n      "type": "n8n-nodes-base.slack",\n      "typeVersion": 2,\n      "position": [3340, 400],\n      "credentials": {\n        "slackOAuth2Api": {\n          "id": "slack-oauth",\n          "name": "Slack OAuth"\n        }\n      }\n    },\n    {\n      "parameters": {\n        "url": "={{$parameter.crmApiUrl}}/sequences/standard-nurture",\n        "sendBody": true,\n        "specifyBody": "json",\n        "jsonBody": "={\n  \"contactId\": \"{{$json.lead_id}}\",\n  \"sequenceType\": \"standard_nurture\",\n  \"personalizations\": {\n    \"firstName\": \"{{$json.first_name}}\",\n    \"company\": \"{{$json.company}}\",\n    \"industry\": \"{{$json.industry}}\",\n    \"interests\": {{$json.interests}}\n  }\n}",\n        "options": {\n          "headers": {\n            "Authorization": "Bearer {{$parameter.crmApiKey}}",\n            "Content-Type": "application/json"\n          }\n        }\n      },\n      "id": "z6a7b8c9-d0e1-2345-zabc-678901234567",\n      "name": "Start Standard Sequence",\n      "type": "n8n-nodes-base.httpRequest",\n      "typeVersion": 3,\n      "position": [1800, 1000]\n    }\n  ],\n  "connections": {\n    "Cold Lead Detection Trigger": {\n      "main": [\n        [\n          {\n            "node": "Get Cold Leads",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Manual Retargeting Trigger": {\n      "main": [\n        [\n          {\n            "node": "Get Cold Leads",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Lead Score Change Trigger": {\n      "main": [\n        [\n          {\n            "node": "Get Cold Leads",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Get Cold Leads": {\n      "main": [\n        [\n          {\n            "node": "Has Cold Leads?",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Has Cold Leads?": {\n      "main": [\n        [\n          {\n            "node": "Split Cold Leads",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Split Cold Leads": {\n      "main": [\n        [\n          {\n            "node": "Enrich Lead Data",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Enrich Lead Data": {\n      "main": [\n        [\n          {\n            "node": "Eligible for Retargeting?",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Eligible for Retargeting?": {\n      "main": [\n        [\n          {\n            "node": "High-Value Lead?",\n            "type": "main",\n            "index": 0\n          }\n        ],\n        [\n          {\n            "node": "Start Standard Sequence",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "High-Value Lead?": {\n      "main": [\n        [\n          {\n            "node": "Create Facebook Custom Audience",\n            "type": "main",\n            "index": 0\n          },\n          {\n            "node": "Create Google Remarketing List",\n            "type": "main",\n            "index": 0\n          },\n          {\n            "node": "Create LinkedIn Audience",\n            "type": "main",\n            "index": 0\n          },\n          {\n            "node": "Create Email Retargeting",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Create Facebook Custom Audience": {\n      "main": [\n        [\n          {\n            "node": "Add to Facebook Audience",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Create Google Remarketing List": {\n      "main": [\n        [\n          {\n            "node": "Start Google Upload Job",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Create LinkedIn Audience": {\n      "main": [\n        [\n          {\n            "node": "Add to LinkedIn Audience",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Add to Facebook Audience": {\n      "main": [\n        [\n          {\n            "node": "Wait for Audience Sync",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Start Google Upload Job": {\n      "main": [\n        [\n          {\n            "node": "Wait for Audience Sync",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Add to LinkedIn Audience": {\n      "main": [\n        [\n          {\n            "node": "Wait for Audience Sync",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Create Email Retargeting": {\n      "main": [\n        [\n          {\n            "node": "Send Winback Email",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Wait for Audience Sync": {\n      "main": [\n        [\n          {\n            "node": "Create Facebook Campaign",\n            "type": "main",\n            "index": 0\n          },\n          {\n            "node": "Create Google Display Campaign",\n            "type": "main",\n            "index": 0\n          },\n          {\n            "node": "Create LinkedIn Campaign",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Create Facebook Campaign": {\n      "main": [\n        [\n          {\n            "node": "Create Facebook AdSet",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Create Facebook AdSet": {\n      "main": [\n        [\n          {\n            "node": "Create Facebook Ad",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Create Facebook Ad": {\n      "main": [\n        [\n          {\n            "node": "Update Lead Activity",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Send Winback Email": {\n      "main": [\n        [\n          {\n            "node": "Update Lead Activity",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Update Lead Activity": {\n      "main": [\n        [\n          {\n            "node": "Notify Marketing Team",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    }\n  },\n  "pinData": {},\n  "settings": {\n    "errorWorkflow": {\n      "active": true\n    },\n    "saveManualExecutions": true,\n    "callerPolicy": "workflowsFromSameOwner",\n    "executionOrder": "v1"\n  },\n  "staticData": {},\n  "tags": [\n    {\n      "createdAt": "2024-01-21T10:00:00.000Z",\n      "updatedAt": "2024-01-21T10:00:00.000Z",\n      "id": "retargeting-automation",\n      "name": "Retargeting Automation"\n    },\n    {\n      "createdAt": "2024-01-21T10:00:00.000Z",\n      "updatedAt": "2024-01-21T10:00:00.000Z",\n      "id": "cross-platform",\n      "name": "Cross-Platform"\n    }\n  ],\n  "triggerCount": 3,\n  "updatedAt": "2024-01-21T10:30:00.000Z",\n  "versionId": "98765432-9876-9876-9876-987654321098"\n}

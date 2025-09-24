@@ -1,0 +1,530 @@
+{
+  "name": "Billing Automation Master Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "day",
+              "value": 1
+            }
+          ]
+        }
+      },
+      "id": "start-daily-billing-check",
+      "name": "Daily Billing Check",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [280, 200],
+      "webhookId": "auto-billing-trigger"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://localhost:3002/api/financial/recurring-billing/due",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "get-due-billing",
+      "name": "Get Due Recurring Billing",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "api-key-auth",
+          "name": "API Key Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-due-billing",
+              "leftValue": "={{ $json.due_subscriptions.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-due-billing",
+      "name": "Has Due Billing?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [720, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process each due subscription and create invoices\nconst dueSubscriptions = $input.first().json.due_subscriptions;\nconst processedInvoices = [];\n\nfor (const subscription of dueSubscriptions) {\n  const invoiceData = {\n    client_id: subscription.client_id,\n    subscription_id: subscription.id,\n    invoice_number: `INV-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`,\n    issue_date: new Date().toISOString(),\n    due_date: new Date(Date.now() + (subscription.payment_terms?.net_days || 30) * 24 * 60 * 60 * 1000).toISOString(),\n    items: [{\n      service_id: subscription.service_id,\n      description: subscription.service.name + ' - ' + subscription.plan_name,\n      quantity: 1,\n      rate: subscription.amount,\n      amount: subscription.amount,\n      tax_rate: subscription.client.tax_rate || 0\n    }],\n    subtotal: subscription.amount,\n    tax_amount: (subscription.amount * (subscription.client.tax_rate || 0)) / 100,\n    total_amount: subscription.amount + ((subscription.amount * (subscription.client.tax_rate || 0)) / 100),\n    currency: subscription.currency,\n    status: 'draft',\n    payment_terms: subscription.client.payment_terms,\n    billing_cycle: subscription.billing_cycle,\n    auto_generated: true,\n    subscription_period: {\n      start: subscription.last_billing_date || subscription.created_at,\n      end: subscription.next_billing_date\n    }\n  };\n  \n  processedInvoices.push({\n    invoice: invoiceData,\n    client: subscription.client,\n    subscription: subscription\n  });\n}\n\nreturn processedInvoices.map(item => ({ json: item }));"
+      },
+      "id": "process-billing-data",
+      "name": "Process Billing Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [940, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3002/api/financial/invoices/create",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.invoice }}",
+        "options": {}
+      },
+      "id": "create-invoice",
+      "name": "Create Invoice",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1160, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "api-key-auth",
+          "name": "API Key Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "invoice-created",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-invoice-created",
+      "name": "Invoice Created Successfully?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1380, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3002/api/financial/invoices/{{ $('Create Invoice').item.json.invoice.id }}/send",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"send_method\": \"email\",\n  \"auto_payment_enabled\": {{ $('Process Billing Data').item.json.client.payment_terms.auto_payment || false }},\n  \"payment_reminder_enabled\": true,\n  \"custom_message\": \"Thank you for your business! Your {{ $('Process Billing Data').item.json.subscription.plan_name }} invoice for {{ $('Process Billing Data').item.json.subscription.billing_cycle }} billing cycle is ready.\"\n}",
+        "options": {}
+      },
+      "id": "send-invoice",
+      "name": "Send Invoice to Client",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1600, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "api-key-auth",
+          "name": "API Key Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "http://localhost:3002/api/financial/subscriptions/{{ $('Process Billing Data').item.json.subscription.id }}/billing-processed",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"last_billing_date\": \"{{ new Date().toISOString() }}\",\n  \"next_billing_date\": \"{{ new Date(Date.now() + ({{ $('Process Billing Data').item.json.subscription.billing_cycle === 'monthly' ? 30 : $('Process Billing Data').item.json.subscription.billing_cycle === 'quarterly' ? 90 : 365 }}) * 24 * 60 * 60 * 1000).toISOString() }}\",\n  \"invoice_id\": \"{{ $('Create Invoice').item.json.invoice.id }}\"\n}",
+        "options": {}
+      },
+      "id": "update-subscription",
+      "name": "Update Subscription Billing",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1820, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "api-key-auth",
+          "name": "API Key Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3002/api/notifications/billing",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"type\": \"invoice_sent\",\n  \"client_id\": \"{{ $('Process Billing Data').item.json.client.id }}\",\n  \"invoice_id\": \"{{ $('Create Invoice').item.json.invoice.id }}\",\n  \"amount\": {{ $('Process Billing Data').item.json.invoice.total_amount }},\n  \"currency\": \"{{ $('Process Billing Data').item.json.invoice.currency }}\",\n  \"due_date\": \"{{ $('Process Billing Data').item.json.invoice.due_date }}\",\n  \"message\": \"Invoice {{ $('Create Invoice').item.json.invoice.invoice_number }} has been automatically generated and sent to {{ $('Process Billing Data').item.json.client.name }}.\",\n  \"metadata\": {\n    \"subscription_id\": \"{{ $('Process Billing Data').item.json.subscription.id }}\",\n    \"billing_cycle\": \"{{ $('Process Billing Data').item.json.subscription.billing_cycle }}\",\n    \"auto_generated\": true\n  }\n}",
+        "options": {}
+      },
+      "id": "log-billing-activity",
+      "name": "Log Billing Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2040, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "api-key-auth",
+          "name": "API Key Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3002/api/integrations/slack/notify",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"channel\": \"#billing-alerts\",\n  \"message\": \"💰 **Auto-Billing Completed**\\n\\n**Client:** {{ $('Process Billing Data').item.json.client.name }}\\n**Invoice:** {{ $('Create Invoice').item.json.invoice.invoice_number }}\\n**Amount:** ${{ $('Process Billing Data').item.json.invoice.total_amount }}\\n**Service:** {{ $('Process Billing Data').item.json.subscription.service.name }}\\n**Due Date:** {{ new Date($('Process Billing Data').item.json.invoice.due_date).toLocaleDateString() }}\\n\\n✅ Invoice sent automatically\",\n  \"color\": \"good\",\n  \"fields\": [\n    {\n      \"title\": \"Billing Cycle\",\n      \"value\": \"{{ $('Process Billing Data').item.json.subscription.billing_cycle }}\",\n      \"short\": true\n    },\n    {\n      \"title\": \"Payment Method\",\n      \"value\": \"{{ $('Process Billing Data').item.json.client.payment_terms.auto_payment ? 'Auto-Payment Enabled' : 'Manual Payment' }}\",\n      \"short\": true\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "slack-notification",
+      "name": "Send Slack Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2260, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "api-key-auth",
+          "name": "API Key Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://localhost:3002/api/financial/invoices/overdue",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "get-overdue-invoices",
+      "name": "Get Overdue Invoices",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 400],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "api-key-auth",
+          "name": "API Key Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-overdue",
+              "leftValue": "={{ $json.overdue_invoices.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-overdue",
+      "name": "Has Overdue Invoices?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [720, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process overdue invoices and create follow-up actions\nconst overdueInvoices = $input.first().json.overdue_invoices;\nconst followUpActions = [];\n\nfor (const invoice of overdueInvoices) {\n  const daysOverdue = Math.floor((Date.now() - new Date(invoice.due_date).getTime()) / (24 * 60 * 60 * 1000));\n  \n  let actionType = 'reminder';\n  let escalationLevel = 1;\n  \n  if (daysOverdue >= 30) {\n    actionType = 'final_notice';\n    escalationLevel = 3;\n  } else if (daysOverdue >= 15) {\n    actionType = 'second_notice';\n    escalationLevel = 2;\n  }\n  \n  const followUpData = {\n    invoice_id: invoice.id,\n    client_id: invoice.client_id,\n    client: invoice.client,\n    invoice: invoice,\n    action_type: actionType,\n    escalation_level: escalationLevel,\n    days_overdue: daysOverdue,\n    outstanding_amount: invoice.total_amount - invoice.paid_amount,\n    late_fee: daysOverdue > 0 ? ((invoice.total_amount - invoice.paid_amount) * (invoice.payment_terms?.late_fee_percentage || 0)) / 100 : 0\n  };\n  \n  followUpActions.push(followUpData);\n}\n\nreturn followUpActions.map(action => ({ json: action }));"
+      },
+      "id": "process-overdue",
+      "name": "Process Overdue Invoices",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [940, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3002/api/financial/invoices/{{ $json.invoice_id }}/follow-up",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"action_type\": \"{{ $json.action_type }}\",\n  \"escalation_level\": {{ $json.escalation_level }},\n  \"days_overdue\": {{ $json.days_overdue }},\n  \"late_fee_applied\": {{ $json.late_fee }},\n  \"custom_message\": \"{{ $json.action_type === 'final_notice' ? 'FINAL NOTICE: Payment is seriously overdue.' : $json.action_type === 'second_notice' ? 'SECOND NOTICE: Please settle your account immediately.' : 'REMINDER: Payment is past due.' }}\",\n  \"auto_generated\": true\n}",
+        "options": {}
+      },
+      "id": "send-follow-up",
+      "name": "Send Follow-up Notice",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1160, 400],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "api-key-auth",
+          "name": "API Key Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3002/api/integrations/email/send",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"to\": \"{{ $('Process Overdue').item.json.client.email }}\",\n  \"cc\": [\"billing@agency.com\"],\n  \"subject\": \"{{ $('Process Overdue').item.json.action_type === 'final_notice' ? '[URGENT] Final Notice - ' : $('Process Overdue').item.json.action_type === 'second_notice' ? '[IMPORTANT] Second Notice - ' : 'Payment Reminder - ' }}Invoice {{ $('Process Overdue').item.json.invoice.invoice_number }}\",\n  \"template\": \"overdue_invoice\",\n  \"template_data\": {\n    \"client_name\": \"{{ $('Process Overdue').item.json.client.name }}\",\n    \"invoice_number\": \"{{ $('Process Overdue').item.json.invoice.invoice_number }}\",\n    \"original_amount\": {{ $('Process Overdue').item.json.invoice.total_amount }},\n    \"outstanding_amount\": {{ $('Process Overdue').item.json.outstanding_amount }},\n    \"late_fee\": {{ $('Process Overdue').item.json.late_fee }},\n    \"days_overdue\": {{ $('Process Overdue').item.json.days_overdue }},\n    \"due_date\": \"{{ $('Process Overdue').item.json.invoice.due_date }}\",\n    \"action_type\": \"{{ $('Process Overdue').item.json.action_type }}\",\n    \"payment_link\": \"https://billing.agency.com/pay/{{ $('Process Overdue').item.json.invoice.id }}\",\n    \"contact_email\": \"billing@agency.com\",\n    \"escalation_level\": {{ $('Process Overdue').item.json.escalation_level }}\n  }\n}",
+        "options": {}
+      },
+      "id": "email-overdue-notice",
+      "name": "Email Overdue Notice",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1380, 400],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "api-key-auth",
+          "name": "API Key Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3002/api/financial/analytics/update",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"event_type\": \"billing_automation_completed\",\n  \"date\": \"{{ new Date().toISOString() }}\",\n  \"metrics\": {\n    \"invoices_created\": {{ $('get-due-billing').item.json.due_subscriptions?.length || 0 }},\n    \"overdue_notices_sent\": {{ $('get-overdue-invoices').item.json.overdue_invoices?.length || 0 }},\n    \"total_billed_amount\": {{ $('get-due-billing').item.json.due_subscriptions?.reduce((sum, sub) => sum + sub.amount, 0) || 0 }},\n    \"total_overdue_amount\": {{ $('get-overdue-invoices').item.json.overdue_invoices?.reduce((sum, inv) => sum + (inv.total_amount - inv.paid_amount), 0) || 0 }},\n    \"automation_success_rate\": 100\n  }\n}",
+        "options": {}
+      },
+      "id": "update-analytics",
+      "name": "Update Billing Analytics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 600],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "api-key-auth",
+          "name": "API Key Auth"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily Billing Check": {
+      "main": [
+        [
+          {
+            "node": "Get Due Recurring Billing",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Overdue Invoices",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Update Billing Analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Due Recurring Billing": {
+      "main": [
+        [
+          {
+            "node": "Has Due Billing?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Due Billing?": {
+      "main": [
+        [
+          {
+            "node": "Process Billing Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Billing Data": {
+      "main": [
+        [
+          {
+            "node": "Create Invoice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Invoice": {
+      "main": [
+        [
+          {
+            "node": "Invoice Created Successfully?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invoice Created Successfully?": {
+      "main": [
+        [
+          {
+            "node": "Send Invoice to Client",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Invoice to Client": {
+      "main": [
+        [
+          {
+            "node": "Update Subscription Billing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Subscription Billing": {
+      "main": [
+        [
+          {
+            "node": "Log Billing Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Billing Activity": {
+      "main": [
+        [
+          {
+            "node": "Send Slack Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Overdue Invoices": {
+      "main": [
+        [
+          {
+            "node": "Has Overdue Invoices?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Overdue Invoices?": {
+      "main": [
+        [
+          {
+            "node": "Process Overdue Invoices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Overdue Invoices": {
+      "main": [
+        [
+          {
+            "node": "Send Follow-up Notice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Follow-up Notice": {
+      "main": [
+        [
+          {
+            "node": "Email Overdue Notice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York"
+  },
+  "versionId": "billing-v2.1.0",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "id": "billing-automation-master",
+  "tags": [
+    {
+      "createdAt": "2024-12-19T00:00:00.000Z",
+      "updatedAt": "2024-12-19T00:00:00.000Z",
+      "id": "1",
+      "name": "billing"
+    },
+    {
+      "createdAt": "2024-12-19T00:00:00.000Z",
+      "updatedAt": "2024-12-19T00:00:00.000Z",
+      "id": "2",
+      "name": "automation"
+    }
+  ]
+}

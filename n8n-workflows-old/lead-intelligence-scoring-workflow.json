@@ -1,0 +1,449 @@
+{
+  "name": "Advanced Lead Intelligence & Scoring Engine",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lead-activity",
+        "options": {}
+      },
+      "id": "webhook-activity-trigger",
+      "name": "Website Activity Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "lead-activity-webhook"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "new-lead",
+        "options": {}
+      },
+      "id": "webhook-new-lead",
+      "name": "New Lead Created Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 600],
+      "webhookId": "new-lead-webhook"
+    },
+    {
+      "parameters": {
+        "intervalSize": 5,
+        "unit": "minutes"
+      },
+      "id": "schedule-enrichment",
+      "name": "Schedule Enrichment Check",
+      "type": "n8n-nodes-base.interval",
+      "typeVersion": 1,
+      "position": [240, 900]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.type}}",
+              "operation": "equal",
+              "value2": "page_view"
+            }
+          ]
+        }
+      },
+      "id": "check-activity-type",
+      "name": "Check Activity Type",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.metadata.page}}",
+              "operation": "contains",
+              "value2": "pricing"
+            }
+          ]
+        }
+      },
+      "id": "check-high-intent",
+      "name": "Check High Intent Pages",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{$parameter.baseUrl}}/api/behavioral/activity",
+        "options": {
+          "headers": {
+            "Content-Type": "application/json"
+          }
+        },
+        "jsonParameters": true,
+        "bodyParametersJson": "={{ $json }}"
+      },
+      "id": "send-to-backend",
+      "name": "Send Activity to Backend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json.data.newScore}}",
+              "operation": "largerEqual",
+              "value2": 80
+            }
+          ]
+        }
+      },
+      "id": "check-score-threshold",
+      "name": "Check Score Threshold",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "url": "https://api.hunter.io/v2/email-verifier",
+        "options": {
+          "qs": {
+            "email": "={{$json.email}}",
+            "api_key": "={{$parameter.hunterApiKey}}"
+          }
+        }
+      },
+      "id": "hunter-email-verification",
+      "name": "Hunter.io Email Verification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [460, 600]
+    },
+    {
+      "parameters": {
+        "url": "https://person.clearbit.com/v2/people/find",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "qs": {
+            "email": "={{$json.email}}"
+          },
+          "headers": {
+            "Authorization": "Bearer ={{$parameter.clearbitApiKey}}"
+          }
+        }
+      },
+      "id": "clearbit-enrichment",
+      "name": "Clearbit Person Enrichment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [680, 600]
+    },
+    {
+      "parameters": {
+        "url": "https://company.clearbit.com/v2/companies/find",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "qs": {
+            "domain": "={{$json.company_domain || $json.email.split('@')[1]}}"
+          },
+          "headers": {
+            "Authorization": "Bearer ={{$parameter.clearbitApiKey}}"
+          }
+        }
+      },
+      "id": "clearbit-company",
+      "name": "Clearbit Company Enrichment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [900, 600]
+    },
+    {
+      "parameters": {
+        "url": "https://api.proxycrawl.com/",
+        "options": {
+          "qs": {
+            "token": "={{$parameter.proxycrawlToken}}",
+            "url": "https://www.linkedin.com/search/results/people/?keywords={{encodeURIComponent($json.firstName + ' ' + $json.lastName + ' ' + $json.company)}}"
+          }
+        }
+      },
+      "id": "linkedin-search",
+      "name": "LinkedIn Profile Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1120, 600]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Advanced Lead Scoring Algorithm\nconst activity = items[0].json;\nconst enrichmentData = {\n  hunter: items[1]?.json || {},\n  clearbit_person: items[2]?.json || {},\n  clearbit_company: items[3]?.json || {},\n  linkedin: items[4]?.json || {}\n};\n\n// Calculate enhanced lead score\nlet baseScore = activity.leadScore || 0;\nlet scoringFactors = [];\n\n// Email verification score\nif (enrichmentData.hunter.result === 'deliverable') {\n  baseScore += 10;\n  scoringFactors.push({\n    factor: 'Email Verified',\n    impact: 10,\n    reason: 'Email deliverability confirmed'\n  });\n}\n\n// Job title scoring\nif (enrichmentData.clearbit_person.employment?.title) {\n  const title = enrichmentData.clearbit_person.employment.title.toLowerCase();\n  const executiveTitles = ['ceo', 'cto', 'cfo', 'vp', 'director', 'head', 'chief'];\n  const managerTitles = ['manager', 'lead', 'senior'];\n  \n  if (executiveTitles.some(t => title.includes(t))) {\n    baseScore += 20;\n    scoringFactors.push({\n      factor: 'Executive Role',\n      impact: 20,\n      reason: 'Decision maker identified'\n    });\n  } else if (managerTitles.some(t => title.includes(t))) {\n    baseScore += 10;\n    scoringFactors.push({\n      factor: 'Management Role',\n      impact: 10,\n      reason: 'Management level position'\n    });\n  }\n}\n\n// Company size scoring\nif (enrichmentData.clearbit_company.metrics?.employees) {\n  const employeeCount = enrichmentData.clearbit_company.metrics.employees;\n  if (employeeCount > 1000) {\n    baseScore += 15;\n    scoringFactors.push({\n      factor: 'Enterprise Company',\n      impact: 15,\n      reason: `Large company (${employeeCount} employees)`\n    });\n  } else if (employeeCount > 100) {\n    baseScore += 10;\n    scoringFactors.push({\n      factor: 'Mid-size Company',\n      impact: 10,\n      reason: `Mid-size company (${employeeCount} employees)`\n    });\n  } else if (employeeCount > 10) {\n    baseScore += 5;\n    scoringFactors.push({\n      factor: 'Small Company',\n      impact: 5,\n      reason: `Small company (${employeeCount} employees)`\n    });\n  }\n}\n\n// Industry scoring\nif (enrichmentData.clearbit_company.category?.industry) {\n  const highValueIndustries = ['technology', 'software', 'saas', 'finance', 'healthcare'];\n  const industry = enrichmentData.clearbit_company.category.industry.toLowerCase();\n  \n  if (highValueIndustries.some(i => industry.includes(i))) {\n    baseScore += 8;\n    scoringFactors.push({\n      factor: 'High-Value Industry',\n      impact: 8,\n      reason: `Target industry: ${enrichmentData.clearbit_company.category.industry}`\n    });\n  }\n}\n\n// LinkedIn presence scoring\nif (enrichmentData.linkedin.profile_url) {\n  baseScore += 5;\n  scoringFactors.push({\n    factor: 'LinkedIn Presence',\n    impact: 5,\n    reason: 'Professional LinkedIn profile found'\n  });\n}\n\n// Technology usage (if available)\nif (enrichmentData.clearbit_company.tech) {\n  const competitorTech = ['hubspot', 'salesforce', 'marketo'];\n  const complementaryTech = ['slack', 'zoom', 'microsoft'];\n  \n  const usedTech = enrichmentData.clearbit_company.tech.map(t => t.toLowerCase());\n  \n  if (competitorTech.some(tech => usedTech.includes(tech))) {\n    baseScore += 12;\n    scoringFactors.push({\n      factor: 'Competitor Tool Usage',\n      impact: 12,\n      reason: 'Uses competing solutions - potential switcher'\n    });\n  }\n  \n  if (complementaryTech.some(tech => usedTech.includes(tech))) {\n    baseScore += 6;\n    scoringFactors.push({\n      factor: 'Complementary Tech Stack',\n      impact: 6,\n      reason: 'Uses complementary tools - good fit'\n    });\n  }\n}\n\n// Ensure score stays within bounds\nbaseScore = Math.min(100, Math.max(0, baseScore));\n\n// Determine lead quality grade\nlet leadGrade;\nif (baseScore >= 90) leadGrade = 'A+';\nelse if (baseScore >= 80) leadGrade = 'A';\nelse if (baseScore >= 70) leadGrade = 'B';\nelse if (baseScore >= 60) leadGrade = 'C';\nelse if (baseScore >= 50) leadGrade = 'D';\nelse leadGrade = 'F';\n\n// Calculate conversion probability\nconst conversionProbability = Math.min(95, (baseScore * 0.8) + (scoringFactors.length * 2));\n\n// Estimate deal value based on company size and industry\nlet estimatedValue = 5000; // Base value\nif (enrichmentData.clearbit_company.metrics?.employees > 1000) estimatedValue *= 4;\nelse if (enrichmentData.clearbit_company.metrics?.employees > 100) estimatedValue *= 2.5;\nelse if (enrichmentData.clearbit_company.metrics?.employees > 10) estimatedValue *= 1.5;\n\nconst result = {\n  ...activity,\n  enrichedData: enrichmentData,\n  enhancedScore: {\n    score: baseScore,\n    grade: leadGrade,\n    conversionProbability: Math.round(conversionProbability),\n    estimatedValue: Math.round(estimatedValue),\n    scoringFactors: scoringFactors,\n    lastUpdated: new Date().toISOString()\n  },\n  enrichmentSources: {\n    hunter: enrichmentData.hunter.result ? 'success' : 'failed',\n    clearbit_person: enrichmentData.clearbit_person.id ? 'success' : 'failed',\n    clearbit_company: enrichmentData.clearbit_company.id ? 'success' : 'failed',\n    linkedin: enrichmentData.linkedin.profile_url ? 'success' : 'failed'\n  },\n  triggers: []\n};\n\n// Add triggered actions based on score\nif (baseScore >= 90) {\n  result.triggers.push({\n    name: 'Hot Lead Alert',\n    action: 'immediate_sales_notification',\n    priority: 'high'\n  });\n}\n\nif (baseScore >= 80) {\n  result.triggers.push({\n    name: 'High Score Follow-up',\n    action: 'personalized_email_sequence',\n    priority: 'medium'\n  });\n}\n\nif (activity.type === 'pricing_view' && baseScore >= 60) {\n  result.triggers.push({\n    name: 'Pricing Interest',\n    action: 'send_pricing_info',\n    priority: 'medium'\n  });\n}\n\nreturn [result];"
+      },
+      "id": "calculate-enhanced-score",
+      "name": "Calculate Enhanced Lead Score",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1340, 600]
+    },
+    {
+      "parameters": {
+        "url": "={{$parameter.baseUrl}}/api/crm/contacts",
+        "options": {
+          "headers": {
+            "Authorization": "Bearer ={{$parameter.apiToken}}",
+            "Content-Type": "application/json"
+          }
+        },
+        "jsonParameters": true,
+        "bodyParametersJson": "={\n  \"contactId\": \"{{$json.contactId}}\",\n  \"enrichmentData\": {{JSON.stringify($json.enrichedData)}},\n  \"enhancedScore\": {{JSON.stringify($json.enhancedScore)}},\n  \"enrichmentSources\": {{JSON.stringify($json.enrichmentSources)}}\n}"
+      },
+      "id": "update-crm-contact",
+      "name": "Update CRM Contact",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1560, 600]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.enhancedScore.grade}}",
+              "operation": "equal",
+              "value2": "A+"
+            }
+          ]
+        },
+        "combineOperation": "any"
+      },
+      "id": "check-hot-lead",
+      "name": "Check Hot Lead (A+)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1780, 500]
+    },
+    {
+      "parameters": {
+        "to": "sales@yourcompany.com",
+        "subject": "🔥 HOT LEAD ALERT: {{$json.firstName}} {{$json.lastName}} (Score: {{$json.enhancedScore.score}})",
+        "text": "A high-value lead has been identified!\n\n📊 Lead Details:\n• Name: {{$json.firstName}} {{$json.lastName}}\n• Email: {{$json.email}}\n• Company: {{$json.company}}\n• Score: {{$json.enhancedScore.score}}/100 ({{$json.enhancedScore.grade}})\n• Conversion Probability: {{$json.enhancedScore.conversionProbability}}%\n• Estimated Value: ${{$json.enhancedScore.estimatedValue}}\n\n🎯 Recent Activity:\n{{$json.recentActivity}}\n\n💡 Scoring Factors:\n{{$json.enhancedScore.scoringFactors.map(f => `• ${f.factor}: +${f.impact} (${f.reason})`).join('\\n')}}\n\n🚀 Recommended Actions:\n• Immediate personal outreach\n• Schedule demo/call within 24 hours\n• Prepare personalized proposal\n\n👤 Enriched Data Available:\n• Email Verified: {{$json.enrichmentSources.hunter === 'success' ? '✅' : '❌'}}\n• Professional Info: {{$json.enrichmentSources.clearbit_person === 'success' ? '✅' : '❌'}}\n• Company Data: {{$json.enrichmentSources.clearbit_company === 'success' ? '✅' : '❌'}}\n• LinkedIn Profile: {{$json.enrichmentSources.linkedin === 'success' ? '✅' : '❌'}}\n\nView full profile: {{$parameter.baseUrl}}/crm/contacts/{{$json.contactId}}"
+      },
+      "id": "send-hot-lead-alert",
+      "name": "Send Hot Lead Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [2000, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json.enhancedScore.score}}",
+              "operation": "largerEqual",
+              "value2": 70
+            }
+          ]
+        }
+      },
+      "id": "check-demo-ready",
+      "name": "Check Demo Ready (70+)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1780, 700]
+    },
+    {
+      "parameters": {
+        "to": "{{$json.email}}",
+        "subject": "{{$json.firstName}}, ready to see how {{$parameter.companyName}} can transform your {{$json.enrichedData.clearbit_company.category?.industry || 'business'}}?",
+        "html": "<!DOCTYPE html>\n<html>\n<head>\n    <style>\n        .email-container { max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif; }\n        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; text-align: center; }\n        .content { padding: 30px 20px; background: #f8f9fa; }\n        .cta-button { background: #28a745; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 20px 0; }\n        .stats { background: white; padding: 20px; margin: 20px 0; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }\n        .footer { padding: 20px; text-align: center; color: #666; }\n    </style>\n</head>\n<body>\n    <div class=\"email-container\">\n        <div class=\"header\">\n            <h1>Hi {{$json.firstName}},</h1>\n            <p>I noticed your interest in {{$parameter.companyName}} solutions</p>\n        </div>\n        \n        <div class=\"content\">\n            <p>Based on your recent activity and profile, it looks like {{$parameter.companyName}} could be a perfect fit for {{$json.company}}.</p>\n            \n            <div class=\"stats\">\n                <h3>Why this might interest you:</h3>\n                <ul>\n                    {{#if $json.enrichedData.clearbit_company.metrics.employees}}\n                    <li>Solutions designed for companies with {{$json.enrichedData.clearbit_company.metrics.employees}} employees</li>\n                    {{/if}}\n                    {{#if $json.enrichedData.clearbit_company.category.industry}}\n                    <li>Proven success in {{$json.enrichedData.clearbit_company.category.industry}} industry</li>\n                    {{/if}}\n                    <li>ROI typically seen within 90 days</li>\n                    <li>{{$json.enhancedScore.conversionProbability}}% of similar prospects become customers</li>\n                </ul>\n            </div>\n            \n            <p>I'd love to show you a personalized demo focusing on:</p>\n            <ul>\n                <li>How companies like {{$json.company}} reduce costs by 40%</li>\n                <li>Streamlined processes that save 10+ hours per week</li>\n                <li>Integration with your existing {{$json.enrichedData.clearbit_company.tech ? $json.enrichedData.clearbit_company.tech.slice(0,3).join(', ') : 'technology stack'}}</li>\n            </ul>\n            \n            <center>\n                <a href=\"{{$parameter.calendlyUrl}}?name={{$json.firstName}}&email={{$json.email}}&company={{$json.company}}\" class=\"cta-button\">\n                    Schedule 15-Minute Demo\n                </a>\n            </center>\n            \n            <p>Or reply to this email with your preferred time, and I'll send a calendar invite.</p>\n            \n            <p>Best regards,<br>\n            {{$parameter.salesRepName}}<br>\n            {{$parameter.salesRepTitle}}<br>\n            {{$parameter.companyName}}</p>\n        </div>\n        \n        <div class=\"footer\">\n            <p>This email was sent because you showed interest in {{$parameter.companyName}}. <a href=\"#\">Unsubscribe</a></p>\n        </div>\n    </div>\n</body>\n</html>"
+      },
+      "id": "send-demo-email",
+      "name": "Send Personalized Demo Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [2000, 700]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.type}}",
+              "operation": "equal",
+              "value2": "pricing_view"
+            }
+          ],
+          "number": [
+            {
+              "value1": "={{$json.enhancedScore.score}}",
+              "operation": "largerEqual",
+              "value2": 60
+            }
+          ]
+        }
+      },
+      "id": "check-pricing-interest",
+      "name": "Check Pricing Interest",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1780, 900]
+    },
+    {
+      "parameters": {
+        "to": "{{$json.email}}",
+        "subject": "{{$json.firstName}}, here's the pricing info you were looking for",
+        "html": "<!DOCTYPE html>\n<html>\n<head>\n    <style>\n        .email-container { max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif; }\n        .header { background: #2c3e50; color: white; padding: 20px; text-align: center; }\n        .content { padding: 20px; }\n        .pricing-table { border-collapse: collapse; width: 100%; margin: 20px 0; }\n        .pricing-table th, .pricing-table td { border: 1px solid #ddd; padding: 12px; text-align: left; }\n        .pricing-table th { background-color: #f2f2f2; }\n        .highlight { background-color: #fff3cd; padding: 15px; border-radius: 5px; margin: 20px 0; }\n        .cta-button { background: #007bff; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; display: inline-block; }\n    </style>\n</head>\n<body>\n    <div class=\"email-container\">\n        <div class=\"header\">\n            <h1>Pricing Information for {{$json.company}}</h1>\n        </div>\n        \n        <div class=\"content\">\n            <p>Hi {{$json.firstName}},</p>\n            \n            <p>I saw you were checking out our pricing page. Here's a customized breakdown based on {{$json.company}}'s profile:</p>\n            \n            <div class=\"highlight\">\n                <strong>Recommended Plan for {{$json.company}}:</strong> \n                {{#if $json.enrichedData.clearbit_company.metrics.employees > 100}}\n                Enterprise Plan - Perfect for companies with {{$json.enrichedData.clearbit_company.metrics.employees}} employees\n                {{else}}\n                Professional Plan - Ideal for growing companies like {{$json.company}}\n                {{/if}}\n            </div>\n            \n            <table class=\"pricing-table\">\n                <tr>\n                    <th>Plan</th>\n                    <th>Monthly Price</th>\n                    <th>Best For</th>\n                </tr>\n                <tr>\n                    <td>Starter</td>\n                    <td>$99/month</td>\n                    <td>Small teams (1-10 users)</td>\n                </tr>\n                <tr>\n                    <td>Professional</td>\n                    <td>$299/month</td>\n                    <td>Growing companies (11-50 users)</td>\n                </tr>\n                <tr>\n                    <td>Enterprise</td>\n                    <td>Custom pricing</td>\n                    <td>Large organizations (50+ users)</td>\n                </tr>\n            </table>\n            \n            <div class=\"highlight\">\n                <strong>Special Offer:</strong> Based on your profile, you qualify for:\n                <ul>\n                    <li>30-day free trial (no credit card required)</li>\n                    <li>Free setup and onboarding ($500 value)</li>\n                    <li>20% discount on first year</li>\n                </ul>\n            </div>\n            \n            <p>ROI Calculator: Companies like {{$json.company}} typically save ${{Math.round($json.enhancedScore.estimatedValue * 2.5)}} annually.</p>\n            \n            <center>\n                <a href=\"{{$parameter.trialUrl}}?email={{$json.email}}&company={{$json.company}}\" class=\"cta-button\">\n                    Start Free Trial\n                </a>\n            </center>\n            \n            <p>Questions about pricing? Reply to this email or <a href=\"{{$parameter.calendlyUrl}}\">schedule a quick call</a>.</p>\n            \n            <p>Best,<br>\n            {{$parameter.salesRepName}}</p>\n        </div>\n    </div>\n</body>\n</html>"
+      },
+      "id": "send-pricing-email",
+      "name": "Send Pricing Information",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [2000, 900]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json.enhancedScore.score}}",
+              "operation": "smaller",
+              "value2": 50
+            }
+          ]
+        }
+      },
+      "id": "check-nurture-needed",
+      "name": "Check If Nurturing Needed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1780, 1100]
+    },
+    {
+      "parameters": {
+        "url": "={{$parameter.baseUrl}}/api/automation/nurture-sequence",
+        "options": {
+          "headers": {
+            "Authorization": "Bearer ={{$parameter.apiToken}}",
+            "Content-Type": "application/json"
+          }
+        },
+        "jsonParameters": true,
+        "bodyParametersJson": "={\n  \"contactId\": \"{{$json.contactId}}\",\n  \"email\": \"{{$json.email}}\",\n  \"sequenceType\": \"low_engagement\",\n  \"personalization\": {\n    \"firstName\": \"{{$json.firstName}}\",\n    \"company\": \"{{$json.company}}\",\n    \"industry\": \"{{$json.enrichedData.clearbit_company.category?.industry}}\",\n    \"companySize\": \"{{$json.enrichedData.clearbit_company.metrics?.employees}}\"\n  }\n}"
+      },
+      "id": "start-nurture-sequence",
+      "name": "Start Nurture Sequence",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [2000, 1100]
+    },
+    {
+      "parameters": {
+        "url": "={{$parameter.baseUrl}}/api/crm/contacts/pending-enrichment",
+        "options": {
+          "headers": {
+            "Authorization": "Bearer ={{$parameter.apiToken}}"
+          }
+        }
+      },
+      "id": "get-pending-enrichment",
+      "name": "Get Contacts Needing Enrichment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [460, 900]
+    },
+    {
+      "parameters": {},
+      "id": "split-contacts",
+      "name": "Split Into Individual Contacts",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [680, 900],
+      "parameters": {
+        "batchSize": 1
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// Anti-spam and fraud detection\nconst activity = items[0].json;\n\n// Check for bot-like behavior\nconst botIndicators = [\n  activity.metadata?.userAgent?.toLowerCase().includes('bot'),\n  activity.metadata?.userAgent?.toLowerCase().includes('crawler'),\n  activity.metadata?.userAgent?.toLowerCase().includes('spider'),\n  !activity.metadata?.userAgent, // Missing user agent\n  activity.metadata?.duration < 5 && activity.type === 'page_view', // Too short page view\n  activity.timestamp && (Date.now() - new Date(activity.timestamp).getTime()) > 24 * 60 * 60 * 1000 // Activity too old\n];\n\nconst botScore = botIndicators.filter(Boolean).length;\n\nif (botScore >= 2) {\n  return [{\n    ...activity,\n    fraudDetection: {\n      isBot: true,\n      score: botScore,\n      reason: 'Multiple bot indicators detected',\n      action: 'discard'\n    }\n  }];\n}\n\n// Check for rapid-fire activities (potential bot)\nif (activity.metadata?.rapidFire && activity.metadata.rapidFire > 10) {\n  return [{\n    ...activity,\n    fraudDetection: {\n      isRapidFire: true,\n      reason: 'Too many activities in short time',\n      action: 'throttle'\n    }\n  }];\n}\n\n// Valid activity\nreturn [{\n  ...activity,\n  fraudDetection: {\n    isValid: true,\n    score: 0,\n    action: 'process'\n  }\n}];"
+      },
+      "id": "fraud-detection",
+      "name": "Fraud & Bot Detection",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [460, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.fraudDetection.action}}",
+              "operation": "equal",
+              "value2": "discard"
+            }
+          ]
+        }
+      },
+      "id": "check-fraud-result",
+      "name": "Check Fraud Detection Result",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 100]
+    },
+    {
+      "parameters": {
+        "entries": {
+          "entry": [
+            {
+              "key": "message",
+              "value": "Activity discarded due to fraud detection"
+            },
+            {
+              "key": "reason",
+              "value": "={{$json.fraudDetection.reason}}"
+            },
+            {
+              "key": "timestamp",
+              "value": "={{new Date().toISOString()}}"
+            }
+          ]
+        }
+      },
+      "id": "log-discarded-activity",
+      "name": "Log Discarded Activity",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [900, 100]
+    },
+    {
+      "parameters": {
+        "url": "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK",
+        "options": {
+          "headers": {
+            "Content-Type": "application/json"
+          }
+        },
+        "jsonParameters": true,
+        "bodyParametersJson": "={\n  \"text\": \"🚨 Hot Lead Alert!\",\n  \"attachments\": [\n    {\n      \"color\": \"danger\",\n      \"fields\": [\n        {\n          \"title\": \"Lead Name\",\n          \"value\": \"{{$json.firstName}} {{$json.lastName}}\",\n          \"short\": true\n        },\n        {\n          \"title\": \"Company\",\n          \"value\": \"{{$json.company}}\",\n          \"short\": true\n        },\n        {\n          \"title\": \"Score\",\n          \"value\": \"{{$json.enhancedScore.score}}/100 ({{$json.enhancedScore.grade}})\",\n          \"short\": true\n        },\n        {\n          \"title\": \"Conversion Probability\",\n          \"value\": \"{{$json.enhancedScore.conversionProbability}}%\",\n          \"short\": true\n        },\n        {\n          \"title\": \"Estimated Value\",\n          \"value\": \"${{$json.enhancedScore.estimatedValue}}\",\n          \"short\": true\n        },\n        {\n          \"title\": \"Recent Activity\",\n          \"value\": \"{{$json.action}}\",\n          \"short\": false\n        }\n      ],\n      \"actions\": [\n        {\n          \"type\": \"button\",\n          \"text\": \"View in CRM\",\n          \"url\": \"{{$parameter.baseUrl}}/crm/contacts/{{$json.contactId}}\"\n        },\n        {\n          \"type\": \"button\",\n          \"text\": \"Schedule Call\",\n          \"url\": \"{{$parameter.calendlyUrl}}?prefill_email={{$json.email}}\"\n        }\n      ]\n    }\n  ]\n}"
+      },
+      "id": "slack-notification",
+      "name": "Send Slack Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [2220, 400]
+    },
+    {
+      "parameters": {
+        "url": "https://api.facebook.com/v18.0/{{$parameter.facebookAdAccountId}}/customaudiences",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "headers": {
+            "Authorization": "Bearer ={{$parameter.facebookAccessToken}}",\n            \"Content-Type\": \"application/json\"\n          }\n        },\n        \"jsonParameters\": true,\n        \"bodyParametersJson\": \"={\\n  \\\"name\\\": \\\"High Intent Leads - {{new Date().toISOString().split('T')[0]}}\\\",\\n  \\\"subtype\\\": \\\"CUSTOM\\\",\\n  \\\"customer_file_source\\\": \\\"USER_PROVIDED_ONLY\\\",\\n  \\\"data\\\": [\\n    {\\n      \\\"email\\\": \\\"{{$json.email}}\\\",\\n      \\\"fn\\\": \\\"{{$json.firstName}}\\\",\\n      \\\"ln\\\": \\\"{{$json.lastName}}\\\",\\n      \\\"ct\\\": \\\"{{$json.enrichedData.clearbit_person.location?.city}}\\\",\\n      \\\"st\\\": \\\"{{$json.enrichedData.clearbit_person.location?.state}}\\\",\\n      \\\"country\\\": \\\"{{$json.enrichedData.clearbit_person.location?.country}}\\\"\\n    }\\n  ]\\n}\"\n      },\n      \"id\": \"facebook-retargeting\",\n      \"name\": \"Add to Facebook Retargeting\",\n      \"type\": \"n8n-nodes-base.httpRequest\",\n      \"typeVersion\": 3,\n      \"position\": [2220, 600]\n    },\n    {\n      \"parameters\": {\n        \"url\": \"https://googleads.googleapis.com/v14/customers/{{$parameter.googleAdsCustomerId}}/userLists\",\n        \"authentication\": \"googleOAuth2Api\",\n        \"options\": {\n          \"headers\": {\n            \"Content-Type\": \"application/json\",\n            \"developer-token\": \"={{$parameter.googleAdsDeveloperToken}}\"\n          }\n        },\n        \"jsonParameters\": true,\n        \"bodyParametersJson\": \"={\\n  \\\"operations\\\": [\\n    {\\n      \\\"create\\\": {\\n        \\\"name\\\": \\\"High Intent Leads - {{new Date().toISOString().split('T')[0]}}\\\",\\n        \\\"membershipLifeSpan\\\": 30,\\n        \\\"membershipStatus\\\": \\\"OPEN\\\",\\n        \\\"crmBasedUserList\\\": {\\n          \\\"uploadKeyType\\\": \\\"CONTACT_INFO\\\",\\n          \\\"dataSourceType\\\": \\\"FIRST_PARTY\\\"\\n        }\\n      }\\n    }\\n  ]\\n}\"\n      },\n      \"id\": \"google-ads-audience\",\n      \"name\": \"Create Google Ads Audience\",\n      \"type\": \"n8n-nodes-base.httpRequest\",\n      \"typeVersion\": 3,\n      \"position\": [2220, 800]\n    }\n  ],\n  \"connections\": {\n    \"Website Activity Webhook\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Fraud & Bot Detection\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"New Lead Created Webhook\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Hunter.io Email Verification\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Schedule Enrichment Check\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Get Contacts Needing Enrichment\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Fraud & Bot Detection\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Check Fraud Detection Result\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Check Fraud Detection Result\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Log Discarded Activity\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ],\n        [\n          {\n            \"node\": \"Check Activity Type\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Check Activity Type\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Check High Intent\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ],\n        [\n          {\n            \"node\": \"Send Activity to Backend\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Send Activity to Backend\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Check Score Threshold\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Hunter.io Email Verification\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Clearbit Person Enrichment\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Clearbit Person Enrichment\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Clearbit Company Enrichment\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Clearbit Company Enrichment\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"LinkedIn Profile Search\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"LinkedIn Profile Search\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Calculate Enhanced Lead Score\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Calculate Enhanced Lead Score\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Update CRM Contact\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Update CRM Contact\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Check Hot Lead (A+)\",\n            \"type\": \"main\",\n            \"index\": 0\n          },\n          {\n            \"node\": \"Check Demo Ready (70+)\",\n            \"type\": \"main\",\n            \"index\": 0\n          },\n          {\n            \"node\": \"Check Pricing Interest\",\n            \"type\": \"main\",\n            \"index\": 0\n          },\n          {\n            \"node\": \"Check If Nurturing Needed\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Check Hot Lead (A+)\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Send Hot Lead Alert\",\n            \"type\": \"main\",\n            \"index\": 0\n          },\n          {\n            \"node\": \"Send Slack Notification\",\n            \"type\": \"main\",\n            \"index\": 0\n          },\n          {\n            \"node\": \"Add to Facebook Retargeting\",\n            \"type\": \"main\",\n            \"index\": 0\n          },\n          {\n            \"node\": \"Create Google Ads Audience\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Check Demo Ready (70+)\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Send Personalized Demo Email\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Check Pricing Interest\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Send Pricing Information\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Check If Nurturing Needed\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Start Nurture Sequence\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Get Contacts Needing Enrichment\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Split Into Individual Contacts\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Split Into Individual Contacts\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Hunter.io Email Verification\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    }\n  },\n  \"parameters\": {\n    \"baseUrl\": {\n      \"displayName\": \"Base URL\",\n      \"description\": \"Your application's base URL\",\n      \"type\": \"string\",\n      \"required\": true,\n      \"default\": \"https://your-app.com\"\n    },\n    \"apiToken\": {\n      \"displayName\": \"API Token\",\n      \"description\": \"Your application's API token\",\n      \"type\": \"string\",\n      \"required\": true,\n      \"typeOptions\": {\n        \"password\": true\n      }\n    },\n    \"hunterApiKey\": {\n      \"displayName\": \"Hunter.io API Key\",\n      \"description\": \"Hunter.io API key for email verification\",\n      \"type\": \"string\",\n      \"required\": true,\n      \"typeOptions\": {\n        \"password\": true\n      }\n    },\n    \"clearbitApiKey\": {\n      \"displayName\": \"Clearbit API Key\",\n      \"description\": \"Clearbit API key for enrichment\",\n      \"type\": \"string\",\n      \"required\": true,\n      \"typeOptions\": {\n        \"password\": true\n      }\n    },\n    \"proxycrawlToken\": {\n      \"displayName\": \"ProxyCrawl Token\",\n      \"description\": \"ProxyCrawl token for LinkedIn scraping\",\n      \"type\": \"string\",\n      \"required\": true,\n      \"typeOptions\": {\n        \"password\": true\n      }\n    },\n    \"companyName\": {\n      \"displayName\": \"Company Name\",\n      \"description\": \"Your company name\",\n      \"type\": \"string\",\n      \"required\": true,\n      \"default\": \"Your Company\"\n    },\n    \"salesRepName\": {\n      \"displayName\": \"Sales Rep Name\",\n      \"description\": \"Primary sales representative name\",\n      \"type\": \"string\",\n      \"required\": true,\n      \"default\": \"John Smith\"\n    },\n    \"salesRepTitle\": {\n      \"displayName\": \"Sales Rep Title\",\n      \"description\": \"Sales representative title\",\n      \"type\": \"string\",\n      \"required\": true,\n      \"default\": \"Senior Sales Executive\"\n    },\n    \"calendlyUrl\": {\n      \"displayName\": \"Calendly URL\",\n      \"description\": \"Calendly scheduling URL\",\n      \"type\": \"string\",\n      \"required\": true,\n      \"default\": \"https://calendly.com/your-company/demo\"\n    },\n    \"trialUrl\": {\n      \"displayName\": \"Trial Signup URL\",\n      \"description\": \"Free trial signup URL\",\n      \"type\": \"string\",\n      \"required\": true,\n      \"default\": \"https://your-app.com/trial\"\n    },\n    \"facebookAdAccountId\": {\n      \"displayName\": \"Facebook Ad Account ID\",\n      \"description\": \"Facebook Ads account ID for retargeting\",\n      \"type\": \"string\",\n      \"required\": false\n    },\n    \"facebookAccessToken\": {\n      \"displayName\": \"Facebook Access Token\",\n      \"description\": \"Facebook API access token\",\n      \"type\": \"string\",\n      \"required\": false,\n      \"typeOptions\": {\n        \"password\": true\n      }\n    },\n    \"googleAdsCustomerId\": {\n      \"displayName\": \"Google Ads Customer ID\",\n      \"description\": \"Google Ads customer ID for audience creation\",\n      \"type\": \"string\",\n      \"required\": false\n    },\n    \"googleAdsDeveloperToken\": {\n      \"displayName\": \"Google Ads Developer Token\",\n      \"description\": \"Google Ads API developer token\",\n      \"type\": \"string\",\n      \"required\": false,\n      \"typeOptions\": {\n        \"password\": true\n      }\n    }\n  },\n  \"meta\": {\n    \"templateCredsSetupCompleted\": true\n  },\n  \"id\": \"advanced-lead-intelligence-scoring\",\n  \"tags\": [\"lead-scoring\", \"enrichment\", \"automation\", \"crm\", \"marketing\"]\n}

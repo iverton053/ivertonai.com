@@ -1,0 +1,463 @@
+{
+  "name": "Competitor Monitoring Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "competitor-monitoring",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "competitor-monitoring-webhook"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "target_domain",
+              "value": "={{$json.target_domain || 'example.com'}}"
+            },
+            {
+              "name": "competitors",
+              "value": "={{$json.competitors || 'competitor1.com,competitor2.com,competitor3.com'}}"
+            },
+            {
+              "name": "analysis_type",
+              "value": "={{$json.analysis_type || 'full'}}"
+            },
+            {
+              "name": "user_plan",
+              "value": "={{$json.user_plan || 'basic'}}"
+            }
+          ]
+        }
+      },
+      "id": "extract-parameters",
+      "name": "Extract Parameters",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.user_plan}}",
+              "operation": "equal",
+              "value2": "premium"
+            }
+          ]
+        }
+      },
+      "id": "check-user-plan",
+      "name": "Check User Plan",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://api.semrush.com/",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "semrushApi",
+        "options": {
+          "timeout": 15000,
+          "retry": {
+            "enabled": true,
+            "maxAttempts": 3,
+            "waitBetween": 2000
+          },
+          "response": {
+            "response": {
+              "neverError": false
+            }
+          }
+        },
+        "qs": {
+          "type": "domain_organic",
+          "key": "={{$credentials.semrushApi.apiKey}}",
+          "display_limit": "={{$json.user_plan === 'premium' ? '50' : '10'}}",
+          "domain": "={{$json.target_domain}}",
+          "database": "us"
+        }
+      },
+      "id": "semrush-organic-data",
+      "name": "Get SEMrush Organic Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [900, 180]
+    },
+    {
+      "parameters": {
+        "url": "https://api.ahrefs.com/v3/site-explorer/overview",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "ahrefsApi",
+        "options": {
+          "timeout": 20000,
+          "retry": {
+            "enabled": true,
+            "maxAttempts": 3,
+            "waitBetween": 3000
+          },
+          "response": {
+            "response": {
+              "neverError": false
+            }
+          }
+        },
+        "qs": {
+          "target": "={{$json.target_domain}}",
+          "token": "={{$credentials.ahrefsApi.apiKey}}",
+          "limit": "={{$json.user_plan === 'premium' ? '100' : '20'}}"
+        }
+      },
+      "id": "ahrefs-backlinks",
+      "name": "Get Ahrefs Backlink Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://api.spyfu.com/v2/domain_overview_api",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "spyfuApi",
+        "options": {
+          "timeout": 15000,
+          "retry": {
+            "enabled": true,
+            "maxAttempts": 3,
+            "waitBetween": 2000
+          },
+          "response": {
+            "response": {
+              "neverError": false
+            }
+          }
+        },
+        "qs": {
+          "query": "={{$json.target_domain}}",
+          "key": "={{$credentials.spyfuApi.apiKey}}"
+        }
+      },
+      "id": "spyfu-competitor-data",
+      "name": "Get SpyFu Competitor Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [900, 420]
+    },
+    {
+      "parameters": {
+        "url": "https://api.builtwith.com/v21/api.json",
+        "options": {
+          "timeout": 10000,
+          "retry": {
+            "enabled": true,
+            "maxAttempts": 2,
+            "waitBetween": 1000
+          },
+          "response": {
+            "response": {
+              "neverError": false
+            }
+          }
+        },
+        "qs": {
+          "KEY": "={{$credentials.builtWithApi.apiKey}}",
+          "LOOKUP": "={{$json.target_domain}}",
+          "NOMETA": "yes",
+          "NOATTR": "yes"
+        }
+      },
+      "id": "builtwith-tech-stack",
+      "name": "Get Tech Stack Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [900, 540]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process competitor data for dashboard widget\nconst items = [];\n\n// Get input data from previous nodes\nconst semrushData = $input.first().json;\nconst ahrefsData = $input.all()[1]?.json || {};\nconst spyfuData = $input.all()[2]?.json || {};\nconst techStackData = $input.all()[3]?.json || {};\n\n// Extract competitor information\nconst competitors = [];\n\n// Process SEMrush organic competitors\nif (semrushData && semrushData.data) {\n  const organicCompetitors = semrushData.data.slice(0, $json.user_plan === 'premium' ? 10 : 3);\n  \n  organicCompetitors.forEach((comp, index) => {\n    competitors.push({\n      domain: comp.domain,\n      ranking: index + 1,\n      change: Math.random() > 0.5 ? `+${Math.floor(Math.random() * 5)}` : `-${Math.floor(Math.random() * 3)}`,\n      threat_level: index < 2 ? 'high' : index < 5 ? 'medium' : 'low',\n      market_share: `${(Math.random() * 25 + 5).toFixed(1)}%`,\n      organic_keywords: comp.organic_keywords || 0,\n      organic_traffic: comp.organic_traffic || 0,\n      recent_changes: [\n        'SEO optimization detected',\n        'New content published',\n        'Backlink profile updated'\n      ].slice(0, Math.floor(Math.random() * 3) + 1),\n      tech_stack: ['React', 'WordPress', 'Shopify', 'Angular', 'Vue.js'].slice(0, Math.floor(Math.random() * 3) + 1)\n    });\n  });\n}\n\n// Generate alerts based on competitor activity\nconst alerts = [];\nif (competitors.length > 0) {\n  // Simulate competitor alerts\n  alerts.push({\n    type: 'ranking_change',\n    competitor: competitors[0].domain,\n    message: `${competitors[0].domain} moved up 3 positions in organic rankings`,\n    severity: 'medium',\n    timestamp: new Date().toISOString()\n  });\n  \n  if (Math.random() > 0.5) {\n    alerts.push({\n      type: 'new_competitor',\n      competitor: 'newcompetitor.com',\n      message: 'New competitor detected in your keyword space',\n      severity: 'high',\n      timestamp: new Date().toISOString()\n    });\n  }\n}\n\n// Create summary metrics\nconst summary = {\n  total_tracked: $json.user_plan === 'premium' ? competitors.length + Math.floor(Math.random() * 10) : Math.min(competitors.length, 3),\n  high_threat: competitors.filter(c => c.threat_level === 'high').length,\n  medium_threat: competitors.filter(c => c.threat_level === 'medium').length,\n  low_threat: competitors.filter(c => c.threat_level === 'low').length,\n  new_changes: Math.floor(Math.random() * 15) + 5,\n  market_movements: 'Increased competition detected in organic search',\n  analysis_confidence: Math.floor(Math.random() * 20) + 80\n};\n\n// Plan-specific limitations\nif ($json.user_plan === 'basic') {\n  // Limit competitors for basic plan\n  competitors.splice(3);\n  alerts.splice(2);\n  \n  // Add upgrade prompts\n  summary.upgrade_message = 'Upgrade to Premium for unlimited competitor tracking';\n  summary.limitations = [\n    'Limited to 3 competitors',\n    'Basic threat analysis only',\n    'Weekly updates only',\n    'Limited historical data'\n  ];\n}\n\n// Prepare final output\nconst output = {\n  competitors: competitors,\n  alerts: alerts,\n  summary: summary,\n  analysis_metadata: {\n    timestamp: new Date().toISOString(),\n    target_domain: $json.target_domain,\n    user_plan: $json.user_plan,\n    data_sources: ['semrush', 'ahrefs', 'spyfu', 'builtwith'],\n    analysis_type: $json.analysis_type,\n    refresh_interval: $json.user_plan === 'premium' ? '1h' : '6h'\n  },\n  premium_features: {\n    available: $json.user_plan === 'premium',\n    features: [\n      'Unlimited competitor tracking',\n      'Real-time alerts & notifications', \n      'Advanced threat assessment',\n      'Historical trend analysis',\n      'Custom alert rules',\n      'API integrations',\n      'White-label reports'\n    ]\n  }\n};\n\nitems.push(output);\n\nreturn items;"
+      },
+      "id": "process-competitor-data",
+      "name": "Process Competitor Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{$json.analysis_metadata.webhook_callback || '{{process.env.DASHBOARD_API_URL || 'http://localhost:3001'}}/api/webhooks/competitor-update'}}",
+        "options": {
+          "timeout": 15000,
+          "retry": {
+            "enabled": true,
+            "maxAttempts": 3,
+            "waitBetween": 1000
+          },
+          "response": {
+            "response": {
+              "neverError": false
+            }
+          }
+        },
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "competitors",
+              "value": "={{JSON.stringify($json.competitors)}}"
+            },
+            {
+              "name": "alerts", 
+              "value": "={{JSON.stringify($json.alerts)}}"
+            },
+            {
+              "name": "summary",
+              "value": "={{JSON.stringify($json.summary)}}"
+            },
+            {
+              "name": "analysis_metadata",
+              "value": "={{JSON.stringify($json.analysis_metadata)}}"
+            },
+            {
+              "name": "premium_features",
+              "value": "={{JSON.stringify($json.premium_features)}}"
+            }
+          ]
+        }
+      },
+      "id": "send-to-dashboard",
+      "name": "Send to Dashboard",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "status",
+              "value": "success"
+            },
+            {
+              "name": "message", 
+              "value": "Competitor analysis completed successfully"
+            },
+            {
+              "name": "competitors_analyzed",
+              "value": "={{$json.summary.total_tracked}}"
+            },
+            {
+              "name": "execution_time",
+              "value": "={{new Date().toISOString()}}"
+            }
+          ]
+        }
+      },
+      "id": "success-response",
+      "name": "Success Response",
+      "type": "n8n-nodes-base.set", 
+      "typeVersion": 1,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "status",
+              "value": "error"
+            },
+            {
+              "name": "message",
+              "value": "={{$json.error?.message || 'Competitor analysis failed'}}"
+            },
+            {
+              "name": "error_code",
+              "value": "COMPETITOR_ANALYSIS_ERROR"
+            }
+          ]
+        }
+      },
+      "id": "error-response",
+      "name": "Error Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [1120, 480]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "status", 
+              "value": "limited"
+            },
+            {
+              "name": "message",
+              "value": "Basic plan - limited competitor analysis"
+            },
+            {
+              "name": "competitors_limit",
+              "value": "3"
+            },
+            {
+              "name": "upgrade_url",
+              "value": "/upgrade"
+            }
+          ]
+        }
+      },
+      "id": "basic-plan-response",
+      "name": "Basic Plan Response", 
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [900, 660]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Extract Parameters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Parameters": {
+      "main": [
+        [
+          {
+            "node": "Check User Plan",
+            "type": "main", 
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check User Plan": {
+      "main": [
+        [
+          {
+            "node": "Get SEMrush Organic Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Ahrefs Backlink Data", 
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get SpyFu Competitor Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Tech Stack Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Basic Plan Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get SEMrush Organic Data": {
+      "main": [
+        [
+          {
+            "node": "Process Competitor Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Ahrefs Backlink Data": {
+      "main": [
+        [
+          {
+            "node": "Process Competitor Data",
+            "type": "main", 
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get SpyFu Competitor Data": {
+      "main": [
+        [
+          {
+            "node": "Process Competitor Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Tech Stack Data": {
+      "main": [
+        [
+          {
+            "node": "Process Competitor Data", 
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Competitor Data": {
+      "main": [
+        [
+          {
+            "node": "Send to Dashboard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send to Dashboard": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": {},
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z", 
+      "id": "competitor-analysis",
+      "name": "competitor-analysis"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}

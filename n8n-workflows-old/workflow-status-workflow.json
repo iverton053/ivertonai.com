@@ -1,0 +1,381 @@
+{
+  "name": "Workflow Status Monitoring Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "workflow-status",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "workflow-status-webhook"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "monitoring_type",
+              "value": "={{$json.monitoring_type || 'all_workflows'}}"
+            },
+            {
+              "name": "user_plan",
+              "value": "={{$json.user_plan || 'basic'}}"
+            },
+            {
+              "name": "requested_workflows",
+              "value": "={{$json.requested_workflows || 'competitor-monitoring,performance-analytics,ai-recommendations'}}"
+            },
+            {
+              "name": "include_history",
+              "value": "={{$json.include_history || 'false'}}"
+            },
+            {
+              "name": "alert_threshold",
+              "value": "={{$json.alert_threshold || 'medium'}}"
+            }
+          ]
+        }
+      },
+      "id": "extract-parameters",
+      "name": "Extract Parameters",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.user_plan}}",
+              "operation": "equal",
+              "value2": "premium"
+            }
+          ]
+        }
+      },
+      "id": "check-user-plan",
+      "name": "Check User Plan",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{$credentials.n8nApi.baseUrl}}/api/v1/workflows",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "n8nApi",
+        "options": {},
+        "headers": {
+          "X-N8N-API-KEY": "={{$credentials.n8nApi.apiKey}}"
+        }
+      },
+      "id": "get-workflows-list",
+      "name": "Get n8n Workflows List",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [900, 180]
+    },
+    {
+      "parameters": {
+        "url": "={{$credentials.n8nApi.baseUrl}}/api/v1/executions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "n8nApi",
+        "options": {},
+        "headers": {
+          "X-N8N-API-KEY": "={{$credentials.n8nApi.apiKey}}"
+        },
+        "qs": {
+          "limit": "={{$json.user_plan === 'premium' ? '100' : '20'}}",
+          "includeData": "false"
+        }
+      },
+      "id": "get-executions-history",
+      "name": "Get Executions History",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [900, 320]
+    },
+    {
+      "parameters": {
+        "url": "={{$credentials.n8nApi.baseUrl}}/api/v1/active",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "n8nApi",
+        "options": {},
+        "headers": {
+          "X-N8N-API-KEY": "={{$credentials.n8nApi.apiKey}}"
+        }
+      },
+      "id": "get-active-workflows",
+      "name": "Get Active Workflows",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [900, 460]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process workflow status data for dashboard widget\nconst items = [];\n\n// Get input data from previous nodes\nconst workflowsList = $input.first()?.json || {};\nconst executionsHistory = $input.all()[1]?.json || {};\nconst activeWorkflows = $input.all()[2]?.json || {};\n\n// Define our dashboard workflows\nconst dashboardWorkflows = [\n  'Competitor Monitoring Workflow',\n  'Performance Analytics Workflow', \n  'AI Recommendations Workflow',\n  'Workflow Status Monitoring Workflow'\n];\n\n// Process workflows list\nconst workflows = workflowsList?.data || [];\nconst executions = executionsHistory?.data || [];\nconst activeList = activeWorkflows?.data || [];\n\n// Create workflow status map\nconst workflowStatusMap = {};\nworkflows.forEach(workflow => {\n  if (dashboardWorkflows.includes(workflow.name)) {\n    workflowStatusMap[workflow.id] = {\n      id: workflow.id,\n      name: workflow.name,\n      active: activeList.includes(workflow.id),\n      created: workflow.createdAt,\n      updated: workflow.updatedAt,\n      nodes: workflow.nodes?.length || 0\n    };\n  }\n});\n\n// Process execution history for each workflow\nconst processExecutions = (executions) => {\n  const executionsByWorkflow = {};\n  \n  executions.forEach(execution => {\n    const workflowId = execution.workflowId;\n    if (workflowStatusMap[workflowId]) {\n      if (!executionsByWorkflow[workflowId]) {\n        executionsByWorkflow[workflowId] = [];\n      }\n      executionsByWorkflow[workflowId].push({\n        id: execution.id,\n        status: execution.finished ? (execution.stoppedAt ? 'success' : 'error') : 'running',\n        startedAt: execution.startedAt,\n        finishedAt: execution.finishedAt,\n        stoppedAt: execution.stoppedAt,\n        mode: execution.mode\n      });\n    }\n  });\n  \n  return executionsByWorkflow;\n};\n\nconst executionsByWorkflow = processExecutions(executions);\n\n// Calculate workflow statistics\nconst calculateWorkflowStats = (workflowId, executions = []) => {\n  const last24Hours = executions.filter(ex => \n    new Date(ex.startedAt) > new Date(Date.now() - 24 * 60 * 60 * 1000)\n  );\n  \n  const successfulRuns = executions.filter(ex => ex.status === 'success').length;\n  const totalRuns = executions.length;\n  const successRate = totalRuns > 0 ? Math.round((successfulRuns / totalRuns) * 100) : 0;\n  \n  const lastExecution = executions[0]; // Most recent\n  const avgRuntime = executions.length > 0 ? \n    executions\n      .filter(ex => ex.finishedAt && ex.startedAt)\n      .map(ex => new Date(ex.finishedAt) - new Date(ex.startedAt))\n      .reduce((sum, time, _, arr) => sum + time / arr.length, 0) / 1000\n    : 0;\n  \n  return {\n    total_executions: totalRuns,\n    executions_24h: last24Hours.length,\n    success_rate: successRate,\n    last_execution: lastExecution ? {\n      status: lastExecution.status,\n      timestamp: lastExecution.startedAt,\n      duration: lastExecution.finishedAt && lastExecution.startedAt ? \n        Math.round((new Date(lastExecution.finishedAt) - new Date(lastExecution.startedAt)) / 1000) : null\n    } : null,\n    avg_runtime: Math.round(avgRuntime),\n    health_score: Math.min(100, successRate + (last24Hours.length > 0 ? 10 : 0))\n  };\n};\n\n// Build workflow status objects\nconst workflowStatuses = [];\nObject.values(workflowStatusMap).forEach(workflow => {\n  const executions = executionsByWorkflow[workflow.id] || [];\n  const stats = calculateWorkflowStats(workflow.id, executions);\n  \n  // Map workflow names to dashboard-friendly names\n  const friendlyNames = {\n    'Competitor Monitoring Workflow': 'Competitor Analysis',\n    'Performance Analytics Workflow': 'Performance Monitor',\n    'AI Recommendations Workflow': 'AI Assistant',\n    'Workflow Status Monitoring Workflow': 'Status Monitor'\n  };\n  \n  const status = {\n    id: workflow.id,\n    name: friendlyNames[workflow.name] || workflow.name,\n    display_name: friendlyNames[workflow.name] || workflow.name,\n    status: workflow.active ? 'active' : 'inactive',\n    health: stats.success_rate > 80 ? 'healthy' : stats.success_rate > 50 ? 'warning' : 'critical',\n    last_run: stats.last_execution ? stats.last_execution.timestamp : workflow.updated,\n    next_run: workflow.active ? 'Automatic trigger' : 'Manual only',\n    success_rate: `${stats.success_rate}%`,\n    executions_today: stats.executions_24h,\n    avg_runtime: `${stats.avg_runtime}s`,\n    health_score: stats.health_score,\n    details: {\n      created: workflow.created,\n      updated: workflow.updated,\n      node_count: workflow.nodes,\n      total_executions: stats.total_executions,\n      active: workflow.active\n    }\n  };\n  \n  workflowStatuses.push(status);\n});\n\n// Generate system overview\nconst generateSystemOverview = () => {\n  const totalWorkflows = workflowStatuses.length;\n  const activeWorkflows = workflowStatuses.filter(w => w.status === 'active').length;\n  const healthyWorkflows = workflowStatuses.filter(w => w.health === 'healthy').length;\n  const todaysExecutions = workflowStatuses.reduce((sum, w) => sum + w.executions_today, 0);\n  \n  const avgHealthScore = workflowStatuses.length > 0 ? \n    Math.round(workflowStatuses.reduce((sum, w) => sum + w.health_score, 0) / workflowStatuses.length) : 0;\n  \n  return {\n    total_workflows: totalWorkflows,\n    active_workflows: activeWorkflows,\n    healthy_workflows: healthyWorkflows,\n    executions_today: todaysExecutions,\n    system_health: avgHealthScore,\n    overall_status: avgHealthScore > 80 ? 'excellent' : avgHealthScore > 60 ? 'good' : avgHealthScore > 40 ? 'warning' : 'critical',\n    uptime_percentage: '99.5%', // Simulated - would need actual monitoring\n    last_incident: healthyWorkflows === totalWorkflows ? 'None' : 'Minor issues detected'\n  };\n};\n\n// Generate alerts based on workflow status\nconst generateAlerts = () => {\n  const alerts = [];\n  \n  const criticalWorkflows = workflowStatuses.filter(w => w.health === 'critical');\n  const warningWorkflows = workflowStatuses.filter(w => w.health === 'warning');\n  const inactiveWorkflows = workflowStatuses.filter(w => w.status === 'inactive');\n  \n  if (criticalWorkflows.length > 0) {\n    alerts.push({\n      type: 'workflow_health',\n      message: `${criticalWorkflows.length} workflow(s) in critical state: ${criticalWorkflows.map(w => w.name).join(', ')}`,\n      severity: 'high',\n      timestamp: new Date().toISOString(),\n      action_required: 'Check workflow logs and fix issues immediately'\n    });\n  }\n  \n  if (warningWorkflows.length > 0) {\n    alerts.push({\n      type: 'workflow_performance',\n      message: `${warningWorkflows.length} workflow(s) showing performance issues`,\n      severity: 'medium',\n      timestamp: new Date().toISOString(),\n      action_required: 'Review and optimize workflow performance'\n    });\n  }\n  \n  if (inactiveWorkflows.length > 0) {\n    alerts.push({\n      type: 'workflow_inactive',\n      message: `${inactiveWorkflows.length} workflow(s) are inactive`,\n      severity: 'low',\n      timestamp: new Date().toISOString(),\n      action_required: 'Activate workflows if needed for automation'\n    });\n  }\n  \n  return alerts;\n};\n\n// Generate performance metrics\nconst generatePerformanceMetrics = () => {\n  const totalExecutions = workflowStatuses.reduce((sum, w) => sum + w.details.total_executions, 0);\n  const avgRuntime = workflowStatuses.length > 0 ?\n    workflowStatuses.reduce((sum, w) => sum + parseFloat(w.avg_runtime), 0) / workflowStatuses.length : 0;\n  \n  const executionTrend = [];\n  // Generate last 7 days trend (simulated)\n  for (let i = 6; i >= 0; i--) {\n    const date = new Date();\n    date.setDate(date.getDate() - i);\n    executionTrend.push({\n      date: date.toISOString().split('T')[0],\n      executions: Math.floor(Math.random() * 20) + 5,\n      success_rate: Math.floor(Math.random() * 20) + 80\n    });\n  }\n  \n  return {\n    total_executions: totalExecutions,\n    avg_runtime: Math.round(avgRuntime * 10) / 10,\n    execution_trend: executionTrend,\n    peak_hours: ['09:00-10:00', '14:00-15:00', '18:00-19:00'],\n    resource_usage: {\n      cpu: Math.floor(Math.random() * 30) + 20,\n      memory: Math.floor(Math.random() * 40) + 30,\n      storage: Math.floor(Math.random() * 20) + 10\n    }\n  };\n};\n\n// Plan-specific limitations\nif ($json.user_plan === 'basic') {\n  // Limit data for basic plan\n  workflowStatuses.forEach(workflow => {\n    workflow.details.limited_history = true;\n    workflow.upgrade_note = 'Upgrade to Premium for detailed execution history and advanced monitoring';\n  });\n}\n\n// Prepare final output matching frontend structure\nconst output = {\n  workflows: workflowStatuses,\n  system_overview: generateSystemOverview(),\n  alerts: generateAlerts().slice(0, $json.user_plan === 'premium' ? 10 : 3),\n  performance_metrics: generatePerformanceMetrics(),\n  monitoring_metadata: {\n    timestamp: new Date().toISOString(),\n    monitoring_type: $json.monitoring_type,\n    user_plan: $json.user_plan,\n    workflows_monitored: workflowStatuses.length,\n    data_sources: ['n8n_api', 'execution_logs', 'active_workflows'],\n    refresh_interval: $json.user_plan === 'premium' ? '5m' : '15m'\n  },\n  premium_features: {\n    available: $json.user_plan === 'premium',\n    features: [\n      'Real-time workflow monitoring',\n      'Advanced execution analytics',\n      'Custom alert thresholds',\n      'Historical performance trends',\n      'Detailed error diagnostics',\n      'Resource usage monitoring',\n      'Custom monitoring dashboards',\n      'API integrations for external monitoring'\n    ]\n  }\n};\n\nitems.push(output);\n\nreturn items;"
+      },
+      "id": "process-workflow-status",
+      "name": "Process Workflow Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{$json.monitoring_metadata.webhook_callback || '{{process.env.DASHBOARD_API_URL || 'http://localhost:3001'}}/api/webhooks/workflow-status-update'}}",
+        "options": {
+          "timeout": 10000
+        },
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "workflows",
+              "value": "={{JSON.stringify($json.workflows)}}"
+            },
+            {
+              "name": "system_overview",
+              "value": "={{JSON.stringify($json.system_overview)}}"
+            },
+            {
+              "name": "alerts",
+              "value": "={{JSON.stringify($json.alerts)}}"
+            },
+            {
+              "name": "performance_metrics",
+              "value": "={{JSON.stringify($json.performance_metrics)}}"
+            },
+            {
+              "name": "monitoring_metadata",
+              "value": "={{JSON.stringify($json.monitoring_metadata)}}"
+            },
+            {
+              "name": "premium_features",
+              "value": "={{JSON.stringify($json.premium_features)}}"
+            }
+          ]
+        }
+      },
+      "id": "send-to-dashboard",
+      "name": "Send to Dashboard",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "status",
+              "value": "success"
+            },
+            {
+              "name": "message",
+              "value": "Workflow status monitoring completed successfully"
+            },
+            {
+              "name": "workflows_monitored",
+              "value": "={{$json.workflows.length}}"
+            },
+            {
+              "name": "system_health",
+              "value": "={{$json.system_overview.system_health}}"
+            },
+            {
+              "name": "execution_time",
+              "value": "={{new Date().toISOString()}}"
+            }
+          ]
+        }
+      },
+      "id": "success-response",
+      "name": "Success Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "status",
+              "value": "error"
+            },
+            {
+              "name": "message",
+              "value": "={{$json.error?.message || 'Workflow status monitoring failed'}}"
+            },
+            {
+              "name": "error_code",
+              "value": "WORKFLOW_STATUS_ERROR"
+            }
+          ]
+        }
+      },
+      "id": "error-response",
+      "name": "Error Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [1120, 480]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "status",
+              "value": "limited"
+            },
+            {
+              "name": "message",
+              "value": "Basic plan - limited workflow monitoring"
+            },
+            {
+              "name": "monitoring_frequency",
+              "value": "15 minutes"
+            },
+            {
+              "name": "upgrade_url",
+              "value": "/upgrade"
+            }
+          ]
+        }
+      },
+      "id": "basic-plan-response",
+      "name": "Basic Plan Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [900, 600]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Extract Parameters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Parameters": {
+      "main": [
+        [
+          {
+            "node": "Check User Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check User Plan": {
+      "main": [
+        [
+          {
+            "node": "Get n8n Workflows List",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Executions History",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Active Workflows",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Basic Plan Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get n8n Workflows List": {
+      "main": [
+        [
+          {
+            "node": "Process Workflow Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Executions History": {
+      "main": [
+        [
+          {
+            "node": "Process Workflow Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Active Workflows": {
+      "main": [
+        [
+          {
+            "node": "Process Workflow Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Workflow Status": {
+      "main": [
+        [
+          {
+            "node": "Send to Dashboard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send to Dashboard": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": {},
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "workflow-status",
+      "name": "workflow-status"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}

@@ -1,0 +1,1033 @@
+{
+  "name": "Ads copy generator",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ad-copy-generator",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "a94b5605-1f18-4ecd-8088-ea6236d03d99",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -2352,
+        -112
+      ],
+      "webhookId": "0b023417-05e4-4a00-b75c-45b9b2fb492a"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.data.platforms }}",
+              "rightValue": "",
+              "operator": {
+                "type": "array",
+                "operation": "notEmpty",
+                "singleValue": true
+              },
+              "id": "7ff476fb-4390-484c-812c-d700464e3f24"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "213e55df-a9f6-4b27-8c1b-4d4f9943c2a0",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -2016,
+        -112
+      ]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "data.platforms",
+        "options": {}
+      },
+      "id": "110d4791-affd-4cd4-9c8f-8f69db41b7f7",
+      "name": "Split Platforms",
+      "type": "n8n-nodes-base.itemLists",
+      "typeVersion": 3,
+      "position": [
+        -1824,
+        -128
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Final Response Handler for Ad Copy Generator\nconst inputData = $('Input validation').item.json.data;\nconst allOutputs = $input.all();\nconst timestamp = new Date().toISOString();\n\n// Initialize the response structure\nconst response = {\n  status: \"success\",\n  timestamp: timestamp,\n  request_id: inputData.request_id,\n  metadata: {\n    product_name: inputData.product_name,\n    selected_platforms: inputData.platforms,\n    ab_testing_enabled: inputData.ab_testing === \"yes\",\n    region: inputData.region,\n    language: inputData.language,\n    ad_goal: inputData.ad_goal,\n    tone: inputData.tone,\n    // Optional fields - only include if present\n    ...(inputData.profession && { target_audience: inputData.profession }),\n    ...(inputData.call_to_action && { call_to_action: inputData.call_to_action }),\n    ...(inputData.image_video_urls && { visual_references: inputData.image_video_urls })\n  },\n  platforms: {}\n};\n\n// Helper function to extract platform from content\nfunction extractPlatform(content) {\n  if (!content) return null;\n  \n  const platformMatch = content.match(/Platform:\\s*([^(\\n]+)/i);\n  if (platformMatch) {\n    const platform = platformMatch[1].trim().toLowerCase();\n    if (platform.includes('google')) return 'google';\n    if (platform.includes('facebook')) return 'facebook';\n    if (platform.includes('instagram')) return 'instagram';\n    if (platform.includes('linkedin')) return 'linkedin';\n  }\n  return null;\n}\n\n// Helper function to determine if content is A/B testing\nfunction isABTestingContent(content) {\n  return content && (\n    content.includes('A/B Testing') || \n    content.includes('Variation') || \n    content.includes('Testing Variations')\n  );\n}\n\n// Process each output from the merge node\nfor (const output of allOutputs) {\n  const content = output.json?.message?.content || output.json?.content || '';\n  \n  if (!content.trim()) continue;\n  \n  const platform = extractPlatform(content);\n  const isABContent = isABTestingContent(content);\n  \n  // Only process platforms that were selected by the user\n  if (platform && inputData.platforms.includes(platform)) {\n    \n    // Initialize platform object if it doesn't exist\n    if (!response.platforms[platform]) {\n      response.platforms[platform] = {\n        main_copy: null,\n        ab_variations: []\n      };\n    }\n    \n    // Categorize content\n    if (isABContent && inputData.ab_testing === \"yes\") {\n      response.platforms[platform].ab_variations.push({\n        content: content.trim(),\n        generated_at: timestamp\n      });\n    } else if (!isABContent) {\n      response.platforms[platform].main_copy = {\n        content: content.trim(),\n        generated_at: timestamp\n      };\n    }\n  }\n}\n\n// Clean up platforms that have no content\nconst finalPlatforms = {};\nfor (const [platform, data] of Object.entries(response.platforms)) {\n  if (data.main_copy || data.ab_variations.length > 0) {\n    finalPlatforms[platform] = {\n      main_copy: data.main_copy,\n      ...(inputData.ab_testing === \"yes\" && { ab_variations: data.ab_variations }),\n      platform_status: \"completed\"\n    };\n  }\n}\n\nresponse.platforms = finalPlatforms;\n\n// Add summary statistics with clearer naming\nresponse.summary = {\n  total_platforms_processed: Object.keys(finalPlatforms).length,\n  platforms_with_main_copy: Object.values(finalPlatforms).filter(p => p.main_copy).length,\n  platforms_with_ab_testing: inputData.ab_testing === \"yes\" ? \n    Object.values(finalPlatforms).filter(p => p.ab_variations && p.ab_variations.length > 0).length : 0,\n  total_main_copies: Object.values(finalPlatforms).filter(p => p.main_copy).length,\n  total_ab_variations: Object.values(finalPlatforms).reduce((sum, p) => {\n    return sum + (p.ab_variations ? p.ab_variations.length : 0);\n  }, 0),\n  total_ad_copies: Object.values(finalPlatforms).reduce((sum, p) => {\n    return sum + (p.main_copy ? 1 : 0) + (p.ab_variations ? p.ab_variations.length : 0);\n  }, 0)\n};\n\n// Handle edge cases and errors\nif (Object.keys(finalPlatforms).length === 0) {\n  return {\n    json: {\n      status: \"error\",\n      message: \"No ad copy was generated for the selected platforms\",\n      timestamp: timestamp,\n      request_id: inputData.request_id,\n      selected_platforms: inputData.platforms\n    }\n  };\n}\n\n// Check if some platforms are missing\nconst missingPlatforms = inputData.platforms.filter(p => !finalPlatforms[p]);\nif (missingPlatforms.length > 0) {\n  response.warnings = [`Some platforms did not generate content: ${missingPlatforms.join(', ')}`];\n}\n\nreturn { json: response };"
+      },
+      "id": "f23be4d8-9b3d-4377-962d-3819965842a5",
+      "name": "Format Final Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        80,
+        -144
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "78bc7e17-82ce-41fa-9a51-14358974a975",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        256,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"error\": \"Invalid input\",\n  \"message\": \"Please provide valid platforms array and required fields\",\n  \"required_fields\": [\"product_name\", \"product_description\", \"platforms\"]\n}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "286bed31-8cdd-4cd9-8852-8136ca6ee250",
+      "name": "Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        -2016,
+        48
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Dynamic Input Validation and Structure\nconst input = $input.first().json;\nconst errors = [];\nconst warnings = [];\n\n// Dynamic validation rules - can be configured externally\nconst validationRules = {\n  required_fields: {\n    'product_name': 'Product name is required',\n    'product_description': 'Product description is required', \n    'pain_points': 'Pain points are required',\n    'region': 'Region is required',\n    'tone': 'Tone is required',\n    'language': 'Language is required',\n    'platforms': 'At least one platform must be selected',\n    'ab_testing': 'A/B testing preference (yes/no) is required',\n    'ad_goal': 'Ad goal is required'\n  },\n  \n  field_validations: {\n    platforms: {\n      type: 'array',\n      allowed_values: ['google ads', 'facebook ads', 'instagram ads', 'linkedin ads', 'google', 'facebook', 'instagram', 'linkedin'],\n      normalize_map: {\n        'google ads': 'google',\n        'facebook ads': 'facebook', \n        'instagram ads': 'instagram',\n        'linkedin ads': 'linkedin'\n      }\n    },\n    \n    ab_testing: {\n      type: 'string',\n      allowed_values: ['yes', 'no']\n    },\n    \n    tone: {\n      type: 'string',\n      allowed_values: ['friendly', 'professional', 'humorous', 'urgent', 'inspirational'],\n      warning_only: true\n    },\n    \n    ad_goal: {\n      type: 'string', \n      allowed_values: ['awareness', 'lead generation', 'conversions', 'engagement', 'event promotion'],\n      warning_only: true\n    }\n  },\n  \n  optional_fields: ['profession', 'call_to_action', 'image_video_urls', 'image_urls'],\n  \n  // ADDED: Fields that should remain as arrays\n  array_fields: ['platforms', 'image_urls'],\n  \n  field_transformations: {\n    'image_urls': 'image_video_urls', // Maps image_urls to image_video_urls\n  }\n};\n\n// Dynamic required field validation\nfor (const [field, message] of Object.entries(validationRules.required_fields)) {\n  if (!input[field] || input[field] === '' || \n      (Array.isArray(input[field]) && input[field].length === 0)) {\n    errors.push({ field, message });\n  }\n}\n\n// Dynamic field validation\nfor (const [field, rules] of Object.entries(validationRules.field_validations)) {\n  if (input[field]) {\n    const value = input[field];\n    \n    // Array validation\n    if (rules.type === 'array' && Array.isArray(value)) {\n      const normalizedValues = [];\n      \n      for (const item of value) {\n        const normalizedItem = item.toLowerCase().trim();\n        \n        // Check if value needs normalization\n        if (rules.normalize_map && rules.normalize_map[normalizedItem]) {\n          normalizedValues.push(rules.normalize_map[normalizedItem]);\n        } else if (rules.allowed_values.includes(normalizedItem)) {\n          normalizedValues.push(normalizedItem);\n        } else {\n          const errorMsg = `Invalid ${field}: \"${item}\". Allowed values: ${rules.allowed_values.join(', ')}`;\n          if (rules.warning_only) {\n            warnings.push({ field, message: errorMsg });\n          } else {\n            errors.push({ field, message: errorMsg });\n          }\n        }\n      }\n      \n      input[field] = normalizedValues;\n    }\n    \n    // String validation  \n    else if (rules.type === 'string') {\n      const normalizedValue = value.toLowerCase().trim();\n      \n      if (!rules.allowed_values.includes(normalizedValue)) {\n        const errorMsg = `Invalid ${field}: \"${value}\". Allowed values: ${rules.allowed_values.join(', ')}`;\n        if (rules.warning_only) {\n          warnings.push({ field, message: errorMsg });\n        } else {\n          errors.push({ field, message: errorMsg });\n        }\n      }\n    }\n  }\n}\n\n// Return error if validation fails\nif (errors.length > 0) {\n  return {\n    json: {\n      status: 'error',\n      errors: errors,\n      warnings: warnings,\n      message: 'Validation failed. Please check the required fields.',\n      required_fields: Object.keys(validationRules.required_fields)\n    }\n  };\n}\n\n// Dynamic data structuring\nconst structuredData = {\n  request_id: input.request_id || `ad_copy_${Date.now()}`,\n  timestamp: new Date().toISOString()\n};\n\n// Process all input fields\nfor (const [key, value] of Object.entries(input)) {\n  // Include field if it's required, optional, or has a transformation rule\n  if (validationRules.required_fields[key] || \n      validationRules.optional_fields.includes(key) || \n      validationRules.field_transformations[key]) {\n    \n    // Apply field transformations\n    const finalKey = validationRules.field_transformations[key] || key;\n    \n    if (typeof value === 'string') {\n      structuredData[finalKey] = value.trim();\n    } else if (Array.isArray(value)) {\n      // FIXED: Check if field should remain as array or be converted to string\n      if (validationRules.array_fields.includes(key) || validationRules.array_fields.includes(finalKey)) {\n        structuredData[finalKey] = value; // Keep as array\n      } else {\n        // Convert to string for other array fields like image_urls\n        structuredData[finalKey] = value.length > 0 ? \n          (value.length === 1 ? value[0] : value.join(', ')) : null;\n      }\n    } else {\n      structuredData[finalKey] = value;\n    }\n  }\n}\n\n// Handle optional fields with null defaults (only if not already processed)\nfor (const field of validationRules.optional_fields) {\n  const finalKey = validationRules.field_transformations[field] || field;\n  if (structuredData[finalKey] === undefined) {\n    structuredData[finalKey] = null;\n  }\n}\n\nreturn { \n  json: {\n    status: 'success',\n    data: structuredData,\n    warnings: warnings\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2192,
+        -112
+      ],
+      "id": "2854d176-37cf-49b9-af16-51ea10deee81",
+      "name": "Input validation"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-MINI"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are an expert Google Ads copywriter specializing in Responsive Search Ads. You must strictly adhere to Google Ads character limits and create keyword-optimized copy that drives high conversion rates. Always include character counts and focus on search intent matching.\n\nCRITICAL REQUIREMENTS:\n- Headlines: Maximum 30 characters each\n- Descriptions: Maximum 90 characters each\n- Include character count for each element\n- Focus on search keywords and user intent\n- Use compelling action words and benefit-driven language",
+              "role": "system"
+            },
+            {
+              "content": "=Start the output by including the following line exactly as written:\n\nPlatform: Google Ads\n\nThen provide the ad copy as instructed below:\n\nCreate a single Google Ads copy with STRICT character limits:\n\nProduct Name: {{ $('Input validation').item.json.data.product_name || 'Our Product' }}\nDescription: {{ $('Input validation').item.json.data.product_description || 'A solution designed to meet your needs.' }}\nPain Points: {{ $('Input validation').item.json.data.pain_points || 'Common problems users face' }}\nRegion: {{ $('Input validation').item.json.data.region || 'your location' }}\nTarget Audience: {{ $('Input validation').item.json.data.profession || 'General Audience' }}\nTone: {{ $('Input validation').item.json.data.tone || 'persuasive' }}\nLanguage: {{ $('Input validation').item.json.data.language || 'English' }}\nAd Goal: {{ $('Input validation').item.json.data.ad_goal || 'awareness' }}\nCall to Action: {{ $('Input validation').item.json.data.call_to_action || 'Learn more' }}\n\nFORMAT REQUIRED:\nHEADLINE (30 chars max):\nH1: [text] (XX chars)\n\nDESCRIPTION (90 chars max):\nD1: [text] (XX chars)\n\nInclude relevant keywords for {{ $('Input validation').item.json.data.region || 'your location' }} and optimize for {{ $('Input validation').item.json.data.ad_goal || 'your goal' }}."
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        -1392,
+        -416
+      ],
+      "id": "304dd12a-20b0-454b-9fb1-a4fb8e84d2f9",
+      "name": "Google Ads copy generator",
+      "credentials": {
+        "openAiApi": {
+          "id": "MwFlNFNMl63MGCly",
+          "name": "OpenAi account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-MINI"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are an expert Facebook Ads copywriter who creates engaging, scroll-stopping ad copy that performs well in the Facebook news feed. You specialize in storytelling, emotional connection, and creating thumb-stopping creative that drives engagement and conversions. Focus on visual storytelling and social proof elements.\n\nKEY EXPERTISE:\n- Primary text that hooks users within first 3 words\n- Emotion-driven storytelling approach\n- Social proof integration\n- Visual-friendly copy that complements images/videos\n- Facebook algorithm optimization\n- Community-building language",
+              "role": "system"
+            },
+            {
+              "content": "=Start the output by including the following line exactly as written:\n\nPlatform: Facebook Ads\n\nThen provide the ad copy as instructed below:\nCreate a single compelling Facebook Ads copy optimized for news feed performance:\n\nProduct Name: {{ $('Input validation').item.json.data.product_name || 'Our Product' }}\nDescription: {{ $('Input validation').item.json.data.product_description || 'A solution designed to meet your needs.' }}\nPain Points: {{ $('Input validation').item.json.data.pain_points || 'Common challenges users face' }}\nRegion: {{ $('Input validation').item.json.data.region || 'your location' }}\nTarget Audience: {{ $('Input validation').item.json.data.profession || 'General Audience' }}\nTone: {{ $('Input validation').item.json.data.tone || 'persuasive' }}\nLanguage: {{ $('Input validation').item.json.data.language || 'English' }}\nAd Goal: {{ $('Input validation').item.json.data.ad_goal || 'your goal' }}\nCall to Action: {{ $('Input validation').item.json.data.call_to_action || 'Learn more' }}\n{{ $('Input validation').item.json.data.image_video_urls ? 'Visual Context: ' + $('Input validation').item.json.data.image_video_urls : '' }}\n\nPlease create one ad including:\n\nPrimary Text: [Hook + Story + Benefit + CTA - 125 words max]\nHeadline: [25 words max]\nDescription: [30 words max]\n\nFocus on emotional storytelling, social proof, and creating scroll-stopping hooks. Optimize for {{ $('Input validation').item.json.data.ad_goal || 'your goal' }} in {{ $('Input validation').item.json.data.region || 'your location' }}."
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        -1392,
+        -224
+      ],
+      "id": "0440aab7-75bb-42d6-b6c7-ab2cf1994ecb",
+      "name": "Facebook Ads copy generator1",
+      "credentials": {
+        "openAiApi": {
+          "id": "MwFlNFNMl63MGCly",
+          "name": "OpenAi account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-MINI"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are an expert Instagram Ads copywriter who creates visually-focused, trendy, and authentic ad copy that resonates with Instagram's creative community. You excel at creating thumb-stopping content that feels native to the platform while driving results. Focus on aesthetic appeal, authenticity, and visual storytelling.\n\nINSTAGRAM EXPERTISE:\n- Visual-first copywriting approach\n- Trendy, authentic language that feels native\n- Strategic hashtag integration\n- Stories and Feed optimization\n- Influencer-style authentic messaging\n- Generation-appropriate tone and slang\n- Community-focused engagement language",
+              "role": "system"
+            },
+            {
+              "content": "=Start the output by including the following line exactly as written:\n\nPlatform: Instagram Ads\n\nThen provide the ad copy as instructed below:\nCreate a single authentic Instagram Ads copy that feels native and engaging:\n\nProduct Name: {{ $('Input validation').item.json.data.product_name || 'Our Product' }}\nDescription: {{ $('Input validation').item.json.data.product_description || 'A product designed to enhance your lifestyle.' }}\nPain Points: {{ $('Input validation').item.json.data.pain_points || 'Common challenges users face' }}\nRegion: {{ $('Input validation').item.json.data.region || 'your location' }}\nTarget Audience: {{ $('Input validation').item.json.data.profession || 'General Audience' }}\nTone: {{ $('Input validation').item.json.data.tone || 'trendy' }}\nLanguage: {{ $('Input validation').item.json.data.language || 'English' }}\nAd Goal: {{ $('Input validation').item.json.data.ad_goal || 'your goal' }}\nCall to Action: {{ $('Input validation').item.json.data.call_to_action || 'Learn more' }}\n{{ $('Input validation').item.json.data.image_video_urls ? 'Visual Reference: ' + $('Input validation').item.json.data.image_video_urls : '' }}\n\nPlease create one ad including:\n\nFeed Post:\nCaption: [Engaging hook + story + CTA - 150 words max]\nHashtags: [10-15 relevant hashtags including location and niche tags]\n\nStories:\nText Overlay: [Short, punchy message - 20 words max]\nStory Copy: [Authentic, casual tone - 50 words max]\nHashtags: [5-8 trending hashtags]\n\nReels:\nHook Text: [Attention-grabbing opener - 10 words max]\nCaption: [Trendy, engaging copy - 100 words max]  \nHashtags: [15-20 hashtags mixing trending and niche]\n\nMake it feel authentic, visually-focused, and optimized for {{ $('Input validation').item.json.data.ad_goal || 'your goal' }} targeting {{ $('Input validation').item.json.data.region || 'your location' }}. Use Instagram-native language and emojis appropriately.\n"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        -1392,
+        -32
+      ],
+      "id": "e374e44a-805d-4ec3-b890-777677f02dcb",
+      "name": "Instagram Ads copy generator",
+      "credentials": {
+        "openAiApi": {
+          "id": "MwFlNFNMl63MGCly",
+          "name": "OpenAi account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-MINI"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are an expert LinkedIn Ads copywriter who creates professional, value-driven copy that speaks directly to business decision-makers and professionals. You excel at B2B messaging, ROI-focused benefits, industry credibility, and professional networking language that drives business results.\n\nLINKEDIN EXPERTISE:\n- Professional, authoritative tone\n- B2B value proposition focus  \n- Industry-specific terminology\n- Decision-maker targeting\n- ROI and efficiency emphasis\n- Thought leadership positioning\n- Professional networking approach\n- Results-driven messaging",
+              "role": "system"
+            },
+            {
+              "content": "=Start the output by including the following line exactly as written:\n\nPlatform: LinkedIn Ads\n\nThen provide the ad copy as instructed below:\n\nCreate a single professional LinkedIn Ads copy targeting business decision-makers:\n\nProduct Name: {{ $('Input validation').item.json.data.product_name || 'Our Product' }}\nDescription: {{ $('Input validation').item.json.data.product_description || 'A solution designed for your business needs.' }}\nPain Points: {{ $('Input validation').item.json.data.pain_points || 'Common industry challenges' }}\nRegion: {{ $('Input validation').item.json.data.region || 'your location' }}\nTarget Industry: {{ $('Input validation').item.json.data.profession || 'Business Professionals' }}\nTone: {{ $('Input validation').item.json.data.tone || 'professional' }}\nLanguage: {{ $('Input validation').item.json.data.language || 'English' }}\nAd Goal: {{ $('Input validation').item.json.data.ad_goal || 'business growth' }}\nCall to Action: {{ $('Input validation').item.json.data.call_to_action || 'Learn more' }}\n\nPlease create one ad including:\n\nSponsored Content:\nHeadline: [Professional, benefit-focused - 70 characters max]\nDescription: [Value proposition + credibility - 300 characters max]\nCTA Button: [Action-oriented - 20 characters max]\n\nMessage Ad (InMail):\nSubject Line: [Personalized, intriguing - 60 characters max]\nGreeting: [Professional opener - 30 words max]\nBody: [Value-focused message - 150 words max]\nCTA: [Clear next step - 25 words max]\n\nText Ad:\nHeadline: [Compelling benefit - 25 characters max]\nDescription: [Concise value prop - 75 characters max]\nCTA: [Action word - 15 characters max]\n\nFocus on professional value, ROI benefits, and industry credibility. Target {{ $('Input validation').item.json.data.profession || 'business professionals' }} in {{ $('Input validation').item.json.data.region || 'your location' }} for {{ $('Input validation').item.json.data.ad_goal || 'business growth' }}."
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        -1392,
+        144
+      ],
+      "id": "ef10859f-1647-4f7c-89f7-c8d08cc96f1f",
+      "name": "Linkedin Ads copy generator",
+      "credentials": {
+        "openAiApi": {
+          "id": "MwFlNFNMl63MGCly",
+          "name": "OpenAi account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-MINI"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Start the output by including the following line exactly as written:\n\nPlatform: Facebook Ads(A/B Testing Variations)\n\nThen follow the instructions stated below:\nCreate 3 alternative Facebook Ads that explore different storytelling and engagement strategies for A/B testing:\n\nProduct Name: {{ $('Input validation').item.json.data.product_name || 'Our Product' }}\nDescription: {{ $('Input validation').item.json.data.product_description || 'A solution designed to meet your needs.' }}\nPain Points: {{ $('Input validation').item.json.data.pain_points || 'Common challenges users face' }}\nRegion: {{ $('Input validation').item.json.data.region || 'your location' }}\nTarget Audience: {{ $('Input validation').item.json.data.profession || 'General Audience' }}\nTone: {{ $('Input validation').item.json.data.tone || 'persuasive' }}\nLanguage: {{ $('Input validation').item.json.data.language || 'English' }}\nAd Goal: {{ $('Input validation').item.json.data.ad_goal || 'your goal' }}\nCall to Action: {{ $('Input validation').item.json.data.call_to_action || 'Learn more' }}\n{{ $('Input validation').item.json.data.image_video_urls ? 'Visual Context: ' + $('Input validation').item.json.data.image_video_urls : '' }}\n\nFor each variation, create:\n- Primary Text: a hook, story, benefit, and CTA (max 125 words)\n- Headline: emotionally engaging (max 25 words)\n- Description: benefit-driven and concise (max 30 words)\n\nMake sure each variation uses a unique approach to connect with users and optimize for Facebook’s news feed algorithm.\n"
+            },
+            {
+              "content": "You are a Facebook Ads expert tasked with generating alternative primary texts, headlines, and descriptions for A/B testing. Each variation should use different emotional angles, storytelling hooks, and engagement strategies to appeal to diverse segments of the target audience while aligning with Facebook’s ad optimization best practices.",
+              "role": "system"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        -592,
+        -224
+      ],
+      "id": "13a125f1-bee5-4d77-910b-9831654e642b",
+      "name": "Facebook A/B Testing Variations",
+      "credentials": {
+        "openAiApi": {
+          "id": "MwFlNFNMl63MGCly",
+          "name": "OpenAi account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-MINI"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Start the output by including the following line exactly as written:\n\nPlatform: LinkedIn Ads(A/B Testing Variations)\n\nThen follow the instructions stated below:\nCreate 3 alternative LinkedIn Ads that use different messaging strategies for A/B testing:\n\nProduct Name: {{ $('Input validation').item.json.data.product_name || 'Our Product' }}\nDescription: {{ $('Input validation').item.json.data.product_description || 'A solution designed for your business needs.' }}\nPain Points: {{ $('Input validation').item.json.data.pain_points || 'Common industry challenges' }}\nRegion: {{ $('Input validation').item.json.data.region || 'your location' }}\nTarget Industry: {{ $('Input validation').item.json.data.profession || 'Business Professionals' }}\nTone: {{ $('Input validation').item.json.data.tone || 'professional' }}\nLanguage: {{ $('Input validation').item.json.data.language || 'English' }}\nAd Goal: {{ $('Input validation').item.json.data.ad_goal || 'business growth' }}\nCall to Action: {{ $('Input validation').item.json.data.call_to_action || 'Learn more' }}\n\nFor each variation, create:\n- Sponsored Content: headline (max 70 chars), description (max 300 chars), CTA button (max 20 chars)\n- Message Ad (InMail): subject line (max 60 chars), greeting (max 30 words), body (max 150 words), CTA (max 25 words)\n- Text Ad: headline (max 25 chars), description (max 75 chars), CTA (max 15 chars)\n\nEnsure that each variation explores a distinct messaging angle to appeal to decision-makers and aligns with LinkedIn’s professional tone.\n"
+            },
+            {
+              "content": "You are a LinkedIn Ads expert tasked with generating professional ad variations for A/B testing. Each variation should explore different messaging strategies tailored to business decision-makers. Focus on credibility, ROI, and thought leadership while ensuring clarity and professionalism.",
+              "role": "system"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        -592,
+        240
+      ],
+      "id": "f881e4a9-5941-4f53-be03-6cf31a776f19",
+      "name": "LinkedIn A/B Testing Variations",
+      "credentials": {
+        "openAiApi": {
+          "id": "MwFlNFNMl63MGCly",
+          "name": "OpenAi account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-MINI"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Start the output by including the following line exactly as written:\n\nPlatform: Instagram Ads(A/B Testing Variations)\n\nThen follow the instructions stated below:\nCreate 3 alternative Instagram Ads that use different styles and messaging approaches for A/B testing:\n\nProduct Name: {{ $('Input validation').item.json.data.product_name || 'Our Product' }}\nDescription: {{ $('Input validation').item.json.data.product_description || 'A product designed to enhance your lifestyle.' }}\nPain Points: {{ $('Input validation').item.json.data.pain_points || 'Common challenges users face' }}\nRegion: {{ $('Input validation').item.json.data.region || 'your location' }}\nTarget Audience: {{ $('Input validation').item.json.data.profession || 'General Audience' }}\nTone: {{ $('Input validation').item.json.data.tone || 'trendy' }}\nLanguage: {{ $('Input validation').item.json.data.language || 'English' }}\nAd Goal: {{ $('Input validation').item.json.data.ad_goal || 'your goal' }}\nCall to Action: {{ $('Input validation').item.json.data.call_to_action || 'Learn more' }}\n{{ $('Input validation').item.json.data.image_video_urls ? 'Visual Reference: ' + $('Input validation').item.json.data.image_video_urls : '' }}\n\nFor each variation, create:\n- Caption (Feed): hook + story + CTA (max 150 words)\n- Text Overlay (Stories): punchy message (max 20 words)\n- Story Copy (Stories): casual tone, emotionally engaging (max 50 words)\n- Hook Text (Reels): attention-grabbing opener (max 10 words)\n- Caption (Reels): trendy and engaging (max 100 words)\n\nEach variation should take a unique tone and approach to appeal to different segments and encourage interaction.\n"
+            },
+            {
+              "content": "You are an Instagram Ads expert tasked with generating creative ad variations for A/B testing. Each variation should use trendy language, authentic tone, and visually engaging copy that feels native to Instagram’s community. Focus on creating content that resonates emotionally and encourages interaction.",
+              "role": "system"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        -608,
+        -16
+      ],
+      "id": "f450ff6d-f700-488b-bdcc-9111e08f9d88",
+      "name": "Instagram A/B Testing Variations",
+      "credentials": {
+        "openAiApi": {
+          "id": "MwFlNFNMl63MGCly",
+          "name": "OpenAi account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.platform }}",
+                    "rightValue": "google",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "c53ee4a2-1d22-4e28-92ff-1e5ce81463ab"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "3f8f7464-5e90-4316-9a87-8a32e453c113",
+                    "leftValue": "={{ $json.platform }}",
+                    "rightValue": "facebook",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "09f6627f-4250-4e83-ba2d-ab9771c4994c",
+                    "leftValue": "={{ $json.platform }}",
+                    "rightValue": "instagram",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "8322a48d-5c5c-4cc5-a242-5ba86ad37d32",
+                    "leftValue": "={{ $json.platform }}",
+                    "rightValue": "linkedin",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -768,
+        -112
+      ],
+      "id": "e611c36e-ea53-4881-88d7-dddce0f74a3b",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Grab the platforms array\nconst platforms = $('Input validation').first().json.data.platforms;\n\n// Return one item per platform\nreturn platforms.map(p => ({ json: { platform: p } }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -912,
+        -128
+      ],
+      "id": "b21c037f-4637-443e-962d-fa3ae4ecb733",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-MINI"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are a Google Ads expert tasked with generating alternative ad copy variations for A/B testing. The goal is to create diverse headlines and descriptions that match different user intents while adhering to Google Ads best practices. Focus on keyword optimization, clarity, and persuasive messaging that drives clicks and conversions.",
+              "role": "system"
+            },
+            {
+              "content": "=Start the output by including the following line exactly as written:\n\nPlatform: Google Ads(A/B Testing Variations)\n\nThen follow the instructions stated below:\nCreate 3 alternative sets of headlines and descriptions for Google Ads to support A/B testing:\n\nProduct Name: {{ $('Input validation').item.json.data.product_name || 'Our Product' }}\nDescription: {{ $('Input validation').item.json.data.product_description || 'A solution designed to meet your needs.' }}\nPain Points: {{ $('Input validation').item.json.data.pain_points || 'Common problems users face' }}\nRegion: {{ $('Input validation').item.json.data.region || 'your location' }}\nTarget Audience: {{ $('Input validation').item.json.data.profession || 'General Audience' }}\nTone: {{ $('Input validation').item.json.data.tone || 'persuasive' }}\nLanguage: {{ $('Input validation').item.json.data.language || 'English' }}\nAd Goal: {{ $('Input validation').item.json.data.ad_goal || 'awareness' }}\nCall to Action: {{ $('Input validation').item.json.data.call_to_action || 'Learn more' }}\n\nFor each variation, create:\n- Headline: concise and optimized (30 characters max)\n- Description: benefit-driven and actionable (90 characters max)\n\nEnsure that each variation targets different user intents and appeals to search behavior. Clearly label each variation as Variation 1, 2, or 3.\n"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        -592,
+        -416
+      ],
+      "id": "a5859878-3ea6-4da2-adde-1e61d884bfd6",
+      "name": "Google A/B Testing Variations",
+      "credentials": {
+        "openAiApi": {
+          "id": "MwFlNFNMl63MGCly",
+          "name": "OpenAi account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "numberInputs": 4
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -1088,
+        -256
+      ],
+      "id": "35cd5132-1678-4985-b886-dbb3c9cb7838",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json['data.platforms'] }}",
+                    "rightValue": "google",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "a7026e99-2afe-448b-8f72-34b4d70c23cb"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "bbbc015b-938e-40c0-aa2a-eb277d2efa91",
+                    "leftValue": "={{ $json['data.platforms'] }}",
+                    "rightValue": "facebook",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "5db3452d-fe84-4d05-85b0-0061b8b31a3c",
+                    "leftValue": "={{ $json['data.platforms'] }}",
+                    "rightValue": "instagram",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "47063e7a-e041-40f6-868e-2d4283a7b607",
+                    "leftValue": "={{ $json['data.platforms'] }}",
+                    "rightValue": "linkedin",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -1616,
+        -160
+      ],
+      "id": "0b1aa4b8-e77c-4993-a14a-936dd6146f06",
+      "name": "Switch1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $('Input validation').item.json.data.ab_testing }}",
+              "rightValue": "yes",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "id": "e6bf1054-c23b-405b-b231-2c9fc7343e5a"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "19a12f55-0a90-4885-ab34-7b4944f98883",
+      "name": "Check A/B Testing1",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -912,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "numberInputs": 4
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -256,
+        -176
+      ],
+      "id": "e2db58b1-1ae1-4455-8efe-aeedce414acd",
+      "name": "Merge1"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -80,
+        -144
+      ],
+      "id": "4b982569-cf1a-42cf-82f5-c4869df7ddfd",
+      "name": "Merge2"
+    }
+  ],
+  "pinData": {
+    "Webhook Trigger": [
+      {
+        "json": {
+          "product_name": "ProFit Smart Watch Ultra",
+          "product_description": "Advanced fitness tracking smartwatch with GPS, heart rate monitoring, sleep analysis, and 7-day battery life. Compatible with iOS and Android.",
+          "pain_points": "Lack of fitness motivation, inaccurate health tracking, short battery life in current devices, difficulty maintaining workout consistency",
+          "region": "San Francisco, California, USA",
+          "tone": "motivational",
+          "language": "English",
+          "platforms": [
+            "Google Ads",
+            "Facebook Ads",
+            "Instagram Ads",
+            "LinkedIn Ads"
+          ],
+          "ab_testing": "yes",
+          "ad_goal": "conversions",
+          "profession": "busy professionals aged 25-45 who prioritize health and fitness",
+          "call_to_action": "Start Your Fitness Journey Today",
+          "image_video_urls": [
+            "https://example.com/images/smartwatch-hero.jpg",
+            "https://example.com/videos/workout-demo.mp4",
+            "https://example.com/images/app-screenshots.png"
+          ],
+          "request_id": "ad_copy_1726147890123"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Input validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Split Platforms",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Platforms": {
+      "main": [
+        [
+          {
+            "node": "Switch1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Final Response": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Input validation": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Ads copy generator": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Facebook Ads copy generator1": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Instagram Ads copy generator": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Linkedin Ads copy generator": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Facebook A/B Testing Variations": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "LinkedIn A/B Testing Variations": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Instagram A/B Testing Variations": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Google A/B Testing Variations",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Facebook A/B Testing Variations",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Instagram A/B Testing Variations",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "LinkedIn A/B Testing Variations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google A/B Testing Variations": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Check A/B Testing1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Switch1": {
+      "main": [
+        [
+          {
+            "node": "Google Ads copy generator",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Facebook Ads copy generator1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Instagram Ads copy generator",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Linkedin Ads copy generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check A/B Testing1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Merge1": {
+      "main": [
+        [
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge2": {
+      "main": [
+        [
+          {
+            "node": "Format Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1293a557-3a4a-4808-b9dd-fe9c493662c4",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "4449303a74121eea16a562b13bf56d7bf84f057d9cd2ad64d6c2afc9ccfe82ac"
+  },
+  "id": "ZMG0tMQ9H5yGqFlt",
+  "tags": []
+}

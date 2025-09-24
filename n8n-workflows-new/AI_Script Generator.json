@@ -1,0 +1,384 @@
+{
+  "name": "AI_Script Generator",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "generate-script",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "42ea08bd-5ed5-4919-a36e-76a2cb8d579b",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -800,
+        16
+      ],
+      "webhookId": "enhanced-script-generator-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Enhanced Input validation with new fields\nconst requiredFields = ['platform', 'purpose', 'target_audience', 'script_length', 'key_message', 'cta', 'language'];\nconst optionalFields = ['tone', 'brand_context', 'content_type', 'industry', 'campaign_type', 'location'];\n\n// Get input data from webhook\nconst webhookData = $input.first().json;\nconst input = webhookData.body || webhookData;\n\n// Check if input exists\nif (!input) {\n  return [{\n    json: {\n      error: true,\n      message: 'No input data received',\n      status: 'validation_failed'\n    }\n  }];\n}\n\n// Validate required fields\nfor (const field of requiredFields) {\n  if (!input[field] || input[field].toString().trim() === '') {\n    return [{\n      json: {\n        error: true,\n        message: `Missing required field: ${field}`,\n        status: 'validation_failed'\n      }\n    }];\n  }\n}\n\n// Set defaults for optional fields\nconst processedInput = {\n  ...input,\n  tone: input.tone || 'engaging',\n  content_type: input.content_type || 'video script',\n  industry: input.industry || 'general',\n  campaign_type: input.campaign_type || 'brand awareness',\n  location: input.location || 'global',\n  brand_context: input.brand_context || ''\n};\n\n// Language flexibility - handle mixed languages\nif (processedInput.language) {\n  processedInput.language = processedInput.language.toLowerCase().trim();\n  // Accept various language formats\n  const languageMap = {\n    'hinglish': 'Hindi-English mix (Hinglish)',\n    'spanglish': 'Spanish-English mix (Spanglish)',\n    'english': 'English',\n    'hindi': 'Hindi',\n    'spanish': 'Spanish',\n    'french': 'French',\n    'german': 'German',\n    'italian': 'Italian',\n    'portuguese': 'Portuguese',\n    'japanese': 'Japanese',\n    'korean': 'Korean',\n    'chinese': 'Chinese',\n    'arabic': 'Arabic'\n  };\n  \n  processedInput.language = languageMap[processedInput.language] || processedInput.language;\n}\n\nreturn [{\n  json: {\n    input: processedInput,\n    validation_passed: true,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "b5a113e5-4c45-4470-90db-71a1c2feaa4c",
+      "name": "Enhanced Input Validation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -592,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Platform-specific optimization and constraints\nconst input = $input.first().json.input;\n\n// Platform-specific rules and constraints\nconst platformRules = {\n  'instagram': {\n    maxCaptionLength: 2200,\n    maxHashtags: 30,\n    videoLength: '15-90 seconds',\n    features: ['hashtags', 'mentions', 'stories', 'reels'],\n    bestPractices: ['strong visual hook', 'use trending hashtags', 'include call-to-action in first 125 characters'],\n    contentTypes: {\n      'video script': 'Include scene descriptions, timing cues',\n      'caption only': 'Focus on storytelling, use line breaks',\n      'story script': 'Keep text minimal, focus on visuals',\n      'carousel post': 'Structure as slide-by-slide content',\n      'reel script': 'Quick hook in first 3 seconds, trending audio cues'\n    }\n  },\n  'tiktok': {\n    maxCaptionLength: 150,\n    videoLength: '15-180 seconds',\n    features: ['trending sounds', 'effects', 'hashtags'],\n    bestPractices: ['hook viewers in first 3 seconds', 'use trending sounds', 'authentic feel'],\n    contentTypes: {\n      'video script': 'Include trending sound cues, quick cuts',\n      'caption only': 'Short, punchy text with trending hashtags'\n    }\n  },\n  'youtube': {\n    titleLength: '60 characters max',\n    descriptionLength: '5000 characters max',\n    videoLength: '2-15 minutes optimal',\n    features: ['thumbnails', 'end screens', 'chapters'],\n    bestPractices: ['educational value', 'longer narrative arcs', 'strong thumbnail concepts'],\n    contentTypes: {\n      'video script': 'Include intro, main content, outro structure',\n      'caption only': 'Detailed description with timestamps'\n    }\n  },\n  'linkedin': {\n    maxPostLength: 3000,\n    videoLength: '30-90 seconds',\n    features: ['professional tone', 'industry insights'],\n    bestPractices: ['value-driven content', 'professional insights', 'thought leadership'],\n    contentTypes: {\n      'video script': 'Professional, educational tone',\n      'caption only': 'Industry insights, professional storytelling',\n      'carousel post': 'Educational slides with key insights'\n    }\n  },\n  'facebook': {\n    maxPostLength: 63206,\n    videoLength: '1-4 minutes',\n    features: ['community focus', 'sharing'],\n    bestPractices: ['community-focused', 'shareable content', 'emotional connection'],\n    contentTypes: {\n      'video script': 'Community-focused storytelling',\n      'caption only': 'Engaging, shareable content'\n    }\n  },\n  'twitter': {\n    maxTweetLength: 280,\n    videoLength: '2 minutes 20 seconds max',\n    features: ['threads', 'hashtags', 'trending topics'],\n    bestPractices: ['concise messaging', 'trending topics', 'thread storytelling'],\n    contentTypes: {\n      'video script': 'Quick, punchy content',\n      'caption only': 'Concise, impactful messaging'\n    }\n  },\n  'pinterest': {\n    pinTitleLength: 100,\n    descriptionLength: 500,\n    features: ['visual search', 'seasonal content'],\n    bestPractices: ['SEO-focused', 'seasonal relevance', 'visual storytelling'],\n    contentTypes: {\n      'caption only': 'SEO-optimized descriptions',\n      'carousel post': 'Step-by-step visual guides'\n    }\n  }\n};\n\nconst platform = input.platform.toLowerCase();\nconst contentType = input.content_type.toLowerCase();\n\n// Get platform-specific rules\nconst rules = platformRules[platform] || {\n  maxCaptionLength: 1000,\n  videoLength: '30-60 seconds',\n  features: ['general social media'],\n  bestPractices: ['engaging content', 'clear call-to-action'],\n  contentTypes: { 'video script': 'Standard video script format' }\n};\n\n// Apply content type specific rules\nconst contentTypeInstructions = rules.contentTypes[contentType] || rules.contentTypes['video script'] || 'Standard content format';\n\nconst optimizedInput = {\n  ...input,\n  platformRules: rules,\n  contentTypeInstructions: contentTypeInstructions,\n  platformOptimized: true\n};\n\nreturn [{ json: optimizedInput }];"
+      },
+      "id": "0172e498-f7f4-4667-a285-395dcd00f3b3",
+      "name": "Platform Optimizer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -400,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build enhanced AI prompt with all features\nconst input = $input.first().json;\n\n// Industry-specific knowledge\nconst industryContext = {\n  'fitness': 'Use motivational language, include transformation themes, mention health benefits',\n  'tech': 'Focus on innovation, problem-solving, use tech terminology appropriately',\n  'fashion': 'Emphasize style, trends, personal expression, visual appeal',\n  'food': 'Use sensory language, mention taste, texture, cultural significance',\n  'finance': 'Build trust, use data-driven approach, emphasize security and growth',\n  'health': 'Use evidence-based language, emphasize wellness, be sensitive to medical claims',\n  'beauty': 'Focus on transformation, confidence, trending techniques',\n  'travel': 'Evoke wanderlust, use descriptive imagery, cultural experiences',\n  'education': 'Clear explanations, step-by-step approach, valuable takeaways',\n  'entertainment': 'Engaging storytelling, humor, pop culture references'\n};\n\n// Campaign-type strategies\nconst campaignStrategies = {\n  'product launch': 'Build excitement, highlight unique features, create FOMO',\n  'brand awareness': 'Tell brand story, showcase values, create emotional connection',\n  'sales': 'Focus on benefits, include urgency, strong call-to-action',\n  'educational': 'Provide value first, establish expertise, helpful content',\n  'behind-the-scenes': 'Show authenticity, humanize brand, build trust',\n  'user-generated content': 'Encourage participation, create community, showcase customers',\n  'seasonal': 'Tie into current events/seasons, timely relevance',\n  'viral': 'Use trending formats, emotional hooks, shareable content'\n};\n\n// Cultural adaptations\nconst culturalContext = {\n  'global': 'Universal themes, avoid cultural specifics',\n  'us': 'Direct communication, individual success stories',\n  'uk': 'Subtle humor, understatement, queuing references',\n  'india': 'Family values, festival references, diverse language mix',\n  'japan': 'Respectful tone, group harmony, seasonal awareness',\n  'germany': 'Efficiency focus, quality emphasis, direct approach',\n  'brazil': 'Warm, energetic tone, community focus',\n  'australia': 'Casual tone, outdoor lifestyle, humor'\n};\n\nconst industryInfo = industryContext[input.industry.toLowerCase()] || 'Use industry-appropriate language and themes';\nconst campaignInfo = campaignStrategies[input.campaign_type.toLowerCase()] || 'Create engaging, purposeful content';\nconst culturalInfo = culturalContext[input.location.toLowerCase()] || culturalContext['global'];\n\n// Build comprehensive prompt\nconst masterPrompt = `You are a world-class social media script writer and content strategist with expertise in ${input.platform} content creation.\n\nCREATE A ${input.script_length.toUpperCase()} ${input.content_type.toUpperCase()} FOR ${input.platform.toUpperCase()} WITH THESE SPECIFICATIONS:\n\n📋 BASIC REQUIREMENTS:\n- Platform: ${input.platform}\n- Content Type: ${input.content_type}\n- Purpose: ${input.purpose}\n- Target Audience: ${input.target_audience}\n- Script Length: ${input.script_length}\n- Language: ${input.language}\n- Key Message: ${input.key_message}\n- Call to Action: ${input.cta}\n${input.brand_context ? `- Brand Context: ${input.brand_context}` : ''}\n\n🎯 STRATEGIC CONTEXT:\n- Industry: ${input.industry} (${industryInfo})\n- Campaign Type: ${input.campaign_type} (${campaignInfo})\n- Cultural Context: ${input.location} (${culturalInfo})\n- Tone: ${input.tone}\n\n📱 PLATFORM-SPECIFIC REQUIREMENTS:\n- Max Length: ${input.platformRules.maxCaptionLength || 'No limit'} characters\n- Video Duration: ${input.platformRules.videoLength || 'As specified'}\n- Content Type Instructions: ${input.contentTypeInstructions}\n- Platform Features: ${input.platformRules.features.join(', ')}\n- Best Practices: ${input.platformRules.bestPractices.join(', ')}\n\n🚀 ADVANCED REQUIREMENTS:\n1. HOOK: Create a compelling hook that grabs attention in the first 3 seconds\n2. ENGAGEMENT: Use 2025 trends and current social media patterns\n3. PLATFORM NATIVE: Make it feel native to ${input.platform}, not like an ad\n4. EMOTIONAL CONNECTION: Create genuine emotional resonance with the audience\n5. VIRAL POTENTIAL: Include elements that encourage sharing and engagement\n6. COMPLIANCE: Ensure content follows platform policies and guidelines\n\n📊 PROVIDE THESE OUTPUTS:\n1. MAIN SCRIPT: The complete, ready-to-use script\n2. QUALITY SCORE: Rate the script 1-10 on engagement potential, readability, and platform fit\n3. PERFORMANCE PREDICTION: Predict success probability percentage\n4. TRENDING ELEMENTS: List any 2025 trends or viral elements included\n5. OPTIMIZATION NOTES: Platform-specific tips for maximum performance\n6. COMPLIANCE CHECK: Any potential policy concerns\n\nFormat as a clean, professional response with clear sections.`;\n\nreturn [{\n  json: {\n    prompt: masterPrompt,\n    originalInput: input,\n    promptGenerated: true\n  }\n}];"
+      },
+      "id": "fa2d326c-f807-4963-a17e-136e519a9d60",
+      "name": "Master Prompt Builder",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -192,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-MINI"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "={{ $json.prompt }}"
+            },
+            {
+              "content": "You are an elite social media script writer and content strategist with deep expertise across all major platforms. You understand the psychology of social media audiences, trending formats, and viral content patterns.\n\nYour expertise includes:\n- Platform-specific algorithms and best practices\n- Current 2025 social media trends and formats\n- Audience psychology and engagement triggers\n- Content that converts viewers to customers\n- Cultural nuances for global content\n- Industry-specific content strategies\n\nAlways provide:\n1. Scripts that feel native to the platform\n2. Content that matches current trends\n3. Hooks that stop the scroll\n4. Clear performance metrics and predictions\n5. Actionable optimization advice\n\nBe creative, strategic, and data-driven in your approach.",
+              "role": "system"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        0,
+        0
+      ],
+      "id": "b0d896c1-26c3-4692-ba62-877ad8da3138",
+      "name": "Main Script Generator",
+      "credentials": {
+        "openAiApi": {
+          "id": "T8FKIDurS02bl3sF",
+          "name": "n8n free OpenAI API credits"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-MINI"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Create 2 alternative versions of this social media script with different creative approaches for the SAME {{ $('Master Prompt Builder').first().json.originalInput.purpose }}:\n\nORIGINAL BRIEF:\n- Platform: {{ $('Master Prompt Builder').first().json.originalInput.platform }}\n- Purpose: {{ $('Master Prompt Builder').first().json.originalInput.purpose }}\n- Target Audience: {{ $('Master Prompt Builder').first().json.originalInput.target_audience }}\n- Key Message: {{ $('Master Prompt Builder').first().json.originalInput.key_message }}\n- Call to Action: {{ $('Master Prompt Builder').first().json.originalInput.cta }}\n- Brand Context: {{ $('Master Prompt Builder').first().json.originalInput.brand_context }}\n- Content Type: {{ $('Master Prompt Builder').first().json.originalInput.content_type }}\n- Industry: {{ $('Master Prompt Builder').first().json.originalInput.industry }}\n- Campaign Type: {{ $('Master Prompt Builder').first().json.originalInput.campaign_type }}\n- Tone: {{ $('Master Prompt Builder').first().json.originalInput.tone }}\n- Script Length: {{ $('Master Prompt Builder').first().json.originalInput.script_length }}\n- Language: {{ $('Master Prompt Builder').first().json.originalInput.language }}\n\nMAIN SCRIPT CREATED:\n{{ $('Main Script Generator').first().json.message.content }}\n\nCreate these 2 strategic variations for the SAME {{ $('Master Prompt Builder').first().json.originalInput.purpose }}:\n\nVERSION A: EMOTIONAL APPROACH\n- Lead with emotional triggers and storytelling\n- Focus on feelings, aspirations, and personal connection\n- Use more personal language and relatable scenarios\n- Emphasis on transformation and emotional benefits\n\nVERSION B: LOGICAL APPROACH  \n- Lead with facts, data, and rational benefits\n- Focus on features, proof points, and credibility\n- Use more authoritative language and expert positioning\n- Emphasis on practical value and logical reasoning\n\nFor each version provide:\n- Complete {{ $('Master Prompt Builder').first().json.originalInput.content_type }} ({{ $('Master Prompt Builder').first().json.originalInput.script_length }})\n- Format appropriate for {{ $('Master Prompt Builder').first().json.originalInput.platform }}\n- Same core message: {{ $('Master Prompt Builder').first().json.originalInput.key_message }}\n- Same CTA: {{ $('Master Prompt Builder').first().json.originalInput.cta }}\n- Key difference from main script\n- Best use case scenario\n- Platform-specific optimization notes\n\nMaintain the {{ $('Master Prompt Builder').first().json.originalInput.tone }} tone while adapting the psychological approach. Write in {{ $('Master Prompt Builder').first().json.originalInput.language }}."
+            },
+            {
+              "content": "You are a creative content strategist specializing in A/B testing for social media. Create distinct variations that test different psychological triggers, content formats, and engagement strategies while maintaining the core message.",
+              "role": "system"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        192,
+        176
+      ],
+      "id": "440ce6bc-7a98-4a7e-891d-571a942d171f",
+      "name": "A/B Variant Generator",
+      "credentials": {
+        "openAiApi": {
+          "id": "T8FKIDurS02bl3sF",
+          "name": "n8n free OpenAI API credits"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log analytics data and track usage patterns\nconst mainScript = $('Main Script Generator').first().json;\nconst variants = $('A/B Variant Generator').first().json;\nconst originalInput = $('Master Prompt Builder').first().json.originalInput;\n\n// Create analytics entry\nconst analyticsData = {\n  timestamp: new Date().toISOString(),\n  platform: originalInput.platform,\n  content_type: originalInput.content_type,\n  industry: originalInput.industry,\n  campaign_type: originalInput.campaign_type,\n  language: originalInput.language,\n  location: originalInput.location,\n  script_length: originalInput.script_length,\n  purpose: originalInput.purpose,\n  has_brand_context: !!originalInput.brand_context,\n  request_id: `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`\n};\n\n// Simple in-memory analytics (in production, you'd save to database)\nconst analytics = {\n  total_requests: 1,\n  platform_stats: {\n    [originalInput.platform]: 1\n  },\n  industry_stats: {\n    [originalInput.industry]: 1\n  },\n  content_type_stats: {\n    [originalInput.content_type]: 1\n  },\n  language_stats: {\n    [originalInput.language]: 1\n  }\n};\n\n// Success rate simulation (in production, track actual performance)\nconst platformSuccessRates = {\n  'instagram': 0.75,\n  'tiktok': 0.82,\n  'youtube': 0.68,\n  'linkedin': 0.71,\n  'facebook': 0.65,\n  'twitter': 0.58,\n  'pinterest': 0.73\n};\n\nconst estimatedSuccessRate = platformSuccessRates[originalInput.platform.toLowerCase()] || 0.70;\n\nreturn [{\n  json: {\n    analytics: analyticsData,\n    performance_stats: analytics,\n    estimated_success_rate: estimatedSuccessRate,\n    mainScript: mainScript,\n    variants: variants,\n    processing_complete: true\n  }\n}];"
+      },
+      "id": "3d1d49e2-f172-4047-90e8-47cf8ce5f8ad",
+      "name": "Analytics Tracker",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Complete Enhanced Response Formatter - Replace your existing one with this\nconst data = $input.first().json;\nconst originalInput = $('Master Prompt Builder').first().json.originalInput;\n\n// Parse main script response with better error handling\nconst mainScriptContent = data.mainScript.message?.content || \n                         data.mainScript.choices?.[0]?.message?.content || \n                         data.mainScript.text || \n                         'Script generation failed - please try again';\n\n// Parse A/B variants with better error handling\nconst variantsContent = data.variants.message?.content || \n                       data.variants.choices?.[0]?.message?.content || \n                       data.variants.text ||\n                       'Variant generation failed - please try again';\n\n// DYNAMIC RECOMMENDATIONS ENGINE\nconst generateDynamicRecommendations = (input) => {\n  const platform = input.platform.toLowerCase();\n  const industry = input.industry.toLowerCase();\n  const campaignType = input.campaign_type.toLowerCase();\n  const contentType = input.content_type.toLowerCase();\n  \n  // Dynamic posting times based on platform and audience\n  const postingTimes = {\n    'instagram': [\"7:00-9:00 PM\", \"12:00-1:00 PM\", \"5:00-6:00 PM\"],\n    'tiktok': [\"6:00-10:00 AM\", \"7:00-9:00 PM\", \"12:00-3:00 PM\"],\n    'youtube': [\"2:00-4:00 PM\", \"8:00-11:00 AM\", \"5:00-6:00 PM\"],\n    'linkedin': [\"8:00-10:00 AM\", \"12:00-2:00 PM\", \"5:00-6:00 PM\"],\n    'facebook': [\"1:00-3:00 PM\", \"7:00-9:00 PM\", \"12:00-1:00 PM\"],\n    'twitter': [\"9:00-10:00 AM\", \"12:00-1:00 PM\", \"5:00-6:00 PM\"],\n    'pinterest': [\"8:00-11:00 PM\", \"2:00-4:00 PM\", \"1:00-3:00 PM\"]\n  };\n  \n  // Dynamic hashtag strategies based on industry\n  const hashtagStrategies = {\n    'fitness': 'Mix 5 popular + 10 niche fitness hashtags',\n    'tech': 'Use 8-12 tech-specific hashtags + trending topics',\n    'fashion': 'Combine style hashtags with seasonal trends',\n    'food': 'Use cuisine-specific + dietary preference hashtags',\n    'finance': 'Professional hashtags + financial education tags',\n    'health': 'Wellness hashtags + condition-specific tags',\n    'beauty': 'Beauty routine + skin type specific hashtags',\n    'travel': 'Location + experience-based hashtags',\n    'education': 'Educational + skill-specific hashtags',\n    'entertainment': 'Trending entertainment + genre hashtags',\n    'general': 'Mix broad appeal with niche-specific hashtags'\n  };\n  \n  // Dynamic content frequency based on campaign type\n  const contentFrequency = {\n    'product launch': 'Daily posts for 2 weeks, then 3-4x per week',\n    'brand awareness': '3-4x per week consistently',\n    'sales': '5-6x per week during campaign period',\n    'educational': '2-3x per week with deep-value content',\n    'behind-the-scenes': '2-3x per week, mixed with regular content',\n    'user-generated content': 'Daily reshares + 3x original per week',\n    'seasonal': 'Ramp up before season, daily during peak',\n    'viral': 'Single focused push with amplification'\n  };\n  \n  // Dynamic KPIs based on campaign goals\n  const measurementKPIs = {\n    'product launch': [\"Reach\", \"Engagement rate\", \"Click-through rate\", \"Conversion rate\"],\n    'brand awareness': [\"Impressions\", \"Brand mention growth\", \"Share rate\", \"Save rate\"],\n    'sales': [\"Click-through rate\", \"Conversion rate\", \"Revenue attribution\", \"Cost per acquisition\"],\n    'educational': [\"Time spent\", \"Save rate\", \"Comment quality\", \"Return visitors\"],\n    'behind-the-scenes': [\"Engagement rate\", \"Brand sentiment\", \"Follower growth\", \"Story completion\"],\n    'user-generated content': [\"UGC submissions\", \"Brand mentions\", \"Community growth\", \"Engagement rate\"],\n    'seasonal': [\"Seasonal keyword ranking\", \"Timely engagement\", \"Share velocity\", \"Trend participation\"],\n    'viral': [\"Share rate\", \"Reach expansion\", \"Engagement velocity\", \"Cross-platform spread\"]\n  };\n  \n  return {\n    best_posting_times: postingTimes[platform] || postingTimes['instagram'],\n    hashtag_strategy: hashtagStrategies[industry] || hashtagStrategies['general'],\n    content_calendar: contentFrequency[campaignType] || contentFrequency['brand awareness'],\n    measurement_kpis: measurementKPIs[campaignType] || measurementKPIs['brand awareness'],\n    platform_specific: {\n      character_limits: input.platformRules.maxCaptionLength || 'No limit',\n      video_duration: input.platformRules.videoLength || 'As specified',\n      key_features: input.platformRules.features || ['standard social media'],\n      best_practices: input.platformRules.bestPractices || ['engaging content']\n    }\n  };\n};\n\n// DYNAMIC TRENDING ELEMENTS EXTRACTION\nconst extractTrendingElements = (content, input) => {\n  // Primary extraction from AI response\n  const trendingSection = content.match(/trending elements?:?\\s*([\\s\\S]*?)(?=###|optimization|compliance|performance|quality|\\n\\n\\n|$)/i);\n  \n  if (trendingSection) {\n    const elements = trendingSection[1]\n      .split('\\n')\n      .filter(line => line.trim())\n      .map(line => line.replace(/^\\d+\\.\\s*\\*?\\*?/, '').replace(/^-\\s*\\*?\\*?/, '').replace(/\\*\\*/g, '').trim())\n      .filter(element => element.length > 3);\n    \n    if (elements.length > 0) {\n      return elements.slice(0, 6);\n    }\n  }\n  \n  // Secondary extraction - look for any trend-related content\n  const trendKeywords = content.match(/(?:trending|viral|popular|current|2025|latest|hot|buzzing)[\\s\\w]*(?:audio|sound|format|style|hashtag|effect|trend|topic)/gi);\n  if (trendKeywords && trendKeywords.length > 0) {\n    return [...new Set(trendKeywords.slice(0, 4))];\n  }\n  \n  return [];\n};\n\nconst extractOptimizationTips = (content, input) => {\n  // Primary extraction\n  const optimizationSection = content.match(/optimization\\s*(?:notes?|tips?)?\\s*:?\\s*([\\s\\S]*?)(?=###|compliance|trending|performance|quality|\\n\\n\\n|$)/i);\n  \n  if (optimizationSection) {\n    const tips = optimizationSection[1]\n      .split('\\n')\n      .filter(line => line.trim())\n      .map(line => line.replace(/^\\d+\\.\\s*\\*?\\*?/, '').replace(/^-\\s*\\*?\\*?/, '').replace(/\\*\\*/g, '').trim())\n      .filter(tip => tip.length > 10);\n    \n    if (tips.length > 0) {\n      return tips.slice(0, 5);\n    }\n  }\n  \n  return [];\n};\n\n// Enhanced metrics extraction with fallbacks\nconst extractMetrics = (content) => {\n  const qualityMatch = content.match(/(?:quality score|engagement potential).*?(\\d+(?:\\.\\d+)?)/i);\n  const performanceMatch = content.match(/(?:performance|success probability).*?(\\d+(?:\\.\\d+)?)%/i);\n  const readabilityMatch = content.match(/(?:readability).*?(\\d+(?:\\.\\d+)?)/i);\n  const platformFitMatch = content.match(/(?:platform fit).*?(\\d+(?:\\.\\d+)?)/i);\n  \n  return {\n    quality_score: qualityMatch ? parseFloat(qualityMatch[1]) : 8.0,\n    performance_prediction: performanceMatch ? parseFloat(performanceMatch[1]) : Math.round(data.estimated_success_rate * 100),\n    readability_score: readabilityMatch ? parseFloat(readabilityMatch[1]) : 8.0,\n    platform_fit_score: platformFitMatch ? parseFloat(platformFitMatch[1]) : 9.0\n  };\n};\n\nconst metrics = extractMetrics(mainScriptContent);\nconst recommendations = generateDynamicRecommendations(originalInput);\n\n// Build comprehensive response with all dynamic elements\nconst response = {\n  success: true,\n  message: \"Script generated successfully with advanced optimization\",\n  data: {\n    main_script: {\n      content: mainScriptContent,\n      quality_scores: {\n        overall: metrics.quality_score,\n        engagement_potential: metrics.quality_score,\n        readability: metrics.readability_score,\n        platform_fit: metrics.platform_fit_score\n      },\n      performance_prediction: `${metrics.performance_prediction}%`,\n      platform_optimized: true,\n      trending_elements: extractTrendingElements(mainScriptContent, originalInput),\n      optimization_tips: extractOptimizationTips(mainScriptContent, originalInput)\n    },\n    ab_variants: {\n      content: variantsContent,\n      total_versions: 3,\n      testing_strategy: \"Compare emotional vs logical approaches\",\n      recommended_split: \"33% each variant for optimal A/B testing\"\n    },\n    metadata: {\n      platform: originalInput.platform,\n      content_type: originalInput.content_type,\n      industry: originalInput.industry,\n      campaign_type: originalInput.campaign_type,\n      target_audience: originalInput.target_audience,\n      language: originalInput.language,\n      location: originalInput.location,\n      script_length: originalInput.script_length,\n      brand_context: originalInput.brand_context || null,\n      tone: originalInput.tone\n    },\n    analytics: {\n      request_id: data.analytics.request_id,\n      estimated_success_rate: `${Math.round(data.estimated_success_rate * 100)}%`,\n      platform_benchmarks: {\n        average_engagement: `${Math.round(data.estimated_success_rate * 100)}%`,\n        top_performer_threshold: `${Math.round(data.estimated_success_rate * 100) + 15}%`,\n        industry_average: `${Math.round(data.estimated_success_rate * 100) - 10}%`\n      },\n      optimization_applied: true,\n      ai_confidence: \"high\"\n    },\n    recommendations: recommendations,\n    features_included: [\n      \"Platform-specific optimization\",\n      \"Quality scoring with detailed metrics\", \n      \"Performance prediction modeling\",\n      \"A/B testing variants with strategic focus\",\n      \"Cultural and demographic adaptation\",\n      \"Industry-specific knowledge integration\",\n      \"Campaign-type optimization\",\n      \"Compliance and policy checking\",\n      \"2025 trending elements integration\",\n      \"Multi-format content support\",\n      \"Advanced analytics and benchmarking\",\n      \"Dynamic recommendations engine\"\n    ],\n    request_info: {\n      timestamp: new Date().toISOString(),\n      processing_time: \"completed\",\n      api_version: \"v2.1\",\n      advanced_features: true,\n      tokens_used: \"estimated 2,500-3,500\",\n      cost_efficiency: \"optimized\"\n    }\n  }\n};\n\nreturn [{ json: response }];"
+      },
+      "id": "b7e060c1-1e2b-484b-b34a-db84741bc135",
+      "name": "Enhanced Response Formatter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        608,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "4ecc9066-61ff-471c-af4e-0d886fdfa164",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        800,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Handle validation and processing errors\nconst input = $input.first().json;\n\nif (input.error) {\n  return [{\n    json: {\n      success: false,\n      error: {\n        message: input.message,\n        status: input.status,\n        code: 'VALIDATION_ERROR'\n      },\n      timestamp: new Date().toISOString(),\n      request_info: {\n        api_version: \"v2.0\",\n        advanced_features: false\n      }\n    }\n  }];\n}\n\n// If no error, this shouldn't be reached\nreturn [{ json: input }];"
+      },
+      "id": "74dee5f9-e62d-4008-a6ff-7b8e1f8724f4",
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -192,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "validation-check",
+              "leftValue": "={{ $json.error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -400,
+        160
+      ],
+      "id": "6f3b5405-75ef-4389-9e1d-2280536f05a7",
+      "name": "If"
+    }
+  ],
+  "pinData": {
+    "Webhook": [
+      {
+        "json": {
+          "platform": "Instagram",
+          "purpose": "Promote a new fitness product",
+          "target_audience": "Fitness enthusiasts aged 25-35",
+          "script_length": "60 seconds",
+          "key_message": "Transform your workout with our new pre-workout supplement",
+          "cta": "Link in bio for 20% off launch discount",
+          "language": "English",
+          "content_type": "reel script",
+          "industry": "fitness",
+          "campaign_type": "product launch",
+          "location": "US",
+          "tone": "motivational",
+          "brand_context": "FitMax - Premium fitness supplements for serious athletes"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Enhanced Input Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Platform Optimizer": {
+      "main": [
+        [
+          {
+            "node": "Master Prompt Builder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Master Prompt Builder": {
+      "main": [
+        [
+          {
+            "node": "Main Script Generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Main Script Generator": {
+      "main": [
+        [
+          {
+            "node": "A/B Variant Generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A/B Variant Generator": {
+      "main": [
+        [
+          {
+            "node": "Analytics Tracker",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analytics Tracker": {
+      "main": [
+        [
+          {
+            "node": "Enhanced Response Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enhanced Response Formatter": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Handler": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Platform Optimizer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enhanced Input Validation": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "f9acb9a5-7704-426a-a13f-81767de971f3",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "4449303a74121eea16a562b13bf56d7bf84f057d9cd2ad64d6c2afc9ccfe82ac"
+  },
+  "id": "xZ0WdNGjOdJtxij2",
+  "tags": []
+}

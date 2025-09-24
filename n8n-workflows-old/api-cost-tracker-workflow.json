@@ -1,0 +1,242 @@
+{
+  "name": "API Cost Tracker Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "api-cost-tracker",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "API Cost Data Webhook", 
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "api-cost-tracker-webhook"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "action",
+              "value": "={{$json.action || 'sync_costs'}}"
+            },
+            {
+              "name": "user_id", 
+              "value": "={{$json.user_id || 'anonymous'}}"
+            },
+            {
+              "name": "time_range",
+              "value": "={{$json.time_range || '30d'}}"
+            },
+            {
+              "name": "cost_data",
+              "value": "={{JSON.stringify($json.cost_data || {})}}"
+            },
+            {
+              "name": "webhook_callback",
+              "value": "={{$json.webhook_callback || '{{process.env.DASHBOARD_API_URL || \"http://localhost:3001\"}}/api/webhooks/api-cost-update'}}"
+            }
+          ]
+        }
+      },
+      "id": "extract-request-data",
+      "name": "Extract Request Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.action}}",
+              "operation": "equal", 
+              "value2": "sync_costs"
+            }
+          ]
+        }
+      },
+      "id": "check-action-type",
+      "name": "Check Action Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// API Cost Analysis and Processing\nconst items = [];\n\n// Mock comprehensive cost data analysis\nconst generateCostAnalysis = () => {\n  const currentMonth = new Date().getMonth();\n  const services = [\n    { name: 'OpenAI GPT-4', cost: Math.floor(Math.random() * 500) + 200, limit: 1000, usage: Math.floor(Math.random() * 80) + 10 },\n    { name: 'Google APIs', cost: Math.floor(Math.random() * 200) + 50, limit: 300, usage: Math.floor(Math.random() * 60) + 20 },\n    { name: 'SEMrush API', cost: Math.floor(Math.random() * 150) + 100, limit: 500, usage: Math.floor(Math.random() * 70) + 15 },\n    { name: 'Ahrefs API', cost: Math.floor(Math.random() * 300) + 150, limit: 800, usage: Math.floor(Math.random() * 90) + 5 },\n    { name: 'Stripe API', cost: Math.floor(Math.random() * 50) + 10, limit: 100, usage: Math.floor(Math.random() * 40) + 30 }\n  ];\n\n  const totalCost = services.reduce((sum, service) => sum + service.cost, 0);\n  const totalBudget = services.reduce((sum, service) => sum + service.limit, 0);\n  const budgetUsage = (totalCost / totalBudget) * 100;\n\n  // Generate alerts\n  const alerts = [];\n  services.forEach(service => {\n    const serviceUsage = (service.cost / service.limit) * 100;\n    if (serviceUsage > 90) {\n      alerts.push({\n        id: `alert_${service.name.replace(/\\s+/g, '_').toLowerCase()}`,\n        service: service.name,\n        severity: 'critical',\n        message: `${service.name} usage at ${serviceUsage.toFixed(1)}% of budget`,\n        cost: service.cost,\n        limit: service.limit,\n        timestamp: new Date().toISOString()\n      });\n    } else if (serviceUsage > 75) {\n      alerts.push({\n        id: `alert_${service.name.replace(/\\s+/g, '_').toLowerCase()}`,\n        service: service.name,\n        severity: 'warning',\n        message: `${service.name} usage at ${serviceUsage.toFixed(1)}% of budget`,\n        cost: service.cost,\n        limit: service.limit,\n        timestamp: new Date().toISOString()\n      });\n    }\n  });\n\n  // Generate optimization recommendations\n  const recommendations = [\n    {\n      service: 'OpenAI GPT-4',\n      recommendation: 'Consider using GPT-3.5-turbo for non-critical tasks to reduce costs by 90%',\n      potential_savings: totalCost * 0.3,\n      priority: 'high'\n    },\n    {\n      service: 'API Optimization',\n      recommendation: 'Implement caching to reduce redundant API calls by 25%',\n      potential_savings: totalCost * 0.15,\n      priority: 'medium'\n    },\n    {\n      service: 'Usage Monitoring',\n      recommendation: 'Set up automated usage alerts to prevent budget overruns',\n      potential_savings: totalCost * 0.1,\n      priority: 'low'\n    }\n  ];\n\n  return {\n    cost_summary: {\n      total_monthly_cost: totalCost,\n      total_budget: totalBudget,\n      budget_usage_percent: budgetUsage,\n      days_remaining: 30 - new Date().getDate(),\n      projected_monthly_cost: totalCost * (30 / new Date().getDate())\n    },\n    service_breakdown: services.map(service => ({\n      ...service,\n      usage_percent: (service.cost / service.limit) * 100,\n      status: service.cost / service.limit > 0.9 ? 'critical' : service.cost / service.limit > 0.75 ? 'warning' : 'normal'\n    })),\n    alerts: alerts,\n    optimization_recommendations: recommendations,\n    efficiency_metrics: {\n      cost_per_request: (totalCost / 10000).toFixed(4),\n      total_requests: 10000 + Math.floor(Math.random() * 5000),\n      avg_response_time: '250ms',\n      total_potential_savings: recommendations.reduce((sum, rec) => sum + rec.potential_savings, 0)\n    },\n    analysis_timestamp: new Date().toISOString(),\n    next_analysis: new Date(Date.now() + 86400000).toISOString()\n  };\n};\n\nconst costAnalysis = generateCostAnalysis();\nconst output = {\n  cost_analysis: costAnalysis,\n  user_id: $json.user_id,\n  action: 'sync_costs',\n  webhook_callback: $json.webhook_callback,\n  analysis_timestamp: new Date().toISOString()\n};\n\nitems.push(output);\nreturn items;"
+      },
+      "id": "process-cost-sync", 
+      "name": "Process Cost Sync",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json.cost_analysis.alerts.filter(a => a.severity === 'critical').length}}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "check-critical-alerts",
+      "name": "Check for Critical Alerts", 
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{$json.webhook_callback}}",
+        "options": {
+          "timeout": 15000,
+          "retry": {
+            "enabled": true,
+            "maxAttempts": 3,
+            "waitBetween": 1000
+          },
+          "response": {
+            "response": {
+              "neverError": false
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{JSON.stringify($json)}}"
+      },
+      "id": "send-to-dashboard",
+      "name": "Send Results to Dashboard",
+      "type": "n8n-nodes-base.httpRequest", 
+      "typeVersion": 3,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "status",
+              "value": "success"
+            },
+            {
+              "name": "message",
+              "value": "API cost analysis completed successfully"
+            },
+            {
+              "name": "total_alerts",
+              "value": "={{$json.cost_analysis?.alerts?.length || 0}}"
+            },
+            {
+              "name": "potential_savings", 
+              "value": "$={{$json.cost_analysis?.efficiency_metrics?.total_potential_savings?.toFixed(2) || '0.00'}}"
+            }
+          ]
+        }
+      },
+      "id": "success-response",
+      "name": "Success Response", 
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [1560, 300]
+    }
+  ],
+  "connections": {
+    "API Cost Data Webhook": {
+      "main": [
+        [
+          {
+            "node": "Extract Request Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Request Data": {
+      "main": [
+        [
+          {
+            "node": "Check Action Type", 
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Action Type": {
+      "main": [
+        [
+          {
+            "node": "Process Cost Sync",
+            "type": "main", 
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Cost Sync": {
+      "main": [
+        [
+          {
+            "node": "Check for Critical Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check for Critical Alerts": {
+      "main": [
+        [
+          {
+            "node": "Send Results to Dashboard",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Results to Dashboard", 
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Results to Dashboard": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": {},
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "api-cost-tracker",
+      "name": "api-cost-tracker"  
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}

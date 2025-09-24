@@ -1,0 +1,420 @@
+{
+  "name": "insta_facebook_trending_hashtag",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hashtag-analyzer",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "0ac9f659-a96d-4b24-ad87-3362c1719c7c",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -944,
+        -96
+      ],
+      "webhookId": "hashtag-analyzer"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract and validate input parameters\nconst inputData = $input.first().json;\n\n// Default values\nconst platforms = inputData.platforms || ['instagram', 'facebook', 'twitter'];\nconst keywords = inputData.keywords || [];\nconst location = inputData.location || 'global';\nconst trackingPeriod = inputData.trackingPeriod || '24h';\nconst numHashtags = inputData.numHashtags || 20;\n\n// Convert tracking period to hours\nconst periodMapping = {\n  '6h': 6,\n  '24h': 24,\n  '7d': 168\n};\n\nconst trackingHours = periodMapping[trackingPeriod] || 24;\n\n// Calculate start time\nconst startTime = new Date(Date.now() - (trackingHours * 60 * 60 * 1000));\n\nreturn {\n  platforms,\n  keywords,\n  location,\n  trackingPeriod,\n  trackingHours,\n  numHashtags,\n  startTime: startTime.toISOString(),\n  requestId: Date.now().toString()\n};"
+      },
+      "id": "aec1d3db-fa4f-4c24-95c8-1f8521bcb7d7",
+      "name": "Input Processor",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -736,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "instagram-condition",
+              "leftValue": "={{ $json.platforms }}",
+              "rightValue": "instagram",
+              "operator": {
+                "type": "array",
+                "operation": "contains",
+                "rightType": "any"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "1ed0ba74-f5d4-49f7-aa63-d7dbfeadadc3",
+      "name": "Check Instagram",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -544,
+        -208
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "facebook-condition",
+              "leftValue": "={{ $json.platforms }}",
+              "rightValue": "facebook",
+              "operator": {
+                "type": "array",
+                "operation": "contains",
+                "rightType": "any"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "66ff1482-0df4-41b5-8876-b3fe7cb9b5b3",
+      "name": "Check Facebook",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -544,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Function node code\n// \"items\" here is the array of posts from HTTP Request\n\nlet allHashtags = [];\n\nfor (let item of items) {\n  const post = item.json;\n\n  // From the \"hashtags\" array\n  if (Array.isArray(post.hashtags)) {\n    allHashtags = allHashtags.concat(post.hashtags);\n  }\n\n  // From the caption text\n  if (typeof post.caption === 'string') {\n    const matches = post.caption.match(/#[\\p{L}0-9_]+/gu) || [];\n    allHashtags = allHashtags.concat(matches.map(t => t.slice(1)));\n  }\n}\n\n// Remove duplicates and prepend \"#\"\nconst uniqueHashtags = [...new Set(allHashtags)].map(tag => `#${tag}`);\n\nreturn [\n  {\n    json: {\n      instagram_hashtags: uniqueHashtags\n    }\n  }\n];"
+      },
+      "id": "e0634a46-0123-4f8c-b03b-d8780079dc53",
+      "name": "Process Instagram",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        176,
+        -288
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merge HTML from all items\nlet html = '';\nfor (const item of items) {\n  const body = item.json?.body ?? item.json;\n  html += typeof body === 'string' ? body : JSON.stringify(body);\n}\n\n// Regex to match hashtags (words starting with #)\nconst hashtagRegex = /#([a-zA-Z0-9_]+)/g;\nlet matches = Array.from(html.matchAll(hashtagRegex), m => '#' + m[1]);\n\n// Deduplicate while preserving order\nconst seen = new Set();\nmatches = matches.filter(tag => {\n  if (seen.has(tag.toLowerCase())) return false;\n  seen.add(tag.toLowerCase());\n  return true;\n});\n\n// Return hashtags in clean JSON\nreturn [{\n  json: {\n    totalHashtags: matches.length,\n    facebook_hashtags: matches\n  }\n}];"
+      },
+      "id": "020b6525-d337-4226-8daa-682c90a8fb36",
+      "name": "Process Facebook",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        176,
+        -96
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "b3d63827-ca6e-41d2-8d6e-875217e77ce5",
+      "name": "No Instagram Data",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -256,
+        -144
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "880c43bb-bc40-4069-a495-5ded3b37e982",
+      "name": "No Facebook Data",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -256,
+        176
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "65da2a84-9df9-4b02-baa7-0a9ad2f96b9c",
+      "name": "Merge Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        640,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get input params from Input Processor\nconst inputParams = $('Input Processor').first().json;\n\n// Get merged platform hashtags from previous node\nconst mergedData = $input.all().map(item => item.json);\n\n// Helper: rank hashtags for a platform\nfunction rankHashtags(tagsArray, limit) {\n  const freqMap = {};\n  const originalCaseMap = {};\n\n  tagsArray.forEach(tag => {\n    const lower = tag.toLowerCase();\n    freqMap[lower] = (freqMap[lower] || 0) + 1;\n    if (!originalCaseMap[lower]) {\n      originalCaseMap[lower] = tag;\n    }\n  });\n\n  return Object.keys(freqMap)\n    .sort((a, b) => {\n      const freqDiff = freqMap[b] - freqMap[a];\n      return freqDiff !== 0 ? freqDiff : a.localeCompare(b);\n    })\n    .map(lower => ({\n      hashtag: originalCaseMap[lower],\n      count: freqMap[lower]\n    }))\n    .slice(0, limit);\n}\n\n// Prepare result\nconst result = {\n  success: true,\n  timestamp: new Date().toISOString(),\n  requestId: inputParams.requestId,\n  parameters: inputParams,\n  platforms: {}\n};\n\n// Extract and rank per platform\nif (inputParams.platforms.includes(\"instagram\")) {\n  let instagramTags = [];\n  mergedData.forEach(data => {\n    if (Array.isArray(data.instagram_hashtags)) {\n      instagramTags.push(...data.instagram_hashtags);\n    }\n  });\n  result.platforms.instagram = {\n    totalHashtagsFound: instagramTags.length,\n    topHashtags: rankHashtags(instagramTags, inputParams.numHashtags)\n  };\n}\n\nif (inputParams.platforms.includes(\"facebook\")) {\n  let facebookTags = [];\n  mergedData.forEach(data => {\n    if (Array.isArray(data.facebook_hashtags)) {\n      facebookTags.push(...data.facebook_hashtags);\n    }\n  });\n  result.platforms.facebook = {\n    totalHashtagsFound: facebookTags.length,\n    topHashtags: rankHashtags(facebookTags, inputParams.numHashtags)\n  };\n}\n\nif (inputParams.platforms.includes(\"twitter\")) {\n  let twitterTags = [];\n  mergedData.forEach(data => {\n    if (Array.isArray(data.twitter_hashtags)) {\n      twitterTags.push(...data.twitter_hashtags);\n    }\n  });\n  result.platforms.twitter = {\n    totalHashtagsFound: twitterTags.length,\n    topHashtags: rankHashtags(twitterTags, inputParams.numHashtags)\n  };\n}\n\n// Return single item\nreturn [{ json: result }];"
+      },
+      "id": "3c9119c2-d4ad-4463-9a6f-835c4ade6cca",
+      "name": "Analyze and Format",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "91e46428-f459-412b-b3f0-0a04413635c3",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1136,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/apify~instagram-hashtag-scraper/run-sync-get-dataset-items?token=YOUR_APIFY_API_TOKEN_HERE",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"hashtags\": [\"{{ $json.keywords[0] }}\"],\n  \"resultsLimit\": 50,\n  \"resultsType\": \"posts\",\n  \"addParentData\": false\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -224,
+        -352
+      ],
+      "id": "b04ff6b2-df3d-4b8a-9015-52263f17e401",
+      "name": "Instagram"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://best-hashtags.com/hashtag/{{ $json.keywords[0] }}/",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -240,
+        16
+      ],
+      "id": "027ec124-d0a7-4349-a63c-8ef16ceff51a",
+      "name": "HTTP Request"
+    }
+  ],
+  "pinData": {
+    "Webhook Trigger": [
+      {
+        "json": {
+          "platforms": [
+            "instagram"
+          ],
+          "keywords": [
+            "15 august"
+          ],
+          "location": "India",
+          "trackingPeriod": "24h",
+          "numHashtags": 20
+        }
+      }
+    ],
+    "Input Processor": [
+      {
+        "json": {
+          "platforms": [
+            "instagram"
+          ],
+          "keywords": [
+            "Indpendence"
+          ],
+          "location": "India",
+          "trackingPeriod": "24h",
+          "trackingHours": 24,
+          "numHashtags": 20,
+          "startTime": "2025-08-14T20:15:25.445Z",
+          "requestId": "1755288925446"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Input Processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Input Processor": {
+      "main": [
+        [
+          {
+            "node": "Check Instagram",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Check Facebook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Instagram": {
+      "main": [
+        [
+          {
+            "node": "Instagram",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Instagram Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Facebook": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Facebook Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Instagram": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Facebook": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "No Instagram Data": {
+      "main": [
+        []
+      ]
+    },
+    "No Facebook Data": {
+      "main": [
+        []
+      ]
+    },
+    "Merge Results": {
+      "main": [
+        [
+          {
+            "node": "Analyze and Format",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze and Format": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Instagram": {
+      "main": [
+        [
+          {
+            "node": "Process Instagram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Process Facebook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "3b5caffd-e6d1-41e0-b7c6-9038d96c635c",
+  "meta": {
+    "instanceId": "892ac801f9cd1033acf424fd4efdd9c93b5867f66fd44caab7b86f5d0099f7b2"
+  },
+  "id": "E9uQAzcf25PCa23j",
+  "tags": []
+}

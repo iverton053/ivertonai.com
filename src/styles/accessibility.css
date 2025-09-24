@@ -1,0 +1,171 @@
+/* Accessibility Improvements */
+
+/* Better color contrast for readability */
+:root {
+  /* Improved color palette for better accessibility */
+  --text-primary: #ffffff;
+  --text-secondary: #e5e7eb;
+  --text-muted: #d1d5db;
+  --text-disabled: #9ca3af;
+  
+  /* Improved purple shades with better contrast */
+  --purple-light: #c084fc;
+  --purple-medium: #a855f7;
+  --purple-accent: #8b5cf6;
+  --purple-dark: #7c3aed;
+  
+  /* Status colors with better contrast */
+  --success: #10b981;
+  --warning: #f59e0b;
+  --error: #ef4444;
+  --info: #3b82f6;
+  
+  /* Focus colors */
+  --focus-ring: #8b5cf6;
+  --focus-ring-offset: #1f2937;
+}
+
+/* Focus indicators for keyboard navigation */
+*:focus {
+  outline: none;
+}
+
+button:focus,
+input:focus,
+select:focus,
+textarea:focus,
+a:focus,
+[tabindex]:focus {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+}
+
+/* Focus for custom components */
+.glass-effect:focus,
+.card:focus,
+[role="button"]:focus {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  :root {
+    --text-secondary: #ffffff;
+    --text-muted: #ffffff;
+    --purple-accent: #ffffff;
+  }
+  
+  .text-gray-400 {
+    color: #ffffff !important;
+  }
+  
+  .text-purple-400 {
+    color: #ffffff !important;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Better color combinations for text readability */
+.text-accessible-primary {
+  color: var(--text-primary);
+}
+
+.text-accessible-secondary {
+  color: var(--text-secondary);
+}
+
+.text-accessible-muted {
+  color: var(--text-muted);
+}
+
+.text-accessible-purple {
+  color: var(--purple-light);
+}
+
+/* Skip link for screen readers */
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 6px;
+  background: var(--purple-dark);
+  color: white;
+  padding: 8px;
+  text-decoration: none;
+  z-index: 9999;
+}
+
+.skip-link:focus {
+  top: 6px;
+}
+
+/* Screen reader only text */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Tooltip positioning fixes */
+.tooltip {
+  position: absolute;
+  z-index: 9999;
+  max-width: 200px;
+  word-wrap: break-word;
+  pointer-events: none;
+}
+
+.tooltip-top {
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 8px;
+}
+
+.tooltip-bottom {
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 8px;
+}
+
+.tooltip-left {
+  right: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-right: 8px;
+}
+
+.tooltip-right {
+  left: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-left: 8px;
+}
+
+/* Auto-adjust tooltip position to stay in viewport */
+.tooltip-auto {
+  position: fixed;
+  z-index: 9999;
+  max-width: 200px;
+  word-wrap: break-word;
+  pointer-events: none;
+}

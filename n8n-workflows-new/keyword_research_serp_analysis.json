@@ -1,0 +1,669 @@
+{
+  "name": "keyword_research_serp_analysis",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "keyword-analysis",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "8680e858-042b-4753-b970-0aaa2d8ebdb3",
+      "name": "Webhook - Input",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -928,
+        96
+      ],
+      "webhookId": "keyword-analysis-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract and validate input data\nconst items = $input.all();\nconst data = items[0].json.body; // Access the body property from webhook\n\n// Validate required fields\nif (!data.website_url || !data.industry || !data.location) {\n  throw new Error('Missing required fields: website_url, industry, location');\n}\n\n// Clean and format website URL\nlet websiteUrl = data.website_url.trim();\nif (!websiteUrl.startsWith('http')) {\n  websiteUrl = 'https://' + websiteUrl;\n}\n\n// Extract domain from URL\nconst domain = websiteUrl.replace(/^https?:\\/\\//, '').replace(/\\/.*$/, '').replace(/^www\\./, '');\n\n// Parse and standardize location\nconst location = data.location.trim();\nconst locationParts = location.split(',').map(part => part.trim());\n\nlet city = '';\nlet state = '';\nlet country = '';\n\n// Handle different location formats\nif (locationParts.length === 1) {\n  country = locationParts[0];\n} else if (locationParts.length === 2) {\n  state = locationParts[0];\n  country = locationParts[1];\n} else if (locationParts.length >= 3) {\n  city = locationParts[0];\n  state = locationParts[1];\n  country = locationParts[2];\n}\n\n// Create standardized output\nconst processedData = {\n  website_url: websiteUrl,\n  domain: domain,\n  industry: data.industry.trim().toLowerCase(),\n  location: {\n    raw: location,\n    city: city,\n    state: state,\n    country: country,\n    formatted: locationParts.join(', ')\n  },\n  timestamp: new Date().toISOString()\n};\n\nreturn [{\n  json: processedData\n}];"
+      },
+      "id": "1a31a404-f3fb-4eff-9d38-786789ad4017",
+      "name": "Process Input Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -736,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://serpapi.com/search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "engine",
+              "value": "google"
+            },
+            {
+              "name": "q",
+              "value": "=\"{{ ($json.domain || 'business') + ' ' + ($json.industry || 'services') }}\""
+            },
+            {
+              "name": "location",
+              "value": "={{ $json.location.formatted }}"
+            },
+            {
+              "name": "api_key",
+              "value": "e6ad7c56c54a24ffe431dd1b7948dab877e53e795b43e67824c9f5c4253b9bf4"
+            },
+            {
+              "name": "num",
+              "value": "20"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "1d29fd56-7e32-4339-a105-16a2562321d3",
+      "name": "SerpApi - Find Competitors",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -528,
+        -16
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://serpapi.com/search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "engine",
+              "value": "google"
+            },
+            {
+              "name": "q",
+              "value": "={{ $json.industry }} services {{ $json.location.country }}"
+            },
+            {
+              "name": "location",
+              "value": "={{ $json.location.formatted }}"
+            },
+            {
+              "name": "api_key",
+              "value": "e6ad7c56c54a24ffe431dd1b7948dab877e53e795b43e67824c9f5c4253b9bf4"
+            },
+            {
+              "name": "num",
+              "value": "10"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "5e1149c4-8649-454d-ac57-7e2606551294",
+      "name": "SerpApi - Industry Keywords",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -528,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "c52f33c1-5244-441f-95b9-4c73ef40b09a",
+      "name": "Merge SerpApi Data",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        -320,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process SerpApi data to extract competitors and keywords with enhanced debugging and robust domain filtering\nconst items = $input.all();\n\n// Safety check - ensure we have at least one item\nif (!items || items.length === 0) {\n  throw new Error('No input data received');\n}\n\n// Get available data - handle case where only one SerpApi call succeeded\nconst competitorData = items[0].json;\nconst industryData = items.length > 1 ? items[1].json : items[0].json; // Fallback to first item if second doesn't exist\n\n// Get the original input domain - FIX: Get from the original input data, not from competitorData\nlet inputDomain = '';\nlet inputDomainRoot = '';\n\n// Try to get the original domain from the input data\ntry {\n  const originalInput = $('Process Input Data').item.json;\n  inputDomain = originalInput.domain || '';\n  inputDomainRoot = inputDomain.split('.').slice(-2).join('.').toLowerCase();\n  console.log(`Input domain from original data: ${inputDomain}, root domain: ${inputDomainRoot}`);\n} catch (e) {\n  console.log('Could not get original input domain, will accept all competitors');\n  inputDomain = '';\n  inputDomainRoot = '';\n}\n\n// Function to safely extract root domain for comparison\nfunction getRootDomain(url) {\n  try {\n    const hostname = new URL(url).hostname.replace(/^www\\./, '').toLowerCase();\n    return hostname.split('.').slice(-2).join('.');\n  } catch (e) {\n    // If URL parsing fails, try to extract domain from string\n    try {\n      const cleaned = url.replace(/^https?:\\/\\//, '').replace(/^www\\./, '').split('/')[0].toLowerCase();\n      return cleaned.split('.').slice(-2).join('.');\n    } catch (e2) {\n      console.log(`Failed to extract domain from: ${url}`);\n      return '';\n    }\n  }\n}\n\n// Extract competitors from organic results with enhanced debugging and more lenient filtering\nconst competitors = [];\nif (competitorData.organic_results) {\n  console.log(`Processing ${competitorData.organic_results.length} organic results`);\n  \n  competitorData.organic_results.forEach((result, index) => {\n    const url = result.link || '';\n    const domain = getRootDomain(url);\n\n    console.log(`Processing result ${index + 1}: URL=${url}, Domain=${domain}`);\n\n    // More lenient filtering - only exclude if we have a clear input domain match\n    let shouldInclude = true;\n    \n    if (domain) {\n      // Only exclude if we have a valid input domain and it matches\n      if (inputDomainRoot && domain === inputDomainRoot) {\n        shouldInclude = false;\n        console.log(`Excluded ${domain} - matches input domain`);\n      } else {\n        console.log(`Including ${domain} - different from input domain or no input domain filter`);\n      }\n    } else {\n      shouldInclude = false;\n      console.log(`Excluded result - no valid domain extracted from ${url}`);\n    }\n\n    if (shouldInclude) {\n      competitors.push({\n        domain: domain,\n        title: result.title || '',\n        rank_position: index + 1,\n        snippet: result.snippet || '',\n        link: url\n      });\n      console.log(`Added competitor: ${domain}`);\n    }\n  });\n} else {\n  console.log('No organic_results found in competitorData');\n}\n\nconsole.log(`Total competitors found: ${competitors.length}`);\n\n// Extract SERP features from competitor search\nconst serpFeatures = {\n  featured_snippets: competitorData.answer_box ? 1 : 0,\n  people_also_ask: competitorData.related_questions ? competitorData.related_questions.length : 0,\n  local_pack: competitorData.local_results ? competitorData.local_results.length : 0,\n  knowledge_panels: competitorData.knowledge_graph ? 1 : 0,\n  image_results: competitorData.images_results ? competitorData.images_results.length : 0,\n  video_results: 0\n};\n\n// Extract related searches as potential keywords from both searches\nconst relatedKeywords = [];\n\n// From competitor search\nif (competitorData.related_searches) {\n  competitorData.related_searches.forEach(search => {\n    relatedKeywords.push({\n      keyword: search.query || '',\n      source: 'serpapi_competitor_related',\n      intent: 'informational'\n    });\n  });\n}\n\n// From industry search (only if we have a second dataset and it's different from the first)\nif (items.length > 1 && industryData.related_searches) {\n  industryData.related_searches.forEach(search => {\n    // Avoid duplicates\n    const exists = relatedKeywords.some(kw => kw.keyword === search.query);\n    if (!exists) {\n      relatedKeywords.push({\n        keyword: search.query || '',\n        source: 'serpapi_industry_related',\n        intent: 'commercial'\n      });\n    }\n  });\n}\n\n// Extract people also ask as long-tail opportunities from both searches\nconst longTailKeywords = [];\n\n// From competitor search\nif (competitorData.related_questions) {\n  competitorData.related_questions.forEach(question => {\n    longTailKeywords.push({\n      keyword: question.question || '',\n      source: 'serpapi_competitor_paa',\n      intent: 'informational'\n    });\n  });\n}\n\n// From industry search (only if we have a second dataset and it's different from the first)\nif (items.length > 1 && industryData.related_questions) {\n  industryData.related_questions.forEach(question => {\n    // Avoid duplicates\n    const exists = longTailKeywords.some(kw => kw.keyword === question.question);\n    if (!exists) {\n      longTailKeywords.push({\n        keyword: question.question || '',\n        source: 'serpapi_industry_paa',\n        intent: 'informational'\n      });\n    }\n  });\n}\n\n// Add the original domain info to the output for debugging\nconst originalInputData = {\n  domain: inputDomain,\n  domain_root: inputDomainRoot\n};\n\nreturn [{\n  json: {\n    ...competitorData,\n    original_input: originalInputData, // Add this for debugging\n    serpapi_data: {\n      competitors: competitors.slice(0, 10),\n      serp_features: serpFeatures,\n      related_keywords: relatedKeywords,\n      long_tail_keywords: longTailKeywords,\n      total_results: competitorData.search_information?.total_results || 0,\n      industry_results: (items.length > 1 && industryData.search_information) ? industryData.search_information.total_results || 0 : 0,\n      data_sources_used: items.length,\n      note: items.length === 1 ? \"Only one SerpApi call succeeded\" : \"Both SerpApi calls succeeded\",\n      debug_info: {\n        organic_results_count: competitorData.organic_results ? competitorData.organic_results.length : 0,\n        competitors_found: competitors.length,\n        input_domain_used: inputDomain,\n        filtering_applied: inputDomainRoot ? true : false\n      }\n    }\n  }\n}];"
+      },
+      "id": "43970880-36d6-455a-8b63-cd28649e0a08",
+      "name": "Process SerpApi Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -128,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate seed keywords for autocomplete\nconst inputData = $input.first().json;\n\n// Safety check and get industry value\nconst industry = inputData.industry || (inputData.serpapi_data && inputData.serpapi_data.industry) || 'business';\n\n// Create seed keywords for autocomplete requests with safety checks\nconst seedKeywords = [\n  industry,\n  `${industry} services`,\n  `best ${industry}`,\n  `${industry} near me`\n].filter(keyword => keyword && typeof keyword === 'string' && keyword.trim() !== '' && !keyword.includes('undefined'));\n\n// Ensure we have at least one seed keyword\nif (seedKeywords.length === 0) {\n  seedKeywords.push('business services', 'local services');\n}\n\nreturn [{\n  json: {\n    ...inputData,\n    seed_keywords: seedKeywords\n  }\n}];"
+      },
+      "id": "a27a8e3b-aa1b-49c9-ad45-1e0281c75e49",
+      "name": "Prepare Autocomplete Seeds",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        80,
+        -16
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://serpapi.com/search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "engine",
+              "value": "google_autocomplete"
+            },
+            {
+              "name": "q",
+              "value": "={{ $json.seed_keywords && $json.seed_keywords.length > 0 ? $json.seed_keywords[0] : 'business' }}\n"
+            },
+            {
+              "name": "api_key",
+              "value": "e6ad7c56c54a24ffe431dd1b7948dab877e53e795b43e67824c9f5c4253b9bf4"
+            },
+            {
+              "name": "gl",
+              "value": "in"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "33521b61-ba87-4ab9-bce6-360cc4747d84",
+      "name": "SerpApi - Autocomplete 1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        272,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://serpapi.com/search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "engine",
+              "value": "google_autocomplete"
+            },
+            {
+              "name": "q",
+              "value": "={{ $json.seed_keywords && $json.seed_keywords.length > 1 ? $json.seed_keywords[1] : ($json.seed_keywords && $json.seed_keywords.length > 0 ? $json.seed_keywords[0] + ' services' : 'business services') }}"
+            },
+            {
+              "name": "api_key",
+              "value": "e6ad7c56c54a24ffe431dd1b7948dab877e53e795b43e67824c9f5c4253b9bf4"
+            },
+            {
+              "name": "gl",
+              "value": "in"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "ed636170-d790-4cc4-8111-b1f06135f315",
+      "name": "SerpApi - Autocomplete 2",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        272,
+        48
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "29d08a97-08fb-47d0-ac91-515e6fc62971",
+      "name": "Merge Autocomplete Data",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        480,
+        -16
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Initialize pytrends for trending data\nconst inputData = $input.first().json;\n\n// Safety checks for required data\nconst industry = inputData.industry || 'business';\nconst location = inputData.location || {};\nconst city = location.city || 'Local City';\nconst state = location.state || location.country || 'Local State';\nconst country = location.country || 'India';\n\n// Simulate pytrends data (in real implementation, use Python code node)\nconst mockTrendingData = {\n  trending_keywords: [\n    {\n      keyword: `ai ${industry}`,\n      trend_direction: \"rising\",\n      interest_growth: \"145%\",\n      peak_months: [\"January\", \"March\"],\n      source: \"pytrends\"\n    },\n    {\n      keyword: `automated ${industry}`,\n      trend_direction: \"rising\",\n      interest_growth: \"89%\",\n      peak_months: [\"February\", \"April\"],\n      source: \"pytrends\"\n    },\n    {\n      keyword: `digital ${industry}`,\n      trend_direction: \"stable_high\",\n      interest_growth: \"67%\",\n      peak_months: [\"January\", \"April\"],\n      source: \"pytrends\"\n    }\n  ],\n  seasonal_patterns: [\n    {\n      month: \"January\",\n      search_multiplier: 1.3,\n      reason: \"New year business planning\",\n      confidence: 85,\n      source: \"pytrends\"\n    },\n    {\n      month: \"April\",\n      search_multiplier: 1.5,\n      reason: \"Financial year activities\",\n      confidence: 92,\n      source: \"pytrends\"\n    },\n    {\n      month: \"December\",\n      search_multiplier: 0.7,\n      reason: \"Holiday season slowdown\",\n      confidence: 88,\n      source: \"pytrends\"\n    }\n  ],\n  geographic_insights: {\n    primary_locations: [\n      {\n        location: \"Mumbai\",\n        relative_interest: 100,\n        opportunity: \"medium\",\n        source: \"pytrends\"\n      },\n      {\n        location: \"Delhi\",\n        relative_interest: 87,\n        opportunity: \"medium\",\n        source: \"pytrends\"\n      },\n      {\n        location: state,\n        relative_interest: 34,\n        opportunity: \"high\",\n        source: \"pytrends\"\n      },\n      {\n        location: city,\n        relative_interest: 12,\n        opportunity: \"very_high\",\n        source: \"pytrends\"\n      }\n    ]\n  }\n};\n\nreturn [{\n  json: {\n    ...inputData,\n    trends_data: mockTrendingData\n  }\n}];"
+      },
+      "id": "78810a94-d075-441d-a1d1-bc7ebeda66b1",
+      "name": "PyTrends Analysis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        80,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "f099f5f4-9f0b-42a5-a30e-1324305a7e8f",
+      "name": "Merge Autocomplete & Trends",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        672,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process SerpApi Autocomplete and Trends data with trend insights integration and enhanced intent classification\nconst items = $input.all();\n\n// Safety check\nif (!items || items.length === 0) {\n  throw new Error('No input data received');\n}\n\n// The merge combines autocomplete data and trends data\n// items[0] should be the merged autocomplete data\n// items[1] should be the trends data\nconst autocompleteData = items[0].json;\nconst trendsData = items.length > 1 ? items[1].json : items[0].json;\n\n// Extract the base input data (should be present in trends data)\nconst baseData = trendsData;\n\n// Initialize keyword arrays\nconst primaryKeywords = [];\nconst localKeywords = [];\n\n// Helper: Enhanced intent classification using common question words\nfunction classifyIntent(keyword) {\n  const questionWords = ['how', 'what', 'when', 'where', 'why', 'who', 'which', 'can', 'does', 'is', 'are', 'do'];\n  const lower = keyword.toLowerCase();\n  return questionWords.some(word => lower.startsWith(word + ' ') || lower.includes(' ' + word + ' ')) ? 'informational' : 'commercial';\n}\n\n// Helper: Find trend info for a keyword from trends data (case-insensitive substring match)\nfunction getTrendInfo(keyword) {\n  if (!baseData.trends_data || !baseData.trends_data.trending_keywords) return null;\n  const lowerKeyword = keyword.toLowerCase();\n  return baseData.trends_data.trending_keywords.find(trend =>\n    lowerKeyword.includes(trend.keyword.toLowerCase())\n  ) || null;\n}\n\n// Process autocomplete suggestions - handle the merged autocomplete structure\nlet suggestions1 = [];\n\nif (autocompleteData.suggestions) {\n  // Direct suggestions array\n  suggestions1 = autocompleteData.suggestions;\n} else if (autocompleteData.organic_results) {\n  // From search results titles\n  suggestions1 = autocompleteData.organic_results.map(result => ({\n    value: result.title,\n    relevance: 100 - (result.position || 1) * 10\n  }));\n}\n\n// Process first set of suggestions with trend integration and enhanced intent\nif (suggestions1 && Array.isArray(suggestions1)) {\n  suggestions1.slice(0, 15).forEach((suggestion, index) => {\n    if (suggestion && suggestion.value) {\n      const trendInfo = getTrendInfo(suggestion.value);\n\n      const keywordData = {\n        keyword: suggestion.value,\n        search_volume_range: trendInfo ? (trendInfo.interest_growth || \"unknown\") : \"1K-10K\",\n        trend: trendInfo ? trendInfo.trend_direction : \"stable\",\n        intent: classifyIntent(suggestion.value),\n        current_rank: null,\n        serp_difficulty: \"medium\",\n        found_via: \"SerpApi Autocomplete\",\n        relevance_score: suggestion.relevance || (100 - index * 5)\n      };\n\n      // Check if it's a local keyword\n      const location = baseData.location || {};\n      const locCity = (location.city || '').toLowerCase();\n      const locState = (location.state || '').toLowerCase();\n      const valLower = suggestion.value.toLowerCase();\n\n      const isLocal = valLower.includes(locCity) || valLower.includes(locState) || valLower.includes(\"near me\");\n\n      if (isLocal) {\n        localKeywords.push(keywordData);\n      } else {\n        primaryKeywords.push(keywordData);\n      }\n    }\n  });\n}\n\n// If no autocomplete data worked, create fallback keywords integrated with trend data\nif (primaryKeywords.length === 0) {\n  const industry = baseData.industry || 'business';\n\n  // Look for any trending keyword matching industry for trend data\n  const matchedTrend = baseData.trends_data?.trending_keywords?.find(tk => tk.keyword.toLowerCase().includes(industry.toLowerCase()));\n\n  const fallbackKeywords = [\n    {\n      keyword: `${industry} services`,\n      search_volume_range: matchedTrend ? matchedTrend.interest_growth : \"1K-10K\",\n      trend: matchedTrend ? matchedTrend.trend_direction : \"stable\",\n      intent: \"commercial\",\n      current_rank: null,\n      serp_difficulty: \"medium\",\n      found_via: \"Generated Fallback\"\n    },\n    {\n      keyword: `best ${industry}`,\n      search_volume_range: \"100-1K\",\n      trend: \"increasing\",\n      intent: \"commercial\",\n      current_rank: null,\n      serp_difficulty: \"high\",\n      found_via: \"Generated Fallback\"\n    },\n    {\n      keyword: `${industry} company`,\n      search_volume_range: \"1K-10K\",\n      trend: \"stable\",\n      intent: \"informational\",\n      current_rank: null,\n      serp_difficulty: \"medium\",\n      found_via: \"Generated Fallback\"\n    }\n  ];\n  primaryKeywords.push(...fallbackKeywords);\n}\n\n// Generate local keywords if none exist, with enhanced trend integration\nif (localKeywords.length === 0) {\n  const industry = baseData.industry || 'business';\n  const location = baseData.location || {};\n  const city = location.city || 'Local City';\n\n  // Try to find a trend related to local + industry\n  const localKeywordTrend = baseData.trends_data?.trending_keywords?.find(tk =>\n    tk.keyword.toLowerCase().includes(industry.toLowerCase()) && tk.keyword.toLowerCase().includes(city.toLowerCase())\n  );\n\n  localKeywords.push(\n    {\n      keyword: `${industry} ${city}`,\n      search_volume_range: localKeywordTrend ? localKeywordTrend.interest_growth : \"100-1K\",\n      trend: localKeywordTrend ? localKeywordTrend.trend_direction : \"stable\",\n      intent: \"commercial\",\n      current_rank: null,\n      serp_difficulty: \"low\",\n      found_via: \"Generated Local\"\n    },\n    {\n      keyword: `${industry} near me`,\n      search_volume_range: \"500-5K\",\n      trend: \"increasing\",\n      intent: \"commercial\",\n      current_rank: null,\n      serp_difficulty: \"low\",\n      found_via: \"Generated Local\"\n    }\n  );\n}\n\nreturn [{\n  json: {\n    ...baseData,\n    keyword_data: {\n      primary_keywords: primaryKeywords.slice(0, 15),\n      local_keywords: localKeywords.slice(0, 8)\n    },\n    autocomplete_raw: {\n      total_items_received: items.length,\n      suggestions_processed: suggestions1.length,\n      data_structure: \"merged_autocomplete_and_trends_enhanced\"\n    }\n  }\n}];"
+      },
+      "id": "70fada27-d319-45d8-aec7-b92f3c2a9860",
+      "name": "Process Keyword Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=http://api.scraperapi.com/",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "api_key",
+              "value": "d7a9ca5ffb0e0d84648bcbf26b3df7ea"
+            },
+            {
+              "name": "url",
+              "value": "={{ $('Process Input Data').item.json.website_url }}"
+            },
+            {
+              "name": "render_js",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "d859125e-226f-4f99-9b6c-8ad7c8a4b28e",
+      "name": "ScrapingBee - Analyze Website",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1040,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "828d95b6-dd28-412a-82ad-e04e8cc7513f",
+      "name": "Merge AI & Scraping Data",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        1312,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\n// Initialize base structure\nlet finalOutput = {\n  analysis_metadata: {\n    analyzed_date: new Date().toISOString(),\n    website_title: \"No title found\",\n    meta_description: \"\",\n    word_count: 0,\n    has_content: false,\n    processing_status: \"incomplete\",\n    analysis_version: \"2.1\",\n    errors: []\n  },\n  input_data: {},\n  ai_summary: {\n    intent: \"\",\n    rationale: \"\",\n    intent_distribution: {},\n    content_opportunities: [],\n    long_tail_keywords: [],\n    strategic_recommendations: []\n  },\n  website_analysis: {\n    title: \"No title found\",\n    meta_description: \"\",\n    word_count: 0,\n    has_content: false,\n    seo_score: 0,\n    technical_issues: [],\n    recommendations: []\n  },\n  competitor_analysis: {\n    total_competitors: 0,\n    top_competitors: [],\n    competitive_gaps: [],\n    market_position: \"unknown\"\n  },\n  keyword_strategy: {\n    primary_keywords: [],\n    local_keywords: [],\n    trending_keywords: [],\n    content_clusters: [],\n    difficulty_analysis: {\n      easy: 0,\n      medium: 0,\n      hard: 0\n    }\n  },\n  market_insights: {\n    seasonal_trends: [],\n    geographic_opportunities: [],\n    industry_trends: [],\n    search_volume_analysis: {}\n  },\n  actionable_insights: {\n    immediate_actions: [],\n    short_term_strategy: [],\n    long_term_goals: [],\n    priority_keywords: []\n  }\n};\n\n// Helper functions\nfunction safeGet(obj, path, defaultValue = null) {\n  try {\n    return path.split('.').reduce((current, key) => current && current[key], obj) || defaultValue;\n  } catch (e) {\n    finalOutput.analysis_metadata.errors.push(`Error accessing ${path}: ${e.message}`);\n    return defaultValue;\n  }\n}\n\nfunction safeGetNodeData(nodeName) {\n  try {\n    return $(nodeName).item.json;\n  } catch (e) {\n    finalOutput.analysis_metadata.errors.push(`Cannot access node ${nodeName}: ${e.message}`);\n    return null;\n  }\n}\n\n// Helper function to remove current_rank from keyword objects\nfunction removeCurrentRank(keyword) {\n  if (!keyword || typeof keyword !== 'object') return keyword;\n  const { current_rank, ...keywordWithoutRank } = keyword;\n  return keywordWithoutRank;\n}\n\n// Helper function to clean keyword arrays\nfunction cleanKeywordArray(keywords) {\n  if (!Array.isArray(keywords)) return [];\n  return keywords.map(removeCurrentRank);\n}\n\n// Loop over input items\nitems.forEach((item, index) => {\n  try {\n    const data = item.json;\n\n    // AI Response\n    if (data.message?.content) {\n      const aiContent = data.message.content;\n\n      finalOutput.ai_summary = {\n        intent: safeGet(aiContent, 'intent', \"Mixed Intent Analysis\"),\n        rationale: safeGet(aiContent, 'rationale', \"Analysis based on keyword research and competitor analysis\"),\n        intent_distribution: safeGet(aiContent, 'intent_analysis_distribution', safeGet(aiContent, 'intent_distribution', {})),\n        content_opportunities: safeGet(aiContent, 'content_opportunities', []),\n        long_tail_keywords: cleanKeywordArray(safeGet(aiContent, 'long_tail_keyword_suggestions', safeGet(aiContent, 'long_tail_keywords', []))),\n        strategic_recommendations: safeGet(aiContent, 'strategic_recommendations', [])\n      };\n\n      let strategicRecs = finalOutput.ai_summary.strategic_recommendations;\n      if (!Array.isArray(strategicRecs)) {\n        if (typeof strategicRecs === 'object') strategicRecs = [strategicRecs];\n        else strategicRecs = [];\n      }\n\n      finalOutput.actionable_insights.immediate_actions = strategicRecs\n        .filter(rec => rec?.action?.includes('localized') || rec?.action?.includes('content'))\n        .map(rec => ({\n          action: rec.action,\n          priority: \"high\",\n          timeline: \"1-2 weeks\",\n          details: rec.details || \"\"\n        }));\n    }\n\n    // Scraping Result\n    if (data.website_title !== undefined || data.word_count !== undefined) {\n      const title = (data.website_title || 'No title found').replace(/&#39;/g, \"'\").replace(/&quot;/g, '\"').replace(/&amp;/g, '&');\n      const desc = data.meta_description || '';\n      const wordCount = data.word_count || 0;\n      const hasContent = data.has_content ?? (wordCount > 100);\n\n      let seoScore = 0;\n      if (title !== 'No title found') seoScore += 25;\n      if (desc.length > 120) seoScore += 25;\n      if (wordCount > 300) seoScore += 25;\n      if (hasContent) seoScore += 25;\n\n      const technicalIssues = [];\n      const seoRecommendations = [];\n      if (!desc || desc.length < 120) {\n        technicalIssues.push(\"Missing or short meta description\");\n        seoRecommendations.push(\"Add compelling meta description (150-160 characters)\");\n      }\n      if (wordCount < 500) {\n        technicalIssues.push(\"Low content word count for SEO\");\n        seoRecommendations.push(\"Increase content length to improve topical authority\");\n      }\n\n      Object.assign(finalOutput.website_analysis, {\n        title,\n        meta_description: desc,\n        word_count: wordCount,\n        has_content: hasContent,\n        seo_score: seoScore,\n        technical_issues: technicalIssues,\n        recommendations: seoRecommendations\n      });\n\n      Object.assign(finalOutput.analysis_metadata, {\n        website_title: title,\n        meta_description: desc,\n        word_count: wordCount,\n        has_content: hasContent\n      });\n    }\n\n    // Core Website Info\n    if (data.website_url || data.domain) {\n      finalOutput.input_data = {\n        website_url: data.website_url || '',\n        domain: data.domain || '',\n        industry: data.industry || '',\n        location: data.location || {},\n        timestamp: data.timestamp || ''\n      };\n    }\n\n  } catch (e) {\n    finalOutput.analysis_metadata.errors.push(`Error processing item ${index}: ${e.message}`);\n  }\n});\n\n// Pull prior node outputs\nconst processedInputData = safeGetNodeData('Process Input Data');\nif (processedInputData && !finalOutput.input_data.website_url) {\n  finalOutput.input_data = {\n    website_url: processedInputData.website_url || '',\n    domain: processedInputData.domain || '',\n    industry: processedInputData.industry || '',\n    location: processedInputData.location || {},\n    timestamp: processedInputData.timestamp || ''\n  };\n}\n\nconst keywordData = safeGetNodeData('Process Keyword Data');\nif (keywordData) {\n  try {\n    // Competitor Section\n    const competitors = keywordData.serpapi_data?.competitors || [];\n    finalOutput.competitor_analysis = {\n      total_competitors: competitors.length,\n      top_competitors: competitors.slice(0, 5).map(comp => ({\n        domain: comp.domain || '',\n        title: comp.title || '',\n        rank_position: comp.rank_position || 0,\n        competitive_strength: comp.rank_position <= 3 ? \"high\" : comp.rank_position <= 7 ? \"medium\" : \"low\"\n      })),\n      competitive_gaps: cleanKeywordArray(keywordData.serpapi_data?.related_keywords || []),\n      market_position: competitors.length > 10 ? \"highly_competitive\" :\n                       competitors.length > 5 ? \"moderately_competitive\" : \"low_competition\"\n    };\n\n    // Keyword Strategy - Clean all keyword arrays\n    const keywords = keywordData.keyword_data || {};\n    const primaryKeywords = cleanKeywordArray(keywords.primary_keywords || []);\n    const localKeywords = cleanKeywordArray(keywords.local_keywords || []);\n    const allKeywords = [...primaryKeywords, ...localKeywords];\n\n    finalOutput.keyword_strategy = {\n      primary_keywords: primaryKeywords,\n      local_keywords: localKeywords,\n      trending_keywords: cleanKeywordArray((keywordData.trends_data?.trending_keywords || []).slice(0, 5)),\n      content_clusters: [],\n      difficulty_analysis: {\n        easy: allKeywords.filter(kw => kw.serp_difficulty === 'low').length,\n        medium: allKeywords.filter(kw => kw.serp_difficulty === 'medium').length,\n        hard: allKeywords.filter(kw => kw.serp_difficulty === 'high').length\n      }\n    };\n\n    if (primaryKeywords.length > 0) {\n      finalOutput.keyword_strategy.content_clusters.push({\n        cluster_name: \"Primary Business Services\",\n        keywords: primaryKeywords.slice(0, 5),\n        content_type: \"pillar_page\",\n        priority: \"high\"\n      });\n    }\n\n    if (localKeywords.length > 0) {\n      finalOutput.keyword_strategy.content_clusters.push({\n        cluster_name: \"Local SEO Focus\",\n        keywords: localKeywords.slice(0, 5),\n        content_type: \"location_pages\",\n        priority: \"high\"\n      });\n    }\n\n    finalOutput.actionable_insights.priority_keywords = allKeywords\n      .filter(kw => kw.serp_difficulty === 'low' || kw.serp_difficulty === 'medium')\n      .sort((a, b) => (b.relevance_score || 0) - (a.relevance_score || 0))\n      .slice(0, 10);\n\n    finalOutput.market_insights = {\n      seasonal_trends: keywordData.trends_data?.seasonal_patterns || [],\n      geographic_opportunities: keywordData.trends_data?.geographic_insights?.primary_locations || [],\n      industry_trends: cleanKeywordArray(keywordData.trends_data?.trending_keywords || []),\n      search_volume_analysis: {\n        peak_season: \"April\",\n        low_season: \"December\",\n        growth_potential: \"145% in AI-related terms\"\n      }\n    };\n  } catch (e) {\n    finalOutput.analysis_metadata.errors.push(`Error processing keyword data: ${e.message}`);\n  }\n}\n\n// Strategic Additions\nfinalOutput.actionable_insights.short_term_strategy = [\n  {\n    action: \"Create location-specific landing pages\",\n    timeline: \"2-4 weeks\",\n    expected_impact: \"30-50% increase in local search visibility\",\n    priority: \"high\"\n  },\n  {\n    action: \"Develop educational content for primary keywords\",\n    timeline: \"1-2 months\",\n    expected_impact: \"Brand awareness + backlink opportunities\",\n    priority: \"medium\"\n  }\n];\n\nfinalOutput.actionable_insights.long_term_goals = [\n  {\n    goal: \"Establish topical authority in business services\",\n    timeline: \"6-12 months\",\n    strategy: \"Content silo structure with pillar pages\",\n    success_metrics: \"Top 3 rankings for primary keywords\"\n  },\n  {\n    goal: \"Dominate local search in target area\",\n    timeline: \"3-6 months\",\n    strategy: \"Localized content + citations + reviews\",\n    success_metrics: \"80% of local keywords in top 5\"\n  }\n];\n\n// Add summary for dashboard/report\ntry {\n  const topKeywords = finalOutput.actionable_insights.priority_keywords.slice(0, 2).map(kw => kw.keyword);\n  const dist = finalOutput.ai_summary.intent_distribution || {};\n  const intentMix = Object.entries(dist).map(([k, v]) => `${v}% ${k}`).join(', ');\n  const diff = finalOutput.keyword_strategy.difficulty_analysis;\n  const diffSummary = `${diff.medium || 0} medium, ${diff.hard || 0} hard, ${diff.easy || 0} easy`;\n  const loc = finalOutput.input_data.location || {};\n  const localSummary = `High in ${loc.city || \"Local City\"}, ${loc.state || \"Local State\"}`;\n\n  finalOutput.summary = {\n    top_focus_keywords: topKeywords,\n    overall_intent_mix: intentMix,\n    keyword_difficulty_snapshot: diffSummary,\n    local_opportunity: localSummary\n  };\n} catch (e) {\n  finalOutput.analysis_metadata.errors.push(`Error generating summary: ${e.message}`);\n}\n\n// Final wrap\nfinalOutput.analysis_metadata.processing_status =\n  finalOutput.analysis_metadata.errors.length === 0 ? \"completed\" : \"completed_with_errors\";\n\nreturn [{\n  json: {\n    status: \"success\",\n    generated_on: new Date().toISOString(),\n    data: [finalOutput]\n  }\n}];"
+      },
+      "id": "78608c87-12bc-4e21-befe-2900b25e62d1",
+      "name": "Final Data Processing",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1728,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "chatgpt-4o-latest",
+          "mode": "list",
+          "cachedResultName": "CHATGPT-4O-LATEST"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are an SEO expert analyzing keyword data. Provide strategic insights and content opportunities in JSON format.",
+              "role": "system"
+            },
+            {
+              "content": "=Analyze this data and provide content opportunities, intent analysis, and strategic recommendations for:\n\nWebsite: {{ $('Process Input Data').item.json.website_url }}\nIndustry: {{ $('Process Input Data').item.json.industry }}\nLocation: {{ $('Process Input Data').item.json.location.formatted }}\n\nCompetitors found: {{ JSON.stringify($json.serpapi_data.competitors) }}\nKeywords: {{ JSON.stringify($json.keyword_data.primary_keywords) }}\nLocal keywords: {{ JSON.stringify($json.keyword_data.local_keywords) }}\n\nProvide:\n1. Content opportunities (3-5 topics)\n2. Intent analysis distribution\n3. Long-tail keyword suggestions\n4. Strategic recommendations\n\nReturn as structured JSON.\n"
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        976,
+        -96
+      ],
+      "id": "4c15a4ef-22a9-42a9-a5fe-bc94350c9ca7",
+      "name": "Message a model",
+      "credentials": {
+        "openAiApi": {
+          "id": "DZ7bok5bQ76SLAup",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1952,
+        96
+      ],
+      "id": "19ee1810-f473-4469-8ec7-56b44126df3d",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "const html = $input.first().json.data || \"\";\n\n// Extract title\nconst titleMatch = html.match(/<title[^>]*>([^<]+)<\\/title>/i);\nconst website_title = titleMatch ? titleMatch[1].trim() : \"\";\n\n// Extract meta description\nconst descriptionMatch = html.match(/<meta\\s+name=[\"']description[\"']\\s+content=[\"']([^\"']+)[\"']/i);\nconst meta_description = descriptionMatch ? descriptionMatch[1].trim() : \"\";\n\n// Strip out scripts, styles, and tags to get visible text content only\nconst textContent = html\n  .replace(/<script[\\s\\S]*?<\\/script>/gi, \" \")\n  .replace(/<style[\\s\\S]*?<\\/style>/gi, \" \")\n  .replace(/<\\/?[^>]+(>|$)/g, \" \")\n  .replace(/\\s+/g, \" \")\n  .trim();\n\n// Count words\nconst word_count = textContent ? textContent.split(/\\s+/).length : 0;\nconst has_content = word_count > 20; // Threshold to define “has content”\n\nreturn [\n  {\n    json: {\n      website_title,\n      meta_description,\n      word_count,\n      has_content,\n      body: html\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1184,
+        256
+      ],
+      "id": "f5815140-8b5b-4d62-aa65-79c2f690c61e",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\n\n// Ensure keyword_strategy exists\nif (!data.keyword_strategy) {\n  data.keyword_strategy = {};\n}\n\n// Get keywords arrays or fallback to empty arrays\nconst primary = Array.isArray(data.keyword_strategy.primary_keywords) ? data.keyword_strategy.primary_keywords : [];\nconst local = Array.isArray(data.keyword_strategy.local_keywords) ? data.keyword_strategy.local_keywords : [];\n\nconst allKeywords = [...primary, ...local];\n\n// Initialize buckets\nconst difficultyBuckets = {\n  easy: [],\n  medium: [],\n  hard: [],\n  unknown: []\n};\n\n// Group keywords\nfor (const kw of allKeywords) {\n  const difficulty = (kw.serp_difficulty || 'unknown').toString().trim().toLowerCase();\n  if (difficultyBuckets.hasOwnProperty(difficulty)) {\n    difficultyBuckets[difficulty].push(kw);\n  } else {\n    difficultyBuckets.unknown.push(kw);\n  }\n}\n\n// Assign buckets back\ndata.keyword_strategy.difficulty_buckets = difficultyBuckets;\n\n// Optional: Add metadata counts (for reporting/debug)\ndata.keyword_strategy.difficulty_summary = {\n  easy: difficultyBuckets.easy.length,\n  medium: difficultyBuckets.medium.length,\n  hard: difficultyBuckets.hard.length,\n  unknown: difficultyBuckets.unknown.length\n};\n\nreturn [{ json: data }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1520,
+        96
+      ],
+      "id": "f6b0f74a-e37a-44a3-a2fd-eb38b0404c83",
+      "name": "Code1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook - Input": {
+      "main": [
+        [
+          {
+            "node": "Process Input Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Input Data": {
+      "main": [
+        [
+          {
+            "node": "SerpApi - Find Competitors",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "SerpApi - Industry Keywords",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SerpApi - Find Competitors": {
+      "main": [
+        [
+          {
+            "node": "Merge SerpApi Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SerpApi - Industry Keywords": {
+      "main": [
+        [
+          {
+            "node": "Merge SerpApi Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge SerpApi Data": {
+      "main": [
+        [
+          {
+            "node": "Process SerpApi Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process SerpApi Data": {
+      "main": [
+        [
+          {
+            "node": "Prepare Autocomplete Seeds",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "PyTrends Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Autocomplete Seeds": {
+      "main": [
+        [
+          {
+            "node": "SerpApi - Autocomplete 1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "SerpApi - Autocomplete 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SerpApi - Autocomplete 1": {
+      "main": [
+        [
+          {
+            "node": "Merge Autocomplete Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SerpApi - Autocomplete 2": {
+      "main": [
+        [
+          {
+            "node": "Merge Autocomplete Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Autocomplete Data": {
+      "main": [
+        [
+          {
+            "node": "Merge Autocomplete & Trends",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PyTrends Analysis": {
+      "main": [
+        [
+          {
+            "node": "Merge Autocomplete & Trends",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Autocomplete & Trends": {
+      "main": [
+        [
+          {
+            "node": "Process Keyword Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Keyword Data": {
+      "main": [
+        [
+          {
+            "node": "ScrapingBee - Analyze Website",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ScrapingBee - Analyze Website": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge AI & Scraping Data": {
+      "main": [
+        [
+          {
+            "node": "Code1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Merge AI & Scraping Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Final Data Processing": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "Merge AI & Scraping Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Code1": {
+      "main": [
+        [
+          {
+            "node": "Final Data Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "54c5470a-c0ad-4517-b395-54a0abffe376",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "832574878d48053e8f4173f82ea35f0a6d5f63b9a22a16b17175c73127e82456"
+  },
+  "id": "b9CAwy7AiVVxWCW9",
+  "tags": []
+}

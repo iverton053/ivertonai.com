@@ -1,0 +1,518 @@
+{
+  "name": "Financial Reporting Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weekday",
+              "value": 1
+            },
+            {
+              "field": "hour",
+              "value": 9
+            }
+          ]
+        }
+      },
+      "id": "weekly-report-trigger",
+      "name": "Weekly Report Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [280, 200]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "day",
+              "value": 1
+            },
+            {
+              "field": "hour",
+              "value": 8
+            }
+          ]
+        }
+      },
+      "id": "monthly-report-trigger",
+      "name": "Monthly Report Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [280, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Determine report type and date range\nconst triggerNode = $workflow.lastNode.name;\n\nlet reportConfig = {\n  report_type: '',\n  period: {\n    start_date: '',\n    end_date: ''\n  },\n  frequency: '',\n  recipients: [],\n  include_sections: []\n};\n\nconst now = new Date();\nconst currentDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());\n\nif (triggerNode === 'Weekly Report Trigger') {\n  // Weekly report - Monday to Sunday of previous week\n  const lastSunday = new Date(currentDate);\n  lastSunday.setDate(currentDate.getDate() - currentDate.getDay() - 7);\n  const lastMonday = new Date(lastSunday);\n  lastMonday.setDate(lastSunday.getDate() - 6);\n  \n  reportConfig = {\n    report_type: 'weekly_financial_summary',\n    period: {\n      start_date: lastMonday.toISOString(),\n      end_date: lastSunday.toISOString()\n    },\n    frequency: 'weekly',\n    recipients: [\n      'management@agency.com',\n      'finance@agency.com',\n      'ceo@agency.com'\n    ],\n    include_sections: [\n      'revenue_summary',\n      'expense_summary',\n      'cash_flow',\n      'client_payments',\n      'outstanding_invoices',\n      'project_profitability',\n      'team_utilization',\n      'key_metrics'\n    ]\n  };\n} else if (triggerNode === 'Monthly Report Trigger') {\n  // Monthly report - Previous full month\n  const lastMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);\n  const thisMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);\n  const lastDayOfMonth = new Date(thisMonth.getTime() - 1);\n  \n  reportConfig = {\n    report_type: 'monthly_financial_report',\n    period: {\n      start_date: lastMonth.toISOString(),\n      end_date: lastDayOfMonth.toISOString()\n    },\n    frequency: 'monthly',\n    recipients: [\n      'management@agency.com',\n      'finance@agency.com',\n      'ceo@agency.com',\n      'board@agency.com'\n    ],\n    include_sections: [\n      'executive_summary',\n      'revenue_analysis',\n      'expense_breakdown',\n      'profit_loss_statement',\n      'cash_flow_statement',\n      'balance_sheet_summary',\n      'client_revenue_breakdown',\n      'project_profitability_analysis',\n      'budget_vs_actual',\n      'forecasting',\n      'kpi_dashboard',\n      'recommendations'\n    ]\n  };\n}\n\nreturn [{ json: reportConfig }];"
+      },
+      "id": "determine-report-config",
+      "name": "Determine Report Configuration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://localhost:3002/api/financial/reports/data",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={\n  \"start_date\": \"{{ $json.period.start_date }}\",\n  \"end_date\": \"{{ $json.period.end_date }}\",\n  \"include_sections\": {{ JSON.stringify($json.include_sections) }},\n  \"detailed\": {{ $json.frequency === 'monthly' }},\n  \"include_comparisons\": true,\n  \"include_forecasting\": {{ $json.frequency === 'monthly' }}\n}",
+        "options": {}
+      },
+      "id": "fetch-financial-data",
+      "name": "Fetch Financial Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "api-key-auth",
+          "name": "API Key Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://localhost:3002/api/projects/analytics/profitability-summary",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={\n  \"start_date\": \"{{ $('Determine Report Configuration').item.json.period.start_date }}\",\n  \"end_date\": \"{{ $('Determine Report Configuration').item.json.period.end_date }}\",\n  \"group_by\": \"client\",\n  \"include_time_tracking\": true,\n  \"include_expenses\": true\n}",
+        "options": {}
+      },
+      "id": "fetch-project-data",
+      "name": "Fetch Project Analytics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "api-key-auth",
+          "name": "API Key Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://localhost:3002/api/team/utilization-report",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={\n  \"start_date\": \"{{ $('Determine Report Configuration').item.json.period.start_date }}\",\n  \"end_date\": \"{{ $('Determine Report Configuration').item.json.period.end_date }}\",\n  \"include_billable_hours\": true,\n  \"include_project_breakdown\": true,\n  \"calculate_efficiency\": true\n}",
+        "options": {}
+      },
+      "id": "fetch-team-utilization",
+      "name": "Fetch Team Utilization",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 400],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "api-key-auth",
+          "name": "API Key Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Compile and analyze all financial data\nconst reportConfig = $('Determine Report Configuration').first().json;\nconst financialData = $('Fetch Financial Data').first().json;\nconst projectData = $('Fetch Project Analytics').first().json;\nconst teamData = $('Fetch Team Utilization').first().json;\n\n// Calculate key metrics and insights\nconst compiledReport = {\n  report_metadata: {\n    report_type: reportConfig.report_type,\n    period: reportConfig.period,\n    generated_at: new Date().toISOString(),\n    frequency: reportConfig.frequency,\n    data_sources: ['financial_system', 'project_management', 'time_tracking']\n  },\n  \n  executive_summary: {\n    total_revenue: financialData.revenue?.total || 0,\n    total_expenses: financialData.expenses?.total || 0,\n    net_profit: (financialData.revenue?.total || 0) - (financialData.expenses?.total || 0),\n    profit_margin: financialData.revenue?.total > 0 ? \n      (((financialData.revenue?.total || 0) - (financialData.expenses?.total || 0)) / (financialData.revenue?.total || 0)) * 100 : 0,\n    cash_flow: financialData.cash_flow?.net_change || 0,\n    outstanding_amount: financialData.outstanding?.total_amount || 0,\n    active_projects: projectData.summary?.total_projects || 0,\n    team_utilization_avg: teamData.overall?.average_utilization || 0\n  },\n  \n  revenue_analysis: {\n    total_revenue: financialData.revenue?.total || 0,\n    recurring_revenue: financialData.revenue?.recurring || 0,\n    one_time_revenue: financialData.revenue?.one_time || 0,\n    growth_rate: financialData.revenue?.growth_rate || 0,\n    revenue_by_service: financialData.revenue?.by_service || [],\n    revenue_by_client: financialData.revenue?.by_client || [],\n    top_performing_clients: (financialData.revenue?.by_client || []).slice(0, 5)\n  },\n  \n  expense_breakdown: {\n    total_expenses: financialData.expenses?.total || 0,\n    by_category: financialData.expenses?.by_category || [],\n    fixed_expenses: financialData.expenses?.fixed || 0,\n    variable_expenses: financialData.expenses?.variable || 0,\n    team_costs: financialData.expenses?.team_costs || 0,\n    overhead: financialData.expenses?.overhead || 0,\n    growth_rate: financialData.expenses?.growth_rate || 0\n  },\n  \n  project_profitability: {\n    total_projects: projectData.summary?.total_projects || 0,\n    profitable_projects: projectData.summary?.profitable_projects || 0,\n    average_margin: projectData.summary?.average_profit_margin || 0,\n    total_project_revenue: projectData.summary?.total_revenue || 0,\n    total_project_costs: projectData.summary?.total_costs || 0,\n    projects_breakdown: projectData.projects?.slice(0, 10) || [],\n    underperforming_projects: (projectData.projects || []).filter(p => p.profit_margin < 20)\n  },\n  \n  team_performance: {\n    total_team_members: teamData.team_metrics?.length || 0,\n    average_utilization: teamData.overall?.average_utilization || 0,\n    total_billable_hours: teamData.overall?.total_billable_hours || 0,\n    total_logged_hours: teamData.overall?.total_logged_hours || 0,\n    efficiency_score: teamData.overall?.efficiency_score || 0,\n    top_performers: (teamData.team_metrics || []).slice(0, 5),\n    underutilized_resources: (teamData.team_metrics || []).filter(m => m.utilization_rate < 60)\n  },\n  \n  cash_flow: {\n    opening_balance: financialData.cash_flow?.opening_balance || 0,\n    closing_balance: financialData.cash_flow?.closing_balance || 0,\n    net_change: financialData.cash_flow?.net_change || 0,\n    cash_inflows: financialData.cash_flow?.inflows || 0,\n    cash_outflows: financialData.cash_flow?.outflows || 0,\n    accounts_receivable: financialData.outstanding?.total_amount || 0,\n    days_sales_outstanding: financialData.metrics?.days_sales_outstanding || 0\n  },\n  \n  key_insights: [],\n  recommendations: [],\n  alerts: []\n};\n\n// Generate insights based on data analysis\nconst insights = [];\nconst recommendations = [];\nconst alerts = [];\n\n// Profit margin analysis\nif (compiledReport.executive_summary.profit_margin < 20) {\n  insights.push({\n    type: 'warning',\n    title: 'Low Profit Margin',\n    description: `Current profit margin of ${compiledReport.executive_summary.profit_margin.toFixed(1)}% is below the target of 20%`,\n    impact: 'high'\n  });\n  recommendations.push({\n    priority: 'high',\n    category: 'profitability',\n    action: 'Review pricing strategy and operational efficiency',\n    expected_impact: 'Increase profit margin by 5-10%'\n  });\n}\n\n// Cash flow analysis\nif (compiledReport.cash_flow.net_change < 0) {\n  alerts.push({\n    type: 'critical',\n    title: 'Negative Cash Flow',\n    description: `Cash flow decreased by $${Math.abs(compiledReport.cash_flow.net_change)}`,\n    action_required: true\n  });\n}\n\n// Outstanding invoices analysis\nif (compiledReport.executive_summary.outstanding_amount > compiledReport.executive_summary.total_revenue * 0.3) {\n  insights.push({\n    type: 'warning',\n    title: 'High Outstanding Amount',\n    description: `Outstanding invoices represent ${((compiledReport.executive_summary.outstanding_amount / compiledReport.executive_summary.total_revenue) * 100).toFixed(1)}% of total revenue`,\n    impact: 'medium'\n  });\n  recommendations.push({\n    priority: 'medium',\n    category: 'collections',\n    action: 'Implement more aggressive collection procedures',\n    expected_impact: 'Reduce outstanding invoices by 20%'\n  });\n}\n\n// Team utilization analysis\nif (compiledReport.team_performance.average_utilization < 70) {\n  insights.push({\n    type: 'info',\n    title: 'Low Team Utilization',\n    description: `Average team utilization of ${compiledReport.team_performance.average_utilization}% indicates capacity for growth`,\n    impact: 'medium'\n  });\n  recommendations.push({\n    priority: 'medium',\n    category: 'resource_management',\n    action: 'Focus on business development to increase team utilization',\n    expected_impact: 'Increase revenue capacity by 20-30%'\n  });\n}\n\n// Project profitability analysis\nif (compiledReport.project_profitability.underperforming_projects.length > 0) {\n  alerts.push({\n    type: 'warning',\n    title: 'Underperforming Projects',\n    description: `${compiledReport.project_profitability.underperforming_projects.length} projects have profit margins below 20%`,\n    action_required: true\n  });\n}\n\ncompiledReport.key_insights = insights;\ncompiledReport.recommendations = recommendations;\ncompiledReport.alerts = alerts;\n\nreturn [{ json: compiledReport }];"
+      },
+      "id": "compile-report-data",
+      "name": "Compile Report Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [940, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3002/api/reports/generate",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"report_type\": \"{{ $('Determine Report Configuration').item.json.report_type }}\",\n  \"format\": \"pdf\",\n  \"data\": {{ JSON.stringify($json) }},\n  \"template\": \"{{ $('Determine Report Configuration').item.json.frequency === 'monthly' ? 'monthly_financial_comprehensive' : 'weekly_financial_summary' }}\",\n  \"branding\": {\n    \"company_name\": \"Your Agency Name\",\n    \"logo_url\": \"https://youragency.com/logo.png\",\n    \"primary_color\": \"#6366f1\"\n  },\n  \"options\": {\n    \"include_charts\": true,\n    \"include_executive_summary\": true,\n    \"include_recommendations\": {{ $('Determine Report Configuration').item.json.frequency === 'monthly' }},\n    \"watermark\": \"CONFIDENTIAL\",\n    \"page_numbers\": true,\n    \"table_of_contents\": {{ $('Determine Report Configuration').item.json.frequency === 'monthly' }}\n  }\n}",
+        "options": {}
+      },
+      "id": "generate-pdf-report",
+      "name": "Generate PDF Report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1160, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "api-key-auth",
+          "name": "API Key Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,\n            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-critical-alerts",
+              "leftValue": "={{ $json.alerts.filter(alert => alert.type === 'critical').length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-critical-alerts",
+      "name": "Has Critical Alerts?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1160, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3002/api/integrations/slack/alert",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"channel\": \"#finance-alerts\",\n  \"alert_type\": \"critical_financial_alert\",\n  \"message\": \"🚨 **CRITICAL FINANCIAL ALERT** 🚨\\n\\n{{ $('Compile Report Data').item.json.alerts.filter(alert => alert.type === 'critical').map(alert => `**${alert.title}:** ${alert.description}`).join('\\\\n') }}\\n\\n📊 **Key Metrics:**\\n• Revenue: ${{ $('Compile Report Data').item.json.executive_summary.total_revenue.toLocaleString() }}\\n• Profit: ${{ $('Compile Report Data').item.json.executive_summary.net_profit.toLocaleString() }}\\n• Cash Flow: ${{ $('Compile Report Data').item.json.cash_flow.net_change.toLocaleString() }}\\n• Outstanding: ${{ $('Compile Report Data').item.json.executive_summary.outstanding_amount.toLocaleString() }}\\n\\n⚠️ **Immediate attention required from finance team**\",\n  \"priority\": \"urgent\",\n  \"mention_users\": [\"@finance-team\", \"@management\"]\n}",
+        "options": {}
+      },
+      "id": "send-critical-alert",
+      "name": "Send Critical Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1380, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "api-key-auth",
+          "name": "API Key Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3002/api/integrations/email/send-report",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"template\": \"financial_report_email\",\n  \"subject\": \"{{ $('Determine Report Configuration').item.json.frequency === 'monthly' ? 'Monthly' : 'Weekly' }} Financial Report - {{ new Date($('Determine Report Configuration').item.json.period.end_date).toLocaleDateString() }}\",\n  \"recipients\": {{ JSON.stringify($('Determine Report Configuration').item.json.recipients) }},\n  \"data\": {\n    \"report_period\": \"{{ new Date($('Determine Report Configuration').item.json.period.start_date).toLocaleDateString() }} - {{ new Date($('Determine Report Configuration').item.json.period.end_date).toLocaleDateString() }}\",\n    \"executive_summary\": {\n      \"total_revenue\": \"${{ $('Compile Report Data').item.json.executive_summary.total_revenue.toLocaleString() }}\",\n      \"net_profit\": \"${{ $('Compile Report Data').item.json.executive_summary.net_profit.toLocaleString() }}\",\n      \"profit_margin\": \"{{ $('Compile Report Data').item.json.executive_summary.profit_margin.toFixed(1) }}%\",\n      \"cash_flow\": \"${{ $('Compile Report Data').item.json.cash_flow.net_change.toLocaleString() }}\",\n      \"outstanding\": \"${{ $('Compile Report Data').item.json.executive_summary.outstanding_amount.toLocaleString() }}\"\n    },\n    \"key_highlights\": [\n      \"Revenue: ${{ $('Compile Report Data').item.json.executive_summary.total_revenue.toLocaleString() }} ({{ $('Compile Report Data').item.json.revenue_analysis.growth_rate > 0 ? '+' : '' }}{{ $('Compile Report Data').item.json.revenue_analysis.growth_rate.toFixed(1) }}%)\",\n      \"Profit Margin: {{ $('Compile Report Data').item.json.executive_summary.profit_margin.toFixed(1) }}%\",\n      \"Active Projects: {{ $('Compile Report Data').item.json.executive_summary.active_projects }}\",\n      \"Team Utilization: {{ $('Compile Report Data').item.json.executive_summary.team_utilization_avg.toFixed(1) }}%\"\n    ],\n    \"alerts_count\": {{ $('Compile Report Data').item.json.alerts.length }},\n    \"critical_alerts_count\": {{ $('Compile Report Data').item.json.alerts.filter(alert => alert.type === 'critical').length }},\n    \"recommendations_count\": {{ $('Compile Report Data').item.json.recommendations.length }}\n  },\n  \"attachments\": [\n    {\n      \"filename\": \"{{ $('Determine Report Configuration').item.json.frequency === 'monthly' ? 'Monthly' : 'Weekly' }}_Financial_Report_{{ new Date().toISOString().split('T')[0] }}.pdf\",\n      \"content\": \"{{ $('Generate PDF Report').item.json.file_content }}\",\n      \"content_type\": \"application/pdf\"\n    }\n  ],\n  \"priority\": {{ $('Compile Report Data').item.json.alerts.filter(alert => alert.type === 'critical').length > 0 ? '\"high\"' : '\"normal\"' }}\n}",
+        "options": {}
+      },
+      "id": "send-report-email",
+      "name": "Send Report Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1380, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "api-key-auth",
+          "name": "API Key Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3002/api/reports/store",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"report_type\": \"{{ $('Determine Report Configuration').item.json.report_type }}\",\n  \"period\": {{ JSON.stringify($('Determine Report Configuration').item.json.period) }},\n  \"data\": {{ JSON.stringify($('Compile Report Data').item.json) }},\n  \"pdf_url\": \"{{ $('Generate PDF Report').item.json.file_url }}\",\n  \"generated_by\": \"automation\",\n  \"recipients\": {{ JSON.stringify($('Determine Report Configuration').item.json.recipients) }},\n  \"metadata\": {\n    \"alerts_count\": {{ $('Compile Report Data').item.json.alerts.length }},\n    \"critical_alerts\": {{ $('Compile Report Data').item.json.alerts.filter(alert => alert.type === 'critical').length }},\n    \"recommendations_count\": {{ $('Compile Report Data').item.json.recommendations.length }},\n    \"data_sources\": {{ JSON.stringify($('Compile Report Data').item.json.report_metadata.data_sources) }},\n    \"automation_version\": \"2.0\"\n  }\n}",
+        "options": {}
+      },
+      "id": "store-report-data",
+      "name": "Store Report in Database",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1600, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "api-key-auth",
+          "name": "API Key Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-underperforming-projects",
+              "leftValue": "={{ $json.project_profitability.underperforming_projects.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-underperforming-projects",
+      "name": "Has Underperforming Projects?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1160, 500]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3002/api/projects/bulk-flag-review",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"project_ids\": {{ JSON.stringify($('Compile Report Data').item.json.project_profitability.underperforming_projects.map(p => p.id)) }},\n  \"flag_reason\": \"low_profitability\",\n  \"priority\": \"medium\",\n  \"review_type\": \"profitability_analysis\",\n  \"automated_flag\": true,\n  \"assigned_to\": \"project-management-team\",\n  \"notes\": \"Projects flagged by automated financial reporting due to profit margins below 20%. Requires immediate review of scope, pricing, and resource allocation.\",\n  \"action_items\": [\n    \"Review project scope and deliverables\",\n    \"Analyze resource allocation efficiency\",\n    \"Evaluate pricing strategy\",\n    \"Consider scope adjustments or rate increases\",\n    \"Document lessons learned for future projects\"\n  ]\n}",
+        "options": {}
+      },
+      "id": "flag-underperforming-projects",
+      "name": "Flag Underperforming Projects",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1380, 500],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "api-key-auth",
+          "name": "API Key Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3002/api/analytics/financial-reporting/log",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"event_type\": \"automated_financial_report_generated\",\n  \"report_type\": \"{{ $('Determine Report Configuration').item.json.report_type }}\",\n  \"period\": {{ JSON.stringify($('Determine Report Configuration').item.json.period) }},\n  \"metrics\": {\n    \"total_revenue\": {{ $('Compile Report Data').item.json.executive_summary.total_revenue }},\n    \"net_profit\": {{ $('Compile Report Data').item.json.executive_summary.net_profit }},\n    \"profit_margin\": {{ $('Compile Report Data').item.json.executive_summary.profit_margin }},\n    \"cash_flow_change\": {{ $('Compile Report Data').item.json.cash_flow.net_change }},\n    \"outstanding_amount\": {{ $('Compile Report Data').item.json.executive_summary.outstanding_amount }},\n    \"active_projects\": {{ $('Compile Report Data').item.json.executive_summary.active_projects }},\n    \"team_utilization\": {{ $('Compile Report Data').item.json.executive_summary.team_utilization_avg }}\n  },\n  \"automation_results\": {\n    \"alerts_generated\": {{ $('Compile Report Data').item.json.alerts.length }},\n    \"critical_alerts\": {{ $('Compile Report Data').item.json.alerts.filter(alert => alert.type === 'critical').length }},\n    \"recommendations\": {{ $('Compile Report Data').item.json.recommendations.length }},\n    \"underperforming_projects_flagged\": {{ $('Compile Report Data').item.json.project_profitability.underperforming_projects.length }},\n    \"report_sent_to\": {{ $('Determine Report Configuration').item.json.recipients.length }},\n    \"pdf_generated\": {{ $('Generate PDF Report').item.json.success || false }}\n  },\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}",
+        "options": {}
+      },
+      "id": "log-reporting-analytics",
+      "name": "Log Reporting Analytics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1600, 500],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "api-key-auth",
+          "name": "API Key Auth"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Weekly Report Trigger": {
+      "main": [
+        [
+          {
+            "node": "Determine Report Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Monthly Report Trigger": {
+      "main": [
+        [
+          {
+            "node": "Determine Report Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Determine Report Configuration": {
+      "main": [
+        [
+          {
+            "node": "Fetch Financial Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Project Analytics",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Team Utilization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Financial Data": {
+      "main": [
+        [
+          {
+            "node": "Compile Report Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Project Analytics": {
+      "main": [
+        [
+          {
+            "node": "Compile Report Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Team Utilization": {
+      "main": [
+        [
+          {
+            "node": "Compile Report Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compile Report Data": {
+      "main": [
+        [
+          {
+            "node": "Generate PDF Report",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Has Critical Alerts?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Has Underperforming Projects?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate PDF Report": {
+      "main": [
+        [
+          {
+            "node": "Send Report Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Critical Alerts?": {
+      "main": [
+        [
+          {
+            "node": "Send Critical Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Report Email": {
+      "main": [
+        [
+          {
+            "node": "Store Report in Database",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Underperforming Projects?": {
+      "main": [
+        [
+          {
+            "node": "Flag Underperforming Projects",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Flag Underperforming Projects": {
+      "main": [
+        [
+          {
+            "node": "Log Reporting Analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Report in Database": {
+      "main": [
+        [
+          {
+            "node": "Log Reporting Analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York"
+  },
+  "versionId": "financial-reporting-v3.0.0",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "id": "financial-reporting-automation",
+  "tags": [
+    {
+      "createdAt": "2024-12-19T00:00:00.000Z",
+      "updatedAt": "2024-12-19T00:00:00.000Z",
+      "id": "1",
+      "name": "billing"
+    },
+    {
+      "createdAt": "2024-12-19T00:00:00.000Z",
+      "updatedAt": "2024-12-19T00:00:00.000Z",
+      "id": "6",
+      "name": "reporting"
+    }
+  ]
+}

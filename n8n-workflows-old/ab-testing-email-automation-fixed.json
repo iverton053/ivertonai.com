@@ -1,0 +1,813 @@
+{
+  "name": "A/B Testing Email Automation - Fixed",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ab-test-email-send",
+        "options": {
+          "noResponseBody": false
+        }
+      },
+      "id": "webhook-email-send",
+      "name": "Email Send Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "ab-test-email-send"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate webhook input\nconst inputData = $input.first().json;\n\nif (!inputData.testId || !inputData.userId || !inputData.emailData) {\n  return {\n    error: 'Missing required fields: testId, userId, or emailData',\n    success: false\n  };\n}\n\nreturn {\n  testId: inputData.testId,\n  userId: inputData.userId,\n  emailData: inputData.emailData,\n  success: true\n};"
+      },
+      "id": "validate-input",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [360, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "input-valid",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-input-valid",
+      "name": "Check Input Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "requestMethod": "GET",
+        "url": "={{ $env.API_BASE_URL }}/api/ab-testing/tests/{{ $json.testId }}/variant/{{ $json.userId }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 10000
+        }
+      },
+      "id": "get-user-variant",
+      "name": "Get User Variant",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [600, 220],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "api-auth",
+          "name": "Dashboard API Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-variant",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            },
+            {
+              "id": "has-variant-id",
+              "leftValue": "={{ !!$json.variantId }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-variant-assigned",
+      "name": "Check Variant Assigned",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [750, 220]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "requestMethod": "GET",
+        "url": "={{ $env.API_BASE_URL }}/api/ab-testing/tests/{{ $('validate-input').first().json.testId }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 10000
+        }
+      },
+      "id": "get-test-details",
+      "name": "Get Test Details",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [900, 140],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "api-auth",
+          "name": "Dashboard API Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract variant content with error handling\nconst validatedInput = $('validate-input').first().json;\nconst variantData = $('get-user-variant').first().json;\nconst testData = $('get-test-details').first().json;\n\nif (!validatedInput || !variantData || !testData) {\n  return {\n    error: 'Missing required data from previous steps',\n    success: false\n  };\n}\n\nconst assignedVariantId = variantData.variantId;\nlet variants;\n\ntry {\n  // Handle both string and object variants\n  if (typeof testData.test.variants === 'string') {\n    variants = JSON.parse(testData.test.variants);\n  } else {\n    variants = testData.test.variants;\n  }\n} catch (error) {\n  return {\n    error: 'Invalid variants data format',\n    success: false\n  };\n}\n\nif (!Array.isArray(variants)) {\n  return {\n    error: 'Variants is not an array',\n    success: false\n  };\n}\n\n// Find the assigned variant\nconst assignedVariant = variants.find(v => v.id === assignedVariantId);\n\nif (!assignedVariant) {\n  return {\n    error: `Variant ${assignedVariantId} not found`,\n    success: false\n  };\n}\n\n// Merge original email data with variant-specific content\nconst emailData = validatedInput.emailData;\nconst emailContent = {\n  to: emailData.to,\n  subject: assignedVariant.content.subject || emailData.subject || 'Test Email',\n  fromName: assignedVariant.content.from_name || emailData.fromName || 'Test Sender',\n  fromEmail: emailData.fromEmail || process.env.DEFAULT_FROM_EMAIL || 'test@example.com',\n  content: assignedVariant.content.html_content || emailData.content || '<p>Test email content</p>',\n  \n  // A/B testing tracking data\n  testId: validatedInput.testId,\n  variantId: assignedVariantId,\n  variantName: assignedVariant.name,\n  userId: validatedInput.userId\n};\n\n// Add tracking pixels and links\nconst baseUrl = process.env.API_BASE_URL || 'http://localhost:3000';\nconst trackingPixel = `<img src=\"${baseUrl}/webhook/ab-test-open-track?testId=${validatedInput.testId}&userId=${validatedInput.userId}&variantId=${assignedVariantId}&eventType=open\" width=\"1\" height=\"1\" style=\"display:none;\" />`;\n\n// Add click tracking to all links\nlet contentWithTracking = emailContent.content;\nconst linkRegex = /<a\\s+([^>]*href=[\"']([^\"']*)[\"'][^>]*)>/gi;\n\ncontentWithTracking = contentWithTracking.replace(linkRegex, (match, attributes, url) => {\n  const trackingUrl = `${baseUrl}/webhook/ab-test-click-track?testId=${validatedInput.testId}&userId=${validatedInput.userId}&variantId=${assignedVariantId}&url=${encodeURIComponent(url)}`;\n  return `<a ${attributes.replace(/href=[\"'][^\"']*[\"']/, `href=\"${trackingUrl}\"`)}>`;\n});\n\n// Add tracking pixel at the end of email content\ncontentWithTracking += trackingPixel;\n\nreturn {\n  ...emailContent,\n  content: contentWithTracking,\n  success: true\n};"
+      },
+      "id": "prepare-email-content",
+      "name": "Prepare Email Content",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1050, 140]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "content-prepared",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-content-prepared",
+      "name": "Check Content Prepared",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1200, 140]
+    },
+    {
+      "parameters": {
+        "method": "post",
+        "url": "={{ $env.EMAIL_SERVICE_URL || ($env.API_BASE_URL + '/api/email/send') }}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "to",
+              "value": "={{ $json.to }}"
+            },
+            {
+              "name": "subject",
+              "value": "={{ $json.subject }}"
+            },
+            {
+              "name": "html",
+              "value": "={{ $json.content }}"
+            },
+            {
+              "name": "from_name",
+              "value": "={{ $json.fromName }}"
+            },
+            {
+              "name": "from_email",
+              "value": "={{ $json.fromEmail }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 15000
+        }
+      },
+      "id": "send-email",
+      "name": "Send Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1350, 60],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "email-service-auth",
+          "name": "Email Service Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "requestMethod": "POST",
+        "url": "={{ $env.API_BASE_URL }}/api/ab-testing/tests/{{ $json.testId }}/track",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "userId",
+              "value": "={{ $json.userId }}"
+            },
+            {
+              "name": "variantId",
+              "value": "={{ $json.variantId }}"
+            },
+            {
+              "name": "eventType",
+              "value": "email_sent"
+            },
+            {
+              "name": "eventValue",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 10000
+        }
+      },
+      "id": "track-email-sent",
+      "name": "Track Email Sent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1500, 60],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "api-auth",
+          "name": "Dashboard API Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"success\": true,\n  \"message\": \"A/B test email sent successfully\",\n  \"testId\": \"{{ $json.testId }}\",\n  \"variantId\": \"{{ $json.variantId }}\",\n  \"userId\": \"{{ $json.userId }}\"\n}"
+      },
+      "id": "return-success",
+      "name": "Return Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1650, 60]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "ab-test-click-track",
+        "options": {}
+      },
+      "id": "webhook-click-track",
+      "name": "Click Tracking Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 600],
+      "webhookId": "ab-test-click-track"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate click tracking parameters\nconst query = $input.first().json.query || {};\n\nif (!query.testId || !query.userId || !query.variantId || !query.url) {\n  return {\n    error: 'Missing required parameters',\n    success: false\n  };\n}\n\nreturn {\n  testId: query.testId,\n  userId: query.userId,\n  variantId: query.variantId,\n  url: decodeURIComponent(query.url),\n  success: true\n};"
+      },
+      "id": "validate-click-params",
+      "name": "Validate Click Parameters",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [390, 600]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "params-valid",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-click-params",
+      "name": "Check Click Parameters",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [540, 600]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "requestMethod": "POST",
+        "url": "={{ $env.API_BASE_URL }}/api/ab-testing/tests/{{ $json.testId }}/track",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "userId",
+              "value": "={{ $json.userId }}"
+            },
+            {
+              "name": "variantId",
+              "value": "={{ $json.variantId }}"
+            },
+            {
+              "name": "eventType",
+              "value": "click"
+            },
+            {
+              "name": "eventValue",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 5000
+        }
+      },
+      "id": "track-click",
+      "name": "Track Click",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [690, 520],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "api-auth",
+          "name": "Dashboard API Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "redirect",
+        "redirectURL": "={{ $json.url }}"
+      },
+      "id": "redirect-to-url",
+      "name": "Redirect to Original URL",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [840, 520]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "ab-test-open-track",
+        "options": {}
+      },
+      "id": "webhook-open-track",
+      "name": "Open Tracking Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 800],
+      "webhookId": "ab-test-open-track"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate open tracking parameters\nconst query = $input.first().json.query || {};\n\nif (!query.testId || !query.userId || !query.variantId) {\n  return {\n    error: 'Missing required parameters',\n    success: false\n  };\n}\n\nreturn {\n  testId: query.testId,\n  userId: query.userId,\n  variantId: query.variantId,\n  success: true\n};"
+      },
+      "id": "validate-open-params",
+      "name": "Validate Open Parameters",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [390, 800]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "params-valid",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-open-params",
+      "name": "Check Open Parameters",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [540, 800]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "requestMethod": "POST",
+        "url": "={{ $env.API_BASE_URL }}/api/ab-testing/tests/{{ $json.testId }}/track",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "userId",
+              "value": "={{ $json.userId }}"
+            },
+            {
+              "name": "variantId",
+              "value": "={{ $json.variantId }}"
+            },
+            {
+              "name": "eventType",
+              "value": "open"
+            },
+            {
+              "name": "eventValue",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 5000
+        }
+      },
+      "id": "track-open",
+      "name": "Track Open",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [690, 720],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "api-auth",
+          "name": "Dashboard API Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "binaryData",
+        "binaryData": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+      },
+      "id": "return-tracking-pixel",
+      "name": "Return Tracking Pixel",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [840, 720]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"success\": false,\n  \"error\": \"{{ $json.error || 'Invalid request' }}\"\n}",
+        "responseCode": 400
+      },
+      "id": "return-error",
+      "name": "Return Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [600, 380]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"success\": false,\n  \"error\": \"Invalid click tracking parameters\"\n}",
+        "responseCode": 400
+      },
+      "id": "return-click-error",
+      "name": "Return Click Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [690, 680]
+    },
+    {
+      "parameters": {
+        "respondWith": "binaryData",
+        "binaryData": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+      },
+      "id": "return-empty-pixel",
+      "name": "Return Empty Pixel",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [690, 880]
+    }
+  ],
+  "connections": {
+    "Email Send Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Check Input Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Input Valid": {
+      "main": [
+        [
+          {
+            "node": "Get User Variant",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get User Variant": {
+      "main": [
+        [
+          {
+            "node": "Check Variant Assigned",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Variant Assigned": {
+      "main": [
+        [
+          {
+            "node": "Get Test Details",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Test Details": {
+      "main": [
+        [
+          {
+            "node": "Prepare Email Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Email Content": {
+      "main": [
+        [
+          {
+            "node": "Check Content Prepared",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Content Prepared": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email": {
+      "main": [
+        [
+          {
+            "node": "Track Email Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Track Email Sent": {
+      "main": [
+        [
+          {
+            "node": "Return Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Click Tracking Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Click Parameters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Click Parameters": {
+      "main": [
+        [
+          {
+            "node": "Check Click Parameters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Click Parameters": {
+      "main": [
+        [
+          {
+            "node": "Track Click",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Click Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Track Click": {
+      "main": [
+        [
+          {
+            "node": "Redirect to Original URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Open Tracking Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Open Parameters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Open Parameters": {
+      "main": [
+        [
+          {
+            "node": "Check Open Parameters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Open Parameters": {
+      "main": [
+        [
+          {
+            "node": "Track Open",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Empty Pixel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Track Open": {
+      "main": [
+        [
+          {
+            "node": "Return Tracking Pixel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": {
+      "errorWorkflow": ""
+    }
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-09-22T10:00:00.000Z",
+      "updatedAt": "2024-09-22T10:00:00.000Z",
+      "id": "ab-testing",
+      "name": "A/B Testing"
+    },
+    {
+      "createdAt": "2024-09-22T10:00:00.000Z",
+      "updatedAt": "2024-09-22T10:00:00.000Z",
+      "id": "email-marketing",
+      "name": "Email Marketing"
+    }
+  ],
+  "triggerCount": 3,
+  "updatedAt": "2024-09-22T10:00:00.000Z",
+  "versionId": "2.0"
+}

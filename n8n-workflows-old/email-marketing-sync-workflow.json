@@ -1,0 +1,1030 @@
+{
+  "name": "Email Marketing Sync",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "email-campaign-results",
+        "options": {
+          "noResponseBody": false
+        }
+      },
+      "name": "Email Campaign Results Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "id": "webhook-campaign-results"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "mailchimp-webhook",
+        "options": {
+          "noResponseBody": false
+        }
+      },
+      "name": "Mailchimp Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        500
+      ],
+      "id": "mailchimp-webhook"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sendgrid-webhook",
+        "options": {
+          "noResponseBody": false
+        }
+      },
+      "name": "SendGrid Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        700
+      ],
+      "id": "sendgrid-webhook"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "constantcontact-webhook",
+        "options": {
+          "noResponseBody": false
+        }
+      },
+      "name": "Constant Contact Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        900
+      ],
+      "id": "constantcontact-webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.platform }}",
+              "rightValue": "mailchimp",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Route by Platform",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        460,
+        600
+      ],
+      "id": "platform-router"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize Mailchimp webhook data\nconst webhookData = $input.all()[0].json;\n\n// Map Mailchimp event types to our system events\nconst eventMapping = {\n  'opened': 'email_opened',\n  'clicked': 'email_clicked',\n  'unsubscribed': 'email_unsubscribed',\n  'bounced': 'email_bounced',\n  'sent': 'email_sent',\n  'delivered': 'email_delivered'\n};\n\nconst normalizedData = {\n  platform: 'mailchimp',\n  event_type: eventMapping[webhookData.type] || webhookData.type,\n  email: webhookData.data?.email || webhookData.email,\n  campaign_id: webhookData.data?.campaign_id,\n  campaign_name: webhookData.data?.campaign_title,\n  timestamp: webhookData.fired_at || new Date().toISOString(),\n  engagement_data: {\n    opens: webhookData.data?.opens || 0,\n    clicks: webhookData.data?.clicks || 0,\n    bounces: webhookData.data?.bounces || 0,\n    unsubs: webhookData.data?.unsubs || 0,\n    url_clicked: webhookData.data?.url,\n    ip_address: webhookData.data?.ip,\n    user_agent: webhookData.data?.user_agent\n  },\n  list_info: {\n    list_id: webhookData.data?.list_id,\n    segment_id: webhookData.data?.segment_id\n  },\n  raw_data: webhookData\n};\n\n// Calculate engagement score\nlet engagement_score = 0;\nif (normalizedData.event_type === 'email_opened') engagement_score = 10;\nif (normalizedData.event_type === 'email_clicked') engagement_score = 25;\nif (normalizedData.event_type === 'email_unsubscribed') engagement_score = -50;\nif (normalizedData.event_type === 'email_bounced') engagement_score = -25;\n\nnormalizedData.engagement_score = engagement_score;\n\nreturn { json: normalizedData };"
+      },
+      "name": "Process Mailchimp Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        500
+      ],
+      "id": "process-mailchimp"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize SendGrid webhook data\nconst webhookData = $input.all()[0].json;\n\n// Handle SendGrid batch events\nconst events = Array.isArray(webhookData) ? webhookData : [webhookData];\nconst processedEvents = [];\n\nevents.forEach(event => {\n  const eventMapping = {\n    'open': 'email_opened',\n    'click': 'email_clicked',\n    'unsubscribe': 'email_unsubscribed',\n    'bounce': 'email_bounced',\n    'delivered': 'email_delivered',\n    'processed': 'email_sent',\n    'dropped': 'email_dropped',\n    'deferred': 'email_deferred',\n    'spamreport': 'email_spam'\n  };\n\n  const normalizedEvent = {\n    platform: 'sendgrid',\n    event_type: eventMapping[event.event] || event.event,\n    email: event.email,\n    campaign_id: event.marketing_campaign_id || event.asm_group_id,\n    campaign_name: event.marketing_campaign_name,\n    timestamp: new Date(event.timestamp * 1000).toISOString(),\n    engagement_data: {\n      opens: event.event === 'open' ? 1 : 0,\n      clicks: event.event === 'click' ? 1 : 0,\n      bounces: event.event === 'bounce' ? 1 : 0,\n      url_clicked: event.url,\n      ip_address: event.ip,\n      user_agent: event.useragent,\n      reason: event.reason,\n      bounce_type: event.type\n    },\n    categories: event.category || [],\n    raw_data: event\n  };\n\n  // Calculate engagement score\n  let engagement_score = 0;\n  if (event.event === 'open') engagement_score = 10;\n  if (event.event === 'click') engagement_score = 25;\n  if (event.event === 'unsubscribe') engagement_score = -50;\n  if (event.event === 'bounce') engagement_score = -25;\n  if (event.event === 'spamreport') engagement_score = -75;\n\n  normalizedEvent.engagement_score = engagement_score;\n  processedEvents.push(normalizedEvent);\n});\n\nreturn processedEvents.map(event => ({ json: event }));"
+      },
+      "name": "Process SendGrid Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        700
+      ],
+      "id": "process-sendgrid"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize Constant Contact webhook data\nconst webhookData = $input.all()[0].json;\n\nconst eventMapping = {\n  'email_open': 'email_opened',\n  'email_click': 'email_clicked',\n  'email_bounce': 'email_bounced',\n  'email_send': 'email_sent',\n  'email_optout': 'email_unsubscribed'\n};\n\nconst normalizedData = {\n  platform: 'constant_contact',\n  event_type: eventMapping[webhookData.event_type] || webhookData.event_type,\n  email: webhookData.contact?.email_address,\n  campaign_id: webhookData.campaign_activity_id,\n  campaign_name: webhookData.campaign_activity?.subject,\n  timestamp: webhookData.event_datetime || new Date().toISOString(),\n  engagement_data: {\n    opens: webhookData.event_type === 'email_open' ? 1 : 0,\n    clicks: webhookData.event_type === 'email_click' ? 1 : 0,\n    bounces: webhookData.event_type === 'email_bounce' ? 1 : 0,\n    url_clicked: webhookData.click_url,\n    bounce_code: webhookData.bounce_code,\n    bounce_description: webhookData.bounce_description\n  },\n  contact_data: {\n    contact_id: webhookData.contact?.contact_id,\n    first_name: webhookData.contact?.first_name,\n    last_name: webhookData.contact?.last_name\n  },\n  raw_data: webhookData\n};\n\n// Calculate engagement score\nlet engagement_score = 0;\nif (normalizedData.event_type === 'email_opened') engagement_score = 10;\nif (normalizedData.event_type === 'email_clicked') engagement_score = 25;\nif (normalizedData.event_type === 'email_unsubscribed') engagement_score = -50;\nif (normalizedData.event_type === 'email_bounced') engagement_score = -25;\n\nnormalizedData.engagement_score = engagement_score;\n\nreturn { json: normalizedData };"
+      },
+      "name": "Process Constant Contact Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        900
+      ],
+      "id": "process-constantcontact"
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "requestMethod": "GET", 
+        "url": "=http://localhost:5000/api/crm/contacts/email/{{ $json.email }}",
+        "options": {
+          "timeout": 15000,
+          "retry": {
+            "enabled": true,
+            "maxAttempts": 3,
+            "waitBetween": 1000
+          },
+          "redirect": {
+            "followRedirects": true,
+            "maxRedirects": 5
+          }
+        }
+      },
+      "name": "Find Contact in CRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        900,
+        600
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "crm-api-auth",
+          "name": "CRM API Auth"
+        }
+      },
+      "id": "find-contact"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.contact }}",
+              "rightValue": "",
+              "operator": {
+                "type": "object",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Contact Exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        600
+      ],
+      "id": "contact-exists"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Calculate new behavioral score based on email engagement\nconst emailData = $node[\"Route by Platform\"].json;\nconst contactData = $node[\"Find Contact in CRM\"].json.contact;\n\n// Current behavioral score\nconst currentScore = contactData.behavioral_score || 0;\n\n// Email engagement scoring matrix\nconst scoringMatrix = {\n  'email_opened': {\n    base_score: 10,\n    frequency_multiplier: 0.8, // Diminishing returns for repeated opens\n    time_decay: 0.9 // Recent activity scores higher\n  },\n  'email_clicked': {\n    base_score: 25,\n    frequency_multiplier: 1.2, // Clicks maintain value\n    time_decay: 0.95\n  },\n  'email_unsubscribed': {\n    base_score: -50,\n    frequency_multiplier: 1.0,\n    time_decay: 1.0\n  },\n  'email_bounced': {\n    base_score: -25,\n    frequency_multiplier: 1.0,\n    time_decay: 1.0\n  },\n  'email_spam': {\n    base_score: -75,\n    frequency_multiplier: 1.0,\n    time_decay: 1.0\n  }\n};\n\n// Get recent email activity (last 30 days)\nconst thirtyDaysAgo = new Date();\nthirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);\n\nconst recentEmailActivity = contactData.activities?.filter(activity => \n  activity.type.startsWith('email_') && \n  new Date(activity.created_at) > thirtyDaysAgo\n) || [];\n\n// Count event types\nconst eventCounts = {};\nrecentEmailActivity.forEach(activity => {\n  eventCounts[activity.type] = (eventCounts[activity.type] || 0) + 1;\n});\n\n// Calculate score adjustment\nconst scoring = scoringMatrix[emailData.event_type] || { base_score: 0, frequency_multiplier: 1.0, time_decay: 1.0 };\nconst frequency_count = eventCounts[emailData.event_type] || 0;\nconst frequency_factor = Math.pow(scoring.frequency_multiplier, frequency_count);\nconst time_factor = scoring.time_decay;\n\nconst score_adjustment = Math.round(scoring.base_score * frequency_factor * time_factor);\nconst new_score = Math.max(0, Math.min(100, currentScore + score_adjustment));\n\n// Determine lead temperature\nlet lead_temperature = 'cold';\nif (new_score >= 70) lead_temperature = 'hot';\nelse if (new_score >= 40) lead_temperature = 'warm';\n\n// Check if score crossed important thresholds\nconst thresholds_crossed = [];\nif (currentScore < 40 && new_score >= 40) thresholds_crossed.push('qualified_lead');\nif (currentScore < 70 && new_score >= 70) thresholds_crossed.push('sales_ready');\nif (currentScore >= 40 && new_score < 40) thresholds_crossed.push('cooling_down');\n\nconst result = {\n  contact_id: contactData._id,\n  email: emailData.email,\n  previous_score: currentScore,\n  score_adjustment: score_adjustment,\n  new_score: new_score,\n  lead_temperature: lead_temperature,\n  thresholds_crossed: thresholds_crossed,\n  engagement_pattern: {\n    event_type: emailData.event_type,\n    platform: emailData.platform,\n    campaign_id: emailData.campaign_id,\n    frequency_count: frequency_count,\n    recent_activity_count: recentEmailActivity.length\n  },\n  timestamp: new Date().toISOString()\n};\n\nreturn { json: result };"
+      },
+      "name": "Calculate Behavioral Score",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        500
+      ],
+      "id": "calculate-score"
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "requestMethod": "PUT",
+        "url": "=http://localhost:5000/api/crm/contacts/{{ $json.contact_id }}/behavioral-score",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"behavioral_score\": {{ $json.new_score }},\n  \"lead_temperature\": \"{{ $json.lead_temperature }}\",\n  \"last_engagement\": {\n    \"type\": \"{{ $json.engagement_pattern.event_type }}\",\n    \"platform\": \"{{ $json.engagement_pattern.platform }}\",\n    \"campaign_id\": \"{{ $json.engagement_pattern.campaign_id }}\",\n    \"timestamp\": \"{{ $json.timestamp }}\"\n  }\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "name": "Update Contact Score",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1560,
+        500
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "crm-api-auth",
+          "name": "CRM API Auth"
+        }
+      },
+      "id": "update-score"
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "requestMethod": "POST",
+        "url": "http://localhost:5000/api/crm/activities",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contact_id\": \"{{ $json.contact_id }}\",\n  \"type\": \"{{ $json.engagement_pattern.event_type }}\",\n  \"description\": \"Email {{ $json.engagement_pattern.event_type.replace('email_', '') }} - {{ $json.engagement_pattern.platform }} campaign\",\n  \"metadata\": {\n    \"platform\": \"{{ $json.engagement_pattern.platform }}\",\n    \"campaign_id\": \"{{ $json.engagement_pattern.campaign_id }}\",\n    \"score_change\": {{ $json.score_adjustment }},\n    \"new_total_score\": {{ $json.new_score }}\n  },\n  \"created_at\": \"{{ $json.timestamp }}\"\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "name": "Log Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1780,
+        500
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "crm-api-auth",
+          "name": "CRM API Auth"
+        }
+      },
+      "id": "log-activity"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.thresholds_crossed }}",
+              "rightValue": "",
+              "operator": {
+                "type": "array",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Threshold Crossed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        500
+      ],
+      "id": "threshold-check"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.thresholds_crossed.includes('sales_ready') }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Sales Ready?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2220,
+        400
+      ],
+      "id": "sales-ready-check"
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "requestMethod": "POST",
+        "url": "http://localhost:5000/api/crm/pipeline/deals",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contact_id\": \"{{ $json.contact_id }}\",\n  \"title\": \"Hot Lead - {{ $json.email }}\",\n  \"value\": 5000,\n  \"stage\": \"qualified\",\n  \"source\": \"email_engagement\",\n  \"priority\": \"high\",\n  \"notes\": \"Auto-created from high email engagement. Score: {{ $json.new_score }}\",\n  \"metadata\": {\n    \"trigger_event\": \"{{ $json.engagement_pattern.event_type }}\",\n    \"trigger_platform\": \"{{ $json.engagement_pattern.platform }}\",\n    \"behavioral_score\": {{ $json.new_score }}\n  }\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "name": "Create Sales Opportunity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        2440,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "crm-api-auth",
+          "name": "CRM API Auth"
+        }
+      },
+      "id": "create-opportunity"
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "requestMethod": "POST",
+        "url": "http://localhost:5000/api/crm/tasks",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contact_id\": \"{{ $json.contact_id }}\",\n  \"title\": \"Follow up with hot lead - {{ $json.email }}\",\n  \"description\": \"Contact has reached sales-ready score ({{ $json.new_score }}) through email engagement. Recent activity: {{ $json.engagement_pattern.event_type }}\",\n  \"priority\": \"high\",\n  \"due_date\": \"{{ new Date(Date.now() + 24*60*60*1000).toISOString() }}\",\n  \"assigned_to\": \"sales_team\",\n  \"metadata\": {\n    \"trigger\": \"behavioral_scoring\",\n    \"score\": {{ $json.new_score }},\n    \"platform\": \"{{ $json.engagement_pattern.platform }}\"\n  }\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "name": "Create Follow-up Task",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        2440,
+        500
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "crm-api-auth",
+          "name": "CRM API Auth"
+        }
+      },
+      "id": "create-task"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.thresholds_crossed.includes('cooling_down') }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Lead Cooling?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2220,
+        600
+      ],
+      "id": "cooling-check"
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "requestMethod": "POST",
+        "url": "http://localhost:5000/api/crm/nurture-sequences/enroll",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contact_id\": \"{{ $json.contact_id }}\",\n  \"sequence_type\": \"re_engagement\",\n  \"trigger\": \"cooling_lead\",\n  \"metadata\": {\n    \"previous_score\": {{ $json.previous_score }},\n    \"current_score\": {{ $json.new_score }},\n    \"last_engagement_platform\": \"{{ $json.engagement_pattern.platform }}\"\n  }\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "name": "Enroll in Re-engagement",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        2440,
+        700
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "crm-api-auth",
+          "name": "CRM API Auth"
+        }
+      },
+      "id": "enroll-reengagement"
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "requestMethod": "POST",
+        "url": "http://localhost:5000/api/crm/contacts",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"email\": \"{{ $json.email }}\",\n  \"source\": \"email_platform\",\n  \"status\": \"lead\",\n  \"behavioral_score\": {{ $json.engagement_score }},\n  \"lead_temperature\": \"warm\",\n  \"platform_data\": {\n    \"{{ $json.platform }}\": {\n      \"campaign_id\": \"{{ $json.campaign_id }}\",\n      \"campaign_name\": \"{{ $json.campaign_name }}\",\n      \"first_engagement\": \"{{ $json.timestamp }}\",\n      \"engagement_type\": \"{{ $json.event_type }}\"\n    }\n  },\n  \"activities\": [\n    {\n      \"type\": \"{{ $json.event_type }}\",\n      \"description\": \"Initial email engagement from {{ $json.platform }}\",\n      \"created_at\": \"{{ $json.timestamp }}\",\n      \"metadata\": {{ JSON.stringify($json.engagement_data) }}\n    }\n  ]\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "name": "Create New Contact",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1340,
+        800
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "crm-api-auth",
+          "name": "CRM API Auth"
+        }
+      },
+      "id": "create-contact"
+    },
+    {
+      "parameters": {
+        "channel": "#sales-alerts",
+        "text": "=🔥 *Hot Lead Alert!* 🔥\n\n*Contact:* {{ $json.email }}\n*Score:* {{ $json.new_score }}/100 ({{ $json.lead_temperature }} 🌡️)\n*Trigger:* {{ $json.engagement_pattern.event_type }} on {{ $json.engagement_pattern.platform }}\n*Previous Score:* {{ $json.previous_score }}\n\n✅ Sales opportunity created\n✅ Follow-up task assigned\n\n_Act fast - this lead is hot! 🚀_",
+        "otherOptions": {
+          "mrkdwn": true
+        }
+      },
+      "name": "Notify Sales Team",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.1,
+      "position": [
+        2660,
+        400
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "slack-sales-alerts",
+          "name": "Sales Slack Bot"
+        }
+      },
+      "id": "slack-notification"
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "requestMethod": "POST",
+        "url": "http://localhost:5000/api/analytics/email-engagement",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"event_type\": \"{{ $json.engagement_pattern.event_type }}\",\n  \"platform\": \"{{ $json.engagement_pattern.platform }}\",\n  \"campaign_id\": \"{{ $json.engagement_pattern.campaign_id }}\",\n  \"contact_id\": \"{{ $json.contact_id }}\",\n  \"score_impact\": {{ $json.score_adjustment }},\n  \"threshold_events\": {{ JSON.stringify($json.thresholds_crossed) }},\n  \"timestamp\": \"{{ $json.timestamp }}\"\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "name": "Track Analytics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        2000,
+        800
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "crm-api-auth",
+          "name": "CRM API Auth"
+        }
+      },
+      "id": "track-analytics"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 */4 * * *"
+            }
+          ]
+        }
+      },
+      "name": "Batch Sync Scheduler",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        240,
+        1100
+      ],
+      "id": "batch-scheduler"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Batch sync configuration for different platforms\nconst platforms = [\n  {\n    name: 'mailchimp',\n    api_endpoint: 'https://us1.api.mailchimp.com/3.0',\n    batch_size: 100,\n    lookback_hours: 4\n  },\n  {\n    name: 'sendgrid',\n    api_endpoint: 'https://api.sendgrid.com/v3',\n    batch_size: 500,\n    lookback_hours: 4\n  },\n  {\n    name: 'constant_contact',\n    api_endpoint: 'https://api.cc.email/v3',\n    batch_size: 50,\n    lookback_hours: 4\n  }\n];\n\nconst timestamp = new Date().toISOString();\nconst lookbackTime = new Date(Date.now() - (4 * 60 * 60 * 1000)).toISOString();\n\nreturn platforms.map(platform => ({\n  json: {\n    platform: platform.name,\n    api_endpoint: platform.api_endpoint,\n    batch_size: platform.batch_size,\n    since: lookbackTime,\n    timestamp: timestamp\n  }\n}));"
+      },
+      "name": "Prepare Batch Requests",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        1100
+      ],
+      "id": "prepare-batch"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.platform }}",
+              "rightValue": "mailchimp",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Batch Platform Router",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        680,
+        1100
+      ],
+      "id": "batch-router"
+    },
+    {
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "mailchimpApi",
+        "requestMethod": "GET",
+        "url": "={{ $json.api_endpoint }}/reports",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "since_send_time",
+              "value": "={{ $json.since }}"
+            },
+            {
+              "name": "count",
+              "value": "={{ $json.batch_size }}"
+            }
+          ]
+        }
+      },
+      "name": "Fetch Mailchimp Batch",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        900,
+        1000
+      ],
+      "credentials": {
+        "mailchimpApi": {
+          "id": "mailchimp-api",
+          "name": "Mailchimp API"
+        }
+      },
+      "id": "fetch-mailchimp-batch"
+    },
+    {
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "sendGridApi",
+        "requestMethod": "GET",
+        "url": "={{ $json.api_endpoint }}/stats",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "start_date",
+              "value": "={{ $json.since.split('T')[0] }}"
+            },
+            {
+              "name": "limit",
+              "value": "={{ $json.batch_size }}"
+            }
+          ]
+        }
+      },
+      "name": "Fetch SendGrid Batch",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        900,
+        1200
+      ],
+      "credentials": {
+        "sendGridApi": {
+          "id": "sendgrid-api",
+          "name": "SendGrid API"
+        }
+      },
+      "id": "fetch-sendgrid-batch"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process batch data and convert to individual events\nconst batchData = $json;\nconst platform = $node[\"Batch Platform Router\"].json.platform;\n\nif (!batchData.reports && !batchData.stats) {\n  return [];\n}\n\nconst events = [];\n\nif (platform === 'mailchimp' && batchData.reports) {\n  batchData.reports.forEach(report => {\n    // Create events for each report metric\n    events.push({\n      platform: 'mailchimp',\n      event_type: 'campaign_summary',\n      campaign_id: report.campaign_id,\n      campaign_name: report.campaign_title,\n      timestamp: report.send_time,\n      batch_metrics: {\n        emails_sent: report.emails_sent,\n        opens: report.opens.opens_total,\n        unique_opens: report.opens.unique_opens,\n        clicks: report.clicks.clicks_total,\n        unique_clicks: report.clicks.unique_clicks,\n        unsubscribes: report.unsubscribed.unsubscribes\n      }\n    });\n  });\n}\n\nif (platform === 'sendgrid' && batchData.stats) {\n  batchData.stats.forEach(stat => {\n    events.push({\n      platform: 'sendgrid',\n      event_type: 'campaign_summary',\n      timestamp: stat.date,\n      batch_metrics: {\n        emails_sent: stat.delivered,\n        opens: stat.opens,\n        unique_opens: stat.unique_opens,\n        clicks: stat.clicks,\n        unique_clicks: stat.unique_clicks,\n        bounces: stat.bounces,\n        spam_reports: stat.spam_reports\n      }\n    });\n  });\n}\n\nreturn events.map(event => ({ json: event }));"
+      },
+      "name": "Process Batch Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        1100
+      ],
+      "id": "process-batch-data"
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "requestMethod": "POST",
+        "url": "http://localhost:5000/api/analytics/campaign-batch",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "name": "Store Batch Analytics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1340,
+        1100
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "crm-api-auth",
+          "name": "CRM API Auth"
+        }
+      },
+      "id": "store-batch-analytics"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Email Campaign Results Webhook": {
+      "main": [
+        [
+          {
+            "node": "Route by Platform",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mailchimp Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Mailchimp Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SendGrid Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process SendGrid Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Constant Contact Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Constant Contact Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Platform": {
+      "main": [
+        [
+          {
+            "node": "Process Mailchimp Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process SendGrid Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Mailchimp Data": {
+      "main": [
+        [
+          {
+            "node": "Find Contact in CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process SendGrid Data": {
+      "main": [
+        [
+          {
+            "node": "Find Contact in CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Constant Contact Data": {
+      "main": [
+        [
+          {
+            "node": "Find Contact in CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Contact in CRM": {
+      "main": [
+        [
+          {
+            "node": "Contact Exists?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Contact Exists?": {
+      "main": [
+        [
+          {
+            "node": "Calculate Behavioral Score",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create New Contact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Behavioral Score": {
+      "main": [
+        [
+          {
+            "node": "Update Contact Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Contact Score": {
+      "main": [
+        [
+          {
+            "node": "Log Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Activity": {
+      "main": [
+        [
+          {
+            "node": "Threshold Crossed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Threshold Crossed?": {
+      "main": [
+        [
+          {
+            "node": "Sales Ready?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Lead Cooling?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Track Analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sales Ready?": {
+      "main": [
+        [
+          {
+            "node": "Create Sales Opportunity",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create Follow-up Task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Sales Opportunity": {
+      "main": [
+        [
+          {
+            "node": "Notify Sales Team",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Follow-up Task": {
+      "main": [
+        [
+          {
+            "node": "Notify Sales Team",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead Cooling?": {
+      "main": [
+        [
+          {
+            "node": "Enroll in Re-engagement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Batch Sync Scheduler": {
+      "main": [
+        [
+          {
+            "node": "Prepare Batch Requests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Batch Requests": {
+      "main": [
+        [
+          {
+            "node": "Batch Platform Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Batch Platform Router": {
+      "main": [
+        [
+          {
+            "node": "Fetch Mailchimp Batch",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch SendGrid Batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Mailchimp Batch": {
+      "main": [
+        [
+          {
+            "node": "Process Batch Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch SendGrid Batch": {
+      "main": [
+        [
+          {
+            "node": "Process Batch Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Batch Data": {
+      "main": [
+        [
+          {
+            "node": "Store Batch Analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "timezone": "America/New_York",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "1",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "email-marketing-sync-v1"
+  },
+  "id": "email-marketing-sync",
+  "tags": [
+    {
+      "id": "email-automation",
+      "name": "Email Automation"
+    },
+    {
+      "id": "crm-integration",
+      "name": "CRM Integration"
+    },
+    {
+      "id": "behavioral-scoring",
+      "name": "Behavioral Scoring"
+    }
+  ]
+}

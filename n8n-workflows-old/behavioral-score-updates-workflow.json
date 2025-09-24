@@ -1,0 +1,1000 @@
+{
+  "name": "Behavioral Score Updates Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "website-activity",
+        "options": {
+          "noResponseBody": false
+        }
+      },
+      "name": "Website Activity Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "id": "website-activity-webhook"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "email-engagement",
+        "options": {
+          "noResponseBody": false
+        }
+      },
+      "name": "Email Engagement Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        500
+      ],
+      "id": "email-engagement-webhook"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "social-interaction",
+        "options": {
+          "noResponseBody": false
+        }
+      },
+      "name": "Social Media Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        700
+      ],
+      "id": "social-media-webhook"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "content-engagement",
+        "options": {
+          "noResponseBody": false
+        }
+      },
+      "name": "Content Engagement Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        900
+      ],
+      "id": "content-engagement-webhook"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sales-interaction",
+        "options": {
+          "noResponseBody": false
+        }
+      },
+      "name": "Sales Interaction Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        1100
+      ],
+      "id": "sales-interaction-webhook"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/15 * * * *"
+            }
+          ]
+        }
+      },
+      "name": "Score Decay Scheduler",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        240,
+        1300
+      ],
+      "id": "score-decay-scheduler"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Unified activity processing for all engagement types\nconst activityData = $input.all()[0].json;\nconst triggerNode = Object.keys($workflow.active)[0];\n\n// Enhanced validation with detailed error information\nconst validationErrors = [];\n\nif (!activityData.email && !activityData.user_id) {\n  validationErrors.push('Missing required identifier: email or user_id');\n}\n\nif (!activityData.timestamp) {\n  activityData.timestamp = new Date().toISOString();\n}\n\nif (activityData.email && !/^[\\w-\\.]+@([\\w-]+\\.)+[\\w-]{2,4}$/.test(activityData.email)) {\n  validationErrors.push('Invalid email format');\n}\n\nif (validationErrors.length > 0) {\n  return { json: { \n    validation_errors: validationErrors,\n    skip_processing: true,\n    raw_data: activityData,\n    error_type: 'validation_failed'\n  }};\n}\n\n// Determine activity source and type\nlet activitySource = 'unknown';\nlet activityType = 'general';\nlet baseScore = 0;\nlet engagementLevel = 'low';\n\n// Map trigger nodes to activity sources\nif (triggerNode.includes('website')) {\n  activitySource = 'website';\n  activityType = activityData.activity_type || 'page_view';\n} else if (triggerNode.includes('email')) {\n  activitySource = 'email';\n  activityType = activityData.event_type || 'opened';\n} else if (triggerNode.includes('social')) {\n  activitySource = 'social_media';\n  activityType = activityData.interaction_type || 'engagement';\n} else if (triggerNode.includes('content')) {\n  activitySource = 'content';\n  activityType = activityData.content_type || 'download';\n} else if (triggerNode.includes('sales')) {\n  activitySource = 'sales';\n  activityType = activityData.interaction_type || 'call';\n}\n\n// Advanced scoring matrix based on activity type and context\nconst scoringMatrix = {\n  website: {\n    'page_view': { base: 1, multiplier: 1.0, decay: 0.95 },\n    'pricing_page': { base: 15, multiplier: 1.5, decay: 0.9 },\n    'demo_page': { base: 25, multiplier: 2.0, decay: 0.85 },\n    'contact_page': { base: 20, multiplier: 1.8, decay: 0.9 },\n    'features_page': { base: 8, multiplier: 1.2, decay: 0.92 },\n    'case_studies': { base: 12, multiplier: 1.4, decay: 0.9 },\n    'blog_post': { base: 3, multiplier: 1.1, decay: 0.95 },\n    'documentation': { base: 10, multiplier: 1.3, decay: 0.9 },\n    'calculator_tool': { base: 18, multiplier: 1.7, decay: 0.88 },\n    'roi_calculator': { base: 22, multiplier: 1.9, decay: 0.85 },\n    'search_internal': { base: 5, multiplier: 1.1, decay: 0.93 }\n  },\n  email: {\n    'opened': { base: 5, multiplier: 1.0, decay: 0.9 },\n    'clicked': { base: 15, multiplier: 1.5, decay: 0.85 },\n    'replied': { base: 30, multiplier: 2.5, decay: 0.8 },\n    'forwarded': { base: 25, multiplier: 2.0, decay: 0.85 },\n    'unsubscribed': { base: -50, multiplier: 1.0, decay: 1.0 },\n    'spam_reported': { base: -75, multiplier: 1.0, decay: 1.0 },\n    'downloaded_attachment': { base: 20, multiplier: 1.8, decay: 0.88 },\n    'calendar_booking': { base: 40, multiplier: 3.0, decay: 0.75 }\n  },\n  social_media: {\n    'like': { base: 2, multiplier: 1.0, decay: 0.95 },\n    'share': { base: 8, multiplier: 1.4, decay: 0.9 },\n    'comment': { base: 12, multiplier: 1.6, decay: 0.88 },\n    'mention': { base: 15, multiplier: 1.8, decay: 0.85 },\n    'dm_sent': { base: 25, multiplier: 2.2, decay: 0.8 },\n    'connection_request': { base: 18, multiplier: 1.9, decay: 0.85 },\n    'profile_visit': { base: 5, multiplier: 1.2, decay: 0.92 },\n    'company_follow': { base: 10, multiplier: 1.5, decay: 0.9 },\n    'event_rsvp': { base: 30, multiplier: 2.5, decay: 0.8 }\n  },\n  content: {\n    'whitepaper_download': { base: 20, multiplier: 1.8, decay: 0.85 },\n    'ebook_download': { base: 18, multiplier: 1.7, decay: 0.87 },\n    'case_study_download': { base: 22, multiplier: 1.9, decay: 0.83 },\n    'webinar_registration': { base: 25, multiplier: 2.1, decay: 0.8 },\n    'webinar_attendance': { base: 35, multiplier: 2.8, decay: 0.75 },\n    'trial_signup': { base: 50, multiplier: 3.5, decay: 0.7 },\n    'demo_request': { base: 45, multiplier: 3.2, decay: 0.72 },\n    'newsletter_signup': { base: 8, multiplier: 1.3, decay: 0.9 },\n    'video_watched': { base: 6, multiplier: 1.2, decay: 0.92 },\n    'podcast_listened': { base: 12, multiplier: 1.5, decay: 0.88 }\n  },\n  sales: {\n    'call_scheduled': { base: 40, multiplier: 3.0, decay: 0.75 },\n    'call_completed': { base: 50, multiplier: 3.5, decay: 0.7 },\n    'call_no_show': { base: -15, multiplier: 1.0, decay: 0.95 },\n    'proposal_sent': { base: 35, multiplier: 2.8, decay: 0.78 },\n    'proposal_viewed': { base: 25, multiplier: 2.2, decay: 0.82 },\n    'contract_sent': { base: 60, multiplier: 4.0, decay: 0.65 },\n    'contract_viewed': { base: 45, multiplier: 3.3, decay: 0.7 },\n    'meeting_attended': { base: 30, multiplier: 2.5, decay: 0.8 },\n    'objection_raised': { base: 10, multiplier: 1.4, decay: 0.9 },\n    'referral_given': { base: 55, multiplier: 3.8, decay: 0.68 }\n  }\n};\n\n// Get scoring parameters\nconst scoring = scoringMatrix[activitySource]?.[activityType] || { base: 1, multiplier: 1.0, decay: 0.95 };\nbaseScore = scoring.base;\n\n// Calculate contextual multipliers\nlet contextMultiplier = 1.0;\nlet sessionMultiplier = 1.0;\nlet frequencyMultiplier = 1.0;\nlet timeMultiplier = 1.0;\nlet deviceMultiplier = 1.0;\n\n// Context-based scoring adjustments\nif (activityData.context) {\n  // Time-based multipliers\n  const hour = new Date().getHours();\n  if (hour >= 9 && hour <= 17) timeMultiplier = 1.2; // Business hours\n  if (hour >= 18 && hour <= 22) timeMultiplier = 1.1; // Evening engagement\n  \n  // Device-based multipliers\n  if (activityData.context.device_type === 'mobile') deviceMultiplier = 1.1;\n  if (activityData.context.device_type === 'desktop') deviceMultiplier = 1.15;\n  \n  // Geographic multipliers\n  if (activityData.context.country && activityData.context.country === 'US') contextMultiplier *= 1.1;\n  if (activityData.context.is_high_value_location) contextMultiplier *= 1.15;\n  \n  // Company size multipliers\n  if (activityData.context.company_size) {\n    switch(activityData.context.company_size) {\n      case 'enterprise': contextMultiplier *= 1.5; break;\n      case 'mid_market': contextMultiplier *= 1.3; break;\n      case 'smb': contextMultiplier *= 1.1; break;\n    }\n  }\n  \n  // Industry multipliers\n  const highValueIndustries = ['technology', 'finance', 'healthcare', 'manufacturing'];\n  if (activityData.context.industry && highValueIndustries.includes(activityData.context.industry)) {\n    contextMultiplier *= 1.2;\n  }\n  \n  // Session depth multiplier (website activities)\n  if (activityData.context.session_depth) {\n    sessionMultiplier = Math.min(2.0, 1 + (activityData.context.session_depth - 1) * 0.1);\n  }\n  \n  // Time on page/content multiplier\n  if (activityData.context.time_spent) {\n    const timeSpent = parseInt(activityData.context.time_spent);\n    if (timeSpent > 120) timeMultiplier *= 1.3; // 2+ minutes\n    else if (timeSpent > 60) timeMultiplier *= 1.15; // 1+ minute\n    else if (timeSpent < 10) timeMultiplier *= 0.8; // Quick bounce\n  }\n}\n\n// Frequency-based scoring (diminishing returns)\nif (activityData.frequency_count) {\n  const frequency = parseInt(activityData.frequency_count);\n  frequencyMultiplier = Math.max(0.3, 1 - (frequency - 1) * 0.1);\n}\n\n// Calculate final score\nconst totalMultiplier = contextMultiplier * sessionMultiplier * frequencyMultiplier * timeMultiplier * deviceMultiplier;\nconst calculatedScore = Math.round(baseScore * scoring.multiplier * totalMultiplier);\n\n// Determine engagement level\nif (calculatedScore >= 30) engagementLevel = 'high';\nelse if (calculatedScore >= 15) engagementLevel = 'medium';\nelse if (calculatedScore >= 5) engagementLevel = 'low';\nelse if (calculatedScore < 0) engagementLevel = 'negative';\n\n// Prepare processed activity data\nconst processedActivity = {\n  // Core identification\n  contact_identifier: activityData.email || activityData.user_id,\n  contact_email: activityData.email,\n  contact_id: activityData.contact_id || null,\n  \n  // Activity details\n  activity_source: activitySource,\n  activity_type: activityType,\n  activity_timestamp: activityData.timestamp || new Date().toISOString(),\n  \n  // Scoring details\n  base_score: baseScore,\n  calculated_score: calculatedScore,\n  engagement_level: engagementLevel,\n  \n  // Multiplier breakdown for transparency\n  scoring_breakdown: {\n    base_score: baseScore,\n    base_multiplier: scoring.multiplier,\n    context_multiplier: contextMultiplier,\n    session_multiplier: sessionMultiplier,\n    frequency_multiplier: frequencyMultiplier,\n    time_multiplier: timeMultiplier,\n    device_multiplier: deviceMultiplier,\n    total_multiplier: totalMultiplier\n  },\n  \n  // Context data\n  context: {\n    device_type: activityData.context?.device_type || 'unknown',\n    location: activityData.context?.location || {},\n    session_id: activityData.context?.session_id,\n    page_url: activityData.context?.page_url,\n    referrer: activityData.context?.referrer,\n    utm_source: activityData.context?.utm_source,\n    utm_medium: activityData.context?.utm_medium,\n    utm_campaign: activityData.context?.utm_campaign,\n    company_size: activityData.context?.company_size,\n    industry: activityData.context?.industry,\n    time_spent: activityData.context?.time_spent,\n    session_depth: activityData.context?.session_depth\n  },\n  \n  // Additional metadata\n  metadata: {\n    trigger_source: triggerNode,\n    processing_timestamp: new Date().toISOString(),\n    workflow_version: '1.0',\n    decay_factor: scoring.decay\n  },\n  \n  // Raw activity data for debugging\n  raw_activity_data: activityData\n};\n\nreturn { json: processedActivity };"
+      },
+      "name": "Process Activity Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        700
+      ],
+      "id": "process-activity-data"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.contact_email }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "isNotEmpty"
+              }
+            },
+            {
+              "leftValue": "={{ $json.calculated_score }}",
+              "rightValue": "",
+              "operator": {
+                "type": "object",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Valid Activity?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        680,
+        700
+      ],
+      "id": "valid-activity-check"
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "requestMethod": "GET",
+        "url": "=http://localhost:5000/api/crm/contacts/email/{{ $json.contact_email }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "include_scoring_history",
+              "value": "true"
+            },
+            {
+              "name": "include_recent_activities",
+              "value": "true"
+            },
+            {
+              "name": "days_lookback",
+              "value": "30"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "name": "Get Contact Details",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        900,
+        600
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "crm-api-auth",
+          "name": "CRM API Auth"
+        }
+      },
+      "id": "get-contact-details"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Advanced behavioral score calculation with machine learning-like features\nconst activityData = $node[\"Valid Activity?\"].json;\nconst contactData = $node[\"Get Contact Details\"].json;\n\nif (!contactData.contact) {\n  return { json: { ...activityData, skip: true, reason: 'Contact not found in CRM' } };\n}\n\nconst contact = contactData.contact;\nconst recentActivities = contactData.recent_activities || [];\nconst scoringHistory = contactData.scoring_history || [];\n\n// Current behavioral score\nconst currentScore = contact.behavioral_score || 0;\nconst currentTemperature = contact.lead_temperature || 'cold';\n\n// Calculate recency and frequency factors\nconst now = new Date();\nconst thirtyDaysAgo = new Date(now - 30 * 24 * 60 * 60 * 1000);\nconst sevenDaysAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);\nconst oneDayAgo = new Date(now - 1 * 24 * 60 * 60 * 1000);\n\n// Activity frequency analysis\nconst recentActivityCounts = {\n  last_24h: recentActivities.filter(a => new Date(a.created_at) > oneDayAgo).length,\n  last_7d: recentActivities.filter(a => new Date(a.created_at) > sevenDaysAgo).length,\n  last_30d: recentActivities.filter(a => new Date(a.created_at) > thirtyDaysAgo).length,\n  same_type_30d: recentActivities.filter(a => \n    a.type === activityData.activity_type && new Date(a.created_at) > thirtyDaysAgo\n  ).length\n};\n\n// Engagement pattern analysis\nconst engagementPatterns = {\n  peak_activity_day: null,\n  peak_activity_hour: null,\n  engagement_consistency: 0,\n  progressive_engagement: 0,\n  multi_channel_engagement: 0\n};\n\n// Analyze daily patterns\nconst dailyActivity = {};\nconst hourlyActivity = {};\nrecentActivities.forEach(activity => {\n  const date = new Date(activity.created_at);\n  const day = date.getDay();\n  const hour = date.getHours();\n  \n  dailyActivity[day] = (dailyActivity[day] || 0) + 1;\n  hourlyActivity[hour] = (hourlyActivity[hour] || 0) + 1;\n});\n\nengagementPatterns.peak_activity_day = Object.keys(dailyActivity).reduce((a, b) => \n  dailyActivity[a] > dailyActivity[b] ? a : b, '0'\n);\n\nengagementPatterns.peak_activity_hour = Object.keys(hourlyActivity).reduce((a, b) => \n  hourlyActivity[a] > hourlyActivity[b] ? a : b, '0'\n);\n\n// Calculate engagement consistency (how regularly they engage)\nconst uniqueDays = new Set(recentActivities.map(a => new Date(a.created_at).toDateString())).size;\nengagementPatterns.engagement_consistency = uniqueDays / 30; // 0-1 score\n\n// Calculate progressive engagement (are they moving through the funnel?)\nconst funnelStages = ['awareness', 'interest', 'consideration', 'intent', 'evaluation', 'purchase'];\nconst stageActivities = {\n  awareness: ['blog_post', 'social_engagement', 'newsletter_signup'],\n  interest: ['whitepaper_download', 'video_watched', 'features_page'],\n  consideration: ['case_study_download', 'webinar_registration', 'comparison_page'],\n  intent: ['pricing_page', 'demo_request', 'contact_page'],\n  evaluation: ['trial_signup', 'proposal_viewed', 'call_scheduled'],\n  purchase: ['contract_viewed', 'payment_page', 'onboarding_started']\n};\n\nconst currentStage = getCurrentFunnelStage(recentActivities, stageActivities);\nconst previousStage = getPreviousFunnelStage(recentActivities, stageActivities);\nengagementPatterns.progressive_engagement = currentStage > previousStage ? 1 : 0;\n\n// Multi-channel engagement score\nconst uniqueChannels = new Set(recentActivities.map(a => a.source || 'unknown')).size;\nengagementPatterns.multi_channel_engagement = Math.min(uniqueChannels / 5, 1); // 0-1 score\n\n// Advanced scoring factors\nconst scoringFactors = {\n  base_score: activityData.calculated_score,\n  \n  // Frequency penalties/bonuses\n  frequency_factor: calculateFrequencyFactor(recentActivityCounts, activityData.activity_type),\n  \n  // Recency bonus (more recent = higher score)\n  recency_factor: calculateRecencyFactor(activityData.activity_timestamp),\n  \n  // Progressive engagement bonus\n  progression_bonus: engagementPatterns.progressive_engagement * 10,\n  \n  // Multi-channel bonus\n  multi_channel_bonus: engagementPatterns.multi_channel_engagement * 15,\n  \n  // Consistency bonus\n  consistency_bonus: engagementPatterns.engagement_consistency * 12,\n  \n  // Peak time alignment bonus\n  peak_time_bonus: calculatePeakTimeBonus(activityData.activity_timestamp, engagementPatterns),\n  \n  // Velocity bonus (increasing activity frequency)\n  velocity_bonus: calculateVelocityBonus(recentActivityCounts),\n  \n  // Intent signal multiplier\n  intent_multiplier: calculateIntentMultiplier(activityData.activity_type, activityData.activity_source),\n  \n  // Company profile multiplier\n  company_multiplier: calculateCompanyMultiplier(contact, activityData.context)\n};\n\n// Calculate frequency factor\nfunction calculateFrequencyFactor(counts, activityType) {\n  const sameTypeCount = counts.same_type_30d;\n  \n  // Different activity types have different optimal frequencies\n  const optimalFrequencies = {\n    'page_view': 10,\n    'email_opened': 5,\n    'content_download': 2,\n    'demo_request': 1,\n    'pricing_page': 3\n  };\n  \n  const optimal = optimalFrequencies[activityType] || 5;\n  \n  if (sameTypeCount === 0) return 1.0;\n  if (sameTypeCount <= optimal) return 1 + (sameTypeCount / optimal) * 0.2;\n  return Math.max(0.5, 1.2 - (sameTypeCount - optimal) * 0.1); // Diminishing returns\n}\n\n// Calculate recency factor\nfunction calculateRecencyFactor(timestamp) {\n  const activityTime = new Date(timestamp);\n  const hoursAgo = (now - activityTime) / (1000 * 60 * 60);\n  \n  if (hoursAgo < 1) return 1.5; // Very recent\n  if (hoursAgo < 24) return 1.3; // Same day\n  if (hoursAgo < 48) return 1.1; // Yesterday\n  if (hoursAgo < 168) return 1.0; // This week\n  return Math.max(0.8, 1 - (hoursAgo / (24 * 30)) * 0.2); // Decay over month\n}\n\n// Calculate peak time bonus\nfunction calculatePeakTimeBonus(timestamp, patterns) {\n  const activityTime = new Date(timestamp);\n  const hour = activityTime.getHours();\n  const day = activityTime.getDay();\n  \n  let bonus = 0;\n  if (hour.toString() === patterns.peak_activity_hour) bonus += 3;\n  if (day.toString() === patterns.peak_activity_day) bonus += 2;\n  \n  return bonus;\n}\n\n// Calculate velocity bonus\nfunction calculateVelocityBonus(counts) {\n  const velocity24h = counts.last_24h;\n  const velocity7d = counts.last_7d / 7;\n  const velocity30d = counts.last_30d / 30;\n  \n  if (velocity24h > velocity7d && velocity7d > velocity30d) {\n    return 20; // Accelerating engagement\n  }\n  if (velocity24h > velocity7d) {\n    return 10; // Recent uptick\n  }\n  if (velocity24h < velocity7d && velocity7d < velocity30d) {\n    return -5; // Declining engagement\n  }\n  return 0;\n}\n\n// Calculate intent multiplier\nfunction calculateIntentMultiplier(activityType, activitySource) {\n  const intentSignals = {\n    'pricing_page': 2.0,\n    'demo_request': 2.5,\n    'trial_signup': 3.0,\n    'contact_page': 1.8,\n    'proposal_viewed': 2.2,\n    'contract_viewed': 3.5,\n    'call_scheduled': 2.8,\n    'roi_calculator': 2.1\n  };\n  \n  return intentSignals[activityType] || 1.0;\n}\n\n// Calculate company multiplier\nfunction calculateCompanyMultiplier(contact, context) {\n  let multiplier = 1.0;\n  \n  // Company size multiplier\n  if (contact.company_size === 'enterprise') multiplier *= 1.5;\n  else if (contact.company_size === 'mid_market') multiplier *= 1.3;\n  \n  // Revenue potential multiplier\n  if (contact.annual_revenue > 100000000) multiplier *= 1.4; // $100M+\n  else if (contact.annual_revenue > 10000000) multiplier *= 1.2; // $10M+\n  \n  // Industry multiplier\n  const highValueIndustries = ['technology', 'finance', 'healthcare', 'manufacturing'];\n  if (highValueIndustries.includes(contact.industry)) multiplier *= 1.2;\n  \n  // Geographic multiplier\n  if (context.location?.country === 'US') multiplier *= 1.1;\n  \n  return multiplier;\n}\n\n// Get current funnel stage\nfunction getCurrentFunnelStage(activities, stageActivities) {\n  const recentActivities = activities.filter(a => new Date(a.created_at) > sevenDaysAgo);\n  \n  for (let i = funnelStages.length - 1; i >= 0; i--) {\n    const stage = funnelStages[i];\n    const stageTypes = stageActivities[stage];\n    \n    if (recentActivities.some(a => stageTypes.includes(a.type))) {\n      return i;\n    }\n  }\n  return 0;\n}\n\n// Get previous funnel stage\nfunction getPreviousFunnelStage(activities, stageActivities) {\n  const olderActivities = activities.filter(a => {\n    const date = new Date(a.created_at);\n    return date <= sevenDaysAgo && date > thirtyDaysAgo;\n  });\n  \n  for (let i = funnelStages.length - 1; i >= 0; i--) {\n    const stage = funnelStages[i];\n    const stageTypes = stageActivities[stage];\n    \n    if (olderActivities.some(a => stageTypes.includes(a.type))) {\n      return i;\n    }\n  }\n  return 0;\n}\n\n// Calculate final score\nconst totalScoreAdjustment = Math.round(\n  scoringFactors.base_score * \n  scoringFactors.frequency_factor * \n  scoringFactors.recency_factor * \n  scoringFactors.intent_multiplier * \n  scoringFactors.company_multiplier +\n  scoringFactors.progression_bonus +\n  scoringFactors.multi_channel_bonus +\n  scoringFactors.consistency_bonus +\n  scoringFactors.peak_time_bonus +\n  scoringFactors.velocity_bonus\n);\n\nconst newBehavioralScore = Math.max(0, Math.min(100, currentScore + totalScoreAdjustment));\n\n// Determine new lead temperature\nlet newTemperature = 'cold';\nif (newBehavioralScore >= 75) newTemperature = 'hot';\nelse if (newBehavioralScore >= 50) newTemperature = 'warm';\nelse if (newBehavioralScore >= 25) newTemperature = 'cool';\n\n// Detect significant changes\nconst significantChange = Math.abs(totalScoreAdjustment) >= 10;\nconst temperatureChanged = newTemperature !== currentTemperature;\nconst majorIncrease = totalScoreAdjustment >= 20;\nconst majorDecrease = totalScoreAdjustment <= -15;\n\nconst result = {\n  // Contact information\n  contact_id: contact._id,\n  contact_email: contact.email,\n  contact_name: `${contact.first_name} ${contact.last_name}`,\n  company: contact.company,\n  \n  // Scoring details\n  previous_score: currentScore,\n  score_adjustment: totalScoreAdjustment,\n  new_behavioral_score: newBehavioralScore,\n  previous_temperature: currentTemperature,\n  new_temperature: newTemperature,\n  \n  // Change indicators\n  significant_change: significantChange,\n  temperature_changed: temperatureChanged,\n  major_increase: majorIncrease,\n  major_decrease: majorDecrease,\n  \n  // Detailed scoring breakdown\n  scoring_factors: scoringFactors,\n  engagement_patterns: engagementPatterns,\n  activity_frequency: recentActivityCounts,\n  \n  // Activity data\n  triggering_activity: {\n    type: activityData.activity_type,\n    source: activityData.activity_source,\n    timestamp: activityData.activity_timestamp,\n    engagement_level: activityData.engagement_level\n  },\n  \n  // Insights and recommendations\n  insights: generateInsights(scoringFactors, engagementPatterns, recentActivityCounts),\n  \n  // Processing metadata\n  processing_timestamp: new Date().toISOString(),\n  workflow_version: '2.0'\n};\n\n// Generate insights\nfunction generateInsights(factors, patterns, counts) {\n  const insights = [];\n  \n  if (factors.progression_bonus > 0) {\n    insights.push('Contact is progressing through the sales funnel');\n  }\n  \n  if (factors.multi_channel_bonus > 10) {\n    insights.push('High multi-channel engagement indicates strong interest');\n  }\n  \n  if (factors.velocity_bonus > 15) {\n    insights.push('Accelerating engagement pattern - prime for outreach');\n  }\n  \n  if (factors.consistency_bonus > 8) {\n    insights.push('Consistent engagement pattern indicates sustained interest');\n  }\n  \n  if (counts.last_24h > 5) {\n    insights.push('High activity in last 24 hours - consider immediate follow-up');\n  }\n  \n  if (factors.intent_multiplier > 2.0) {\n    insights.push('High-intent activity detected - sales-ready signal');\n  }\n  \n  return insights;\n}\n\nreturn { json: result };"
+      },
+      "name": "Calculate Advanced Score",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        600
+      ],
+      "id": "calculate-advanced-score"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.skip }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "notEqual"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Should Update Score?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        600
+      ],
+      "id": "should-update-score"
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "requestMethod": "PUT",
+        "url": "=http://localhost:5000/api/crm/contacts/{{ $json.contact_id }}/behavioral-score",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"behavioral_score\": {{ $json.new_behavioral_score }},\n  \"lead_temperature\": \"{{ $json.new_temperature }}\",\n  \"score_history\": {\n    \"previous_score\": {{ $json.previous_score }},\n    \"score_adjustment\": {{ $json.score_adjustment }},\n    \"adjustment_reason\": \"{{ $json.triggering_activity.type }}\",\n    \"timestamp\": \"{{ $json.processing_timestamp }}\"\n  },\n  \"engagement_insights\": {{ JSON.stringify($json.insights) }},\n  \"last_activity\": {\n    \"type\": \"{{ $json.triggering_activity.type }}\",\n    \"source\": \"{{ $json.triggering_activity.source }}\",\n    \"timestamp\": \"{{ $json.triggering_activity.timestamp }}\",\n    \"engagement_level\": \"{{ $json.triggering_activity.engagement_level }}\"\n  }\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "name": "Update Contact Score",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1560,
+        500
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "crm-api-auth",
+          "name": "CRM API Auth"
+        }
+      },
+      "id": "update-contact-score"
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "requestMethod": "POST",
+        "url": "http://localhost:5000/api/crm/activities",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contact_id\": \"{{ $json.contact_id }}\",\n  \"type\": \"{{ $json.triggering_activity.type }}\",\n  \"description\": \"Behavioral scoring update: {{ $json.triggering_activity.type }} ({{ $json.triggering_activity.source }})\",\n  \"metadata\": {\n    \"score_change\": {{ $json.score_adjustment }},\n    \"new_score\": {{ $json.new_behavioral_score }},\n    \"temperature_change\": \"{{ $json.previous_temperature }} → {{ $json.new_temperature }}\",\n    \"engagement_level\": \"{{ $json.triggering_activity.engagement_level }}\",\n    \"scoring_factors\": {{ JSON.stringify($json.scoring_factors) }},\n    \"insights\": {{ JSON.stringify($json.insights) }}\n  },\n  \"created_at\": \"{{ $json.triggering_activity.timestamp }}\"\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "name": "Log Scoring Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1780,
+        500
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "crm-api-auth",
+          "name": "CRM API Auth"
+        }
+      },
+      "id": "log-scoring-activity"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.temperature_changed }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Temperature Changed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        500
+      ],
+      "id": "temperature-changed-check"
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "requestMethod": "POST",
+        "url": "http://localhost:5000/api/webhooks/lead-temperature-change",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contact_id\": \"{{ $json.contact_id }}\",\n  \"email\": \"{{ $json.contact_email }}\",\n  \"previous_temperature\": \"{{ $json.previous_temperature }}\",\n  \"current_temperature\": \"{{ $json.new_temperature }}\",\n  \"behavioral_score\": {{ $json.new_behavioral_score }},\n  \"score_change\": {{ $json.score_adjustment }},\n  \"triggering_activity\": {{ JSON.stringify($json.triggering_activity) }},\n  \"company\": \"{{ $json.company }}\",\n  \"timestamp\": \"{{ $json.processing_timestamp }}\"\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "name": "Trigger Temperature Change Webhook",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        2220,
+        400
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "crm-api-auth",
+          "name": "CRM API Auth"
+        }
+      },
+      "id": "trigger-temperature-webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.major_increase }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            },
+            {
+              "leftValue": "={{ $json.new_behavioral_score }}",
+              "rightValue": 60,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "name": "High-Value Score Change?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        700
+      ],
+      "id": "high-value-score-check"
+    },
+    {
+      "parameters": {
+        "channel": "#sales-alerts",
+        "text": "=🚀 *High-Value Lead Activity Alert!*\n\n*Contact:* {{ $json.contact_name }} ({{ $json.contact_email }})\n*Company:* {{ $json.company }}\n*Score Change:* {{ $json.previous_score }} → {{ $json.new_behavioral_score }} ({{ $json.score_adjustment > 0 ? '+' : '' }}{{ $json.score_adjustment }})\n*Temperature:* {{ $json.previous_temperature }} → {{ $json.new_temperature }}\n\n*Triggering Activity:* {{ $json.triggering_activity.type }} ({{ $json.triggering_activity.engagement_level }} engagement)\n*Source:* {{ $json.triggering_activity.source }}\n*Timestamp:* {{ $json.triggering_activity.timestamp }}\n\n*Key Insights:*\n{{ $json.insights.slice(0, 3).map(insight => `• ${insight}`).join('\\n') || '• No specific insights available' }}\n\n{{ $json.new_behavioral_score >= 75 ? '🔥 *HOT LEAD* - Immediate follow-up recommended!' : $json.new_behavioral_score >= 50 ? '🌡️ *WARM LEAD* - Consider reaching out within 24 hours' : '❄️ *COOL LEAD* - Monitor for further engagement' }}\n\n_Score updated automatically by behavioral scoring engine._",
+        "otherOptions": {
+          "mrkdwn": true
+        }
+      },
+      "name": "Alert Sales Team",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.1,
+      "position": [
+        2220,
+        600
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "slack-sales-alerts",
+          "name": "Sales Slack Bot"
+        }
+      },
+      "id": "alert-sales-team"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.new_temperature }}",
+              "rightValue": "hot",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "leftValue": "={{ $json.previous_temperature }}",
+              "rightValue": "hot",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Became Hot Lead?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2440,
+        400
+      ],
+      "id": "became-hot-check"
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "requestMethod": "POST",
+        "url": "http://localhost:5000/api/crm/tasks",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contact_id\": \"{{ $json.contact_id }}\",\n  \"title\": \"URGENT: Follow up with hot lead - {{ $json.contact_name }}\",\n  \"description\": \"Contact became hot lead through {{ $json.triggering_activity.type }}. Score: {{ $json.new_behavioral_score }}/100. {{ $json.insights.join(' ') }}\",\n  \"priority\": \"high\",\n  \"due_date\": \"{{ new Date(Date.now() + 2*60*60*1000).toISOString() }}\",\n  \"assigned_to\": \"sales_team\",\n  \"task_type\": \"follow_up\",\n  \"metadata\": {\n    \"trigger\": \"behavioral_scoring\",\n    \"score\": {{ $json.new_behavioral_score }},\n    \"temperature\": \"{{ $json.new_temperature }}\",\n    \"activity_type\": \"{{ $json.triggering_activity.type }}\",\n    \"urgency_level\": \"high\"\n  }\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "name": "Create Urgent Follow-up Task",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        2660,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "crm-api-auth",
+          "name": "CRM API Auth"
+        }
+      },
+      "id": "create-urgent-task"
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "requestMethod": "POST",
+        "url": "http://localhost:5000/api/analytics/behavioral-scoring",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"event_type\": \"score_update\",\n  \"contact_id\": \"{{ $json.contact_id }}\",\n  \"activity_type\": \"{{ $json.triggering_activity.type }}\",\n  \"activity_source\": \"{{ $json.triggering_activity.source }}\",\n  \"score_change\": {{ $json.score_adjustment }},\n  \"new_score\": {{ $json.new_behavioral_score }},\n  \"temperature_change\": {\n    \"from\": \"{{ $json.previous_temperature }}\",\n    \"to\": \"{{ $json.new_temperature }}\",\n    \"changed\": {{ $json.temperature_changed }}\n  },\n  \"engagement_level\": \"{{ $json.triggering_activity.engagement_level }}\",\n  \"scoring_factors\": {{ JSON.stringify($json.scoring_factors) }},\n  \"engagement_patterns\": {{ JSON.stringify($json.engagement_patterns) }},\n  \"insights_generated\": {{ $json.insights.length }},\n  \"timestamp\": \"{{ $json.processing_timestamp }}\"\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "name": "Track Scoring Analytics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        2440,
+        800
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "crm-api-auth",
+          "name": "CRM API Auth"
+        }
+      },
+      "id": "track-scoring-analytics"
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "requestMethod": "GET",
+        "url": "http://localhost:5000/api/crm/contacts/score-decay",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "decay_threshold_days",
+              "value": "7"
+            },
+            {
+              "name": "decay_rate",
+              "value": "0.02"
+            },
+            {
+              "name": "minimum_score",
+              "value": "0"
+            },
+            {
+              "name": "limit",
+              "value": "100"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "name": "Get Contacts for Decay",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        460,
+        1300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "crm-api-auth",
+          "name": "CRM API Auth"
+        }
+      },
+      "id": "get-contacts-for-decay"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process score decay for inactive contacts\nconst decayData = $input.all()[0].json;\n\nif (!decayData.contacts || !Array.isArray(decayData.contacts)) {\n  return [];\n}\n\nconst processedContacts = decayData.contacts.map(contact => {\n  const currentScore = contact.behavioral_score || 0;\n  const daysSinceActivity = contact.days_since_last_activity || 0;\n  const currentTemperature = contact.lead_temperature || 'cold';\n  \n  // Calculate decay amount based on inactivity period\n  let decayRate = 0.02; // Base decay rate (2% per week)\n  \n  // Accelerated decay for longer inactivity\n  if (daysSinceActivity > 30) decayRate = 0.05; // 5% per week after 30 days\n  else if (daysSinceActivity > 14) decayRate = 0.03; // 3% per week after 14 days\n  \n  // Calculate decay amount (weekly decay applied proportionally)\n  const weeksInactive = daysSinceActivity / 7;\n  const decayMultiplier = Math.pow(1 - decayRate, weeksInactive);\n  const newScore = Math.max(0, Math.round(currentScore * decayMultiplier));\n  const scoreDecay = currentScore - newScore;\n  \n  // Determine new temperature\n  let newTemperature = 'cold';\n  if (newScore >= 75) newTemperature = 'hot';\n  else if (newScore >= 50) newTemperature = 'warm';\n  else if (newScore >= 25) newTemperature = 'cool';\n  \n  return {\n    contact_id: contact._id,\n    contact_email: contact.email,\n    contact_name: `${contact.first_name} ${contact.last_name}`,\n    company: contact.company,\n    previous_score: currentScore,\n    new_score: newScore,\n    score_decay: scoreDecay,\n    previous_temperature: currentTemperature,\n    new_temperature: newTemperature,\n    temperature_changed: currentTemperature !== newTemperature,\n    days_inactive: daysSinceActivity,\n    decay_rate_applied: decayRate,\n    last_activity_type: contact.last_activity_type,\n    last_activity_date: contact.last_activity_date,\n    processing_timestamp: new Date().toISOString()\n  };\n});\n\n// Filter out contacts with no significant change\nconst significantChanges = processedContacts.filter(contact => \n  contact.score_decay >= 1 || contact.temperature_changed\n);\n\nreturn significantChanges.map(contact => ({ json: contact }));"
+      },
+      "name": "Process Score Decay",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        1300
+      ],
+      "id": "process-score-decay"
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "requestMethod": "PUT",
+        "url": "=http://localhost:5000/api/crm/contacts/{{ $json.contact_id }}/behavioral-score",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"behavioral_score\": {{ $json.new_score }},\n  \"lead_temperature\": \"{{ $json.new_temperature }}\",\n  \"score_history\": {\n    \"previous_score\": {{ $json.previous_score }},\n    \"score_adjustment\": {{ -$json.score_decay }},\n    \"adjustment_reason\": \"score_decay\",\n    \"days_inactive\": {{ $json.days_inactive }},\n    \"decay_rate\": {{ $json.decay_rate_applied }},\n    \"timestamp\": \"{{ $json.processing_timestamp }}\"\n  },\n  \"decay_metadata\": {\n    \"last_activity_type\": \"{{ $json.last_activity_type }}\",\n    \"last_activity_date\": \"{{ $json.last_activity_date }}\",\n    \"inactivity_period_days\": {{ $json.days_inactive }}\n  }\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "name": "Update Decayed Scores",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        900,
+        1300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "crm-api-auth",
+          "name": "CRM API Auth"
+        }
+      },
+      "id": "update-decayed-scores"
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "requestMethod": "POST",
+        "url": "http://localhost:5000/api/analytics/behavioral-scoring",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"event_type\": \"score_decay\",\n  \"contact_id\": \"{{ $json.contact_id }}\",\n  \"score_change\": {{ -$json.score_decay }},\n  \"new_score\": {{ $json.new_score }},\n  \"temperature_change\": {\n    \"from\": \"{{ $json.previous_temperature }}\",\n    \"to\": \"{{ $json.new_temperature }}\",\n    \"changed\": {{ $json.temperature_changed }}\n  },\n  \"inactivity_days\": {{ $json.days_inactive }},\n  \"decay_rate\": {{ $json.decay_rate_applied }},\n  \"timestamp\": \"{{ $json.processing_timestamp }}\"\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "name": "Track Decay Analytics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1120,
+        1300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "crm-api-auth",
+          "name": "CRM API Auth"
+        }
+      },
+      "id": "track-decay-analytics"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.temperature_changed }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            },
+            {
+              "leftValue": "={{ $json.new_temperature }}",
+              "rightValue": "cold",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Lead Went Cold?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        1300
+      ],
+      "id": "lead-went-cold-check"
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "requestMethod": "POST",
+        "url": "http://localhost:5000/api/webhooks/lead-temperature-change",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contact_id\": \"{{ $json.contact_id }}\",\n  \"email\": \"{{ $json.contact_email }}\",\n  \"previous_temperature\": \"{{ $json.previous_temperature }}\",\n  \"current_temperature\": \"{{ $json.new_temperature }}\",\n  \"behavioral_score\": {{ $json.new_score }},\n  \"score_change\": {{ -$json.score_decay }},\n  \"change_reason\": \"score_decay\",\n  \"days_inactive\": {{ $json.days_inactive }},\n  \"company\": \"{{ $json.company }}\",\n  \"timestamp\": \"{{ $json.processing_timestamp }}\"\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "name": "Trigger Cold Lead Webhook",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1560,
+        1300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "crm-api-auth",
+          "name": "CRM API Auth"
+        }
+      },
+      "id": "trigger-cold-lead-webhook"
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "requestMethod": "POST",
+        "url": "http://localhost:5000/api/crm/contacts/bulk-log",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"reason\": \"invalid_activity_data\",\n  \"metadata\": {\n    \"missing_fields\": \"email or contact identifier\",\n    \"raw_data\": {{ JSON.stringify($json) }}\n  },\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "name": "Log Invalid Activities",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        680,
+        900
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "crm-api-auth",
+          "name": "CRM API Auth"
+        }
+      },
+      "id": "log-invalid-activities"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Website Activity Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Activity Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Engagement Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Activity Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Social Media Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Activity Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Content Engagement Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Activity Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sales Interaction Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Activity Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Activity Data": {
+      "main": [
+        [
+          {
+            "node": "Valid Activity?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid Activity?": {
+      "main": [
+        [
+          {
+            "node": "Get Contact Details",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Invalid Activities",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Contact Details": {
+      "main": [
+        [
+          {
+            "node": "Calculate Advanced Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Advanced Score": {
+      "main": [
+        [
+          {
+            "node": "Should Update Score?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Update Score?": {
+      "main": [
+        [
+          {
+            "node": "Update Contact Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Contact Score": {
+      "main": [
+        [
+          {
+            "node": "Log Scoring Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Scoring Activity": {
+      "main": [
+        [
+          {
+            "node": "Temperature Changed?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "High-Value Score Change?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Track Scoring Analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Temperature Changed?": {
+      "main": [
+        [
+          {
+            "node": "Trigger Temperature Change Webhook",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Became Hot Lead?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "High-Value Score Change?": {
+      "main": [
+        [
+          {
+            "node": "Alert Sales Team",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Became Hot Lead?": {
+      "main": [
+        [
+          {
+            "node": "Create Urgent Follow-up Task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Score Decay Scheduler": {
+      "main": [
+        [
+          {
+            "node": "Get Contacts for Decay",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Contacts for Decay": {
+      "main": [
+        [
+          {
+            "node": "Process Score Decay",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Score Decay": {
+      "main": [
+        [
+          {
+            "node": "Update Decayed Scores",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Decayed Scores": {
+      "main": [
+        [
+          {
+            "node": "Track Decay Analytics",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Lead Went Cold?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead Went Cold?": {
+      "main": [
+        [
+          {
+            "node": "Trigger Cold Lead Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "timezone": "America/New_York",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "behavioral-score-updates-v1"
+  },
+  "id": "behavioral-score-updates",
+  "tags": [
+    {
+      "id": "behavioral-scoring",
+      "name": "Behavioral Scoring"
+    },
+    {
+      "id": "real-time",
+      "name": "Real-Time"
+    },
+    {
+      "id": "automation",
+      "name": "Automation"
+    },
+    {
+      "id": "crm-integration",
+      "name": "CRM Integration"
+    }
+  ]
+}

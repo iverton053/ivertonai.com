@@ -1,0 +1,782 @@
+{
+  "name": "Client Communication Automation Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "client-event",
+        "options": {}
+      },
+      "id": "client-event-webhook",
+      "name": "Client Event Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        400
+      ],
+      "webhookId": "client-event-webhook"
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/clients/{{$json.clientId}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "options": {}
+      },
+      "id": "get-client-data",
+      "name": "Get Client Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        460,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Route client events to appropriate communication workflows\nconst eventData = $input.all()[0].json;\nconst clientData = $input.first().json.data;\n\nconst eventType = eventData.eventType;\nconst clientInfo = {\n  id: clientData.id,\n  companyName: clientData.company_name,\n  industry: clientData.industry,\n  status: clientData.status,\n  createdAt: clientData.created_at,\n  contacts: clientData.client_contacts || [],\n  primaryContact: clientData.client_contacts?.find(c => c.is_primary) || clientData.client_contacts?.[0]\n};\n\n// Calculate client lifecycle stage\nconst daysSinceOnboarding = Math.floor((Date.now() - new Date(clientData.created_at).getTime()) / (1000 * 60 * 60 * 24));\nlet lifecycleStage = 'new';\n\nif (daysSinceOnboarding > 90) lifecycleStage = 'established';\nelse if (daysSinceOnboarding > 30) lifecycleStage = 'growing';\nelse if (daysSinceOnboarding > 7) lifecycleStage = 'onboarding';\n\n// Determine communication workflow based on event type\nlet workflowType = '';\nlet urgency = 'normal';\nlet scheduledDelay = 0; // minutes\n\nswitch (eventType) {\n  case 'client_onboarded':\n    workflowType = 'welcome_sequence';\n    urgency = 'high';\n    scheduledDelay = 30; // 30 minutes after onboarding\n    break;\n    \n  case 'project_completed':\n    workflowType = 'project_completion';\n    urgency = 'high';\n    scheduledDelay = 60; // 1 hour after completion\n    break;\n    \n  case 'monthly_checkin':\n    workflowType = 'monthly_checkin';\n    urgency = 'normal';\n    scheduledDelay = 0; // Immediate\n    break;\n    \n  case 'payment_overdue':\n    workflowType = 'payment_reminder';\n    urgency = 'urgent';\n    scheduledDelay = 0; // Immediate\n    break;\n    \n  case 'contract_renewal_due':\n    workflowType = 'renewal_reminder';\n    urgency = 'high';\n    scheduledDelay = 0; // Immediate\n    break;\n    \n  case 'project_milestone':\n    workflowType = 'milestone_update';\n    urgency = 'normal';\n    scheduledDelay = 120; // 2 hours after milestone\n    break;\n    \n  case 'performance_report_ready':\n    workflowType = 'report_delivery';\n    urgency = 'normal';\n    scheduledDelay = 15; // 15 minutes to prepare\n    break;\n    \n  case 'issue_escalation':\n    workflowType = 'issue_resolution';\n    urgency = 'urgent';\n    scheduledDelay = 0; // Immediate\n    break;\n    \n  case 'satisfaction_survey':\n    workflowType = 'feedback_collection';\n    urgency = 'normal';\n    scheduledDelay = 24 * 60; // 24 hours delay\n    break;\n    \n  default:\n    workflowType = 'general_update';\n    urgency = 'normal';\n    scheduledDelay = 60;\n}\n\n// Check for communication preferences\nconst communicationChannels = ['email'];\nif (clientInfo.primaryContact?.phone) communicationChannels.push('sms');\nif (eventData.urgency === 'urgent') communicationChannels.push('slack');\n\n// Calculate send time (business hours optimization)\nconst sendTime = new Date(Date.now() + scheduledDelay * 60000);\nconst sendHour = sendTime.getHours();\nconst sendDay = sendTime.getDay();\n\n// Adjust for business hours (9 AM - 6 PM, Monday-Friday)\nif (sendHour < 9 || sendHour > 18 || sendDay === 0 || sendDay === 6) {\n  const nextBusinessDay = new Date(sendTime);\n  \n  // Move to next business day\n  while (nextBusinessDay.getDay() === 0 || nextBusinessDay.getDay() === 6) {\n    nextBusinessDay.setDate(nextBusinessDay.getDate() + 1);\n  }\n  \n  // Set to 9 AM\n  nextBusinessDay.setHours(9, 0, 0, 0);\n  sendTime.setTime(nextBusinessDay.getTime());\n}\n\nreturn [{\n  json: {\n    eventData,\n    clientInfo,\n    workflowType,\n    urgency,\n    lifecycleStage,\n    communicationChannels,\n    sendTime: sendTime.toISOString(),\n    scheduledDelay,\n    isImmediate: scheduledDelay === 0 && urgency === 'urgent',\n    personalizedData: {\n      primaryContactName: clientInfo.primaryContact?.first_name || 'there',\n      companyName: clientInfo.companyName,\n      industry: clientInfo.industry,\n      relationshipDuration: daysSinceOnboarding\n    }\n  }\n}];"
+      },
+      "id": "communication-router",
+      "name": "Communication Router & Scheduler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "immediate-check",
+              "leftValue": "={{$json.isImmediate}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "urgency-check",
+      "name": "Urgency Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        900,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "amount": "={{Math.max(1, $json.scheduledDelay)}}",
+        "unit": "minutes"
+      },
+      "id": "schedule-delay",
+      "name": "Schedule Communication Delay",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/content/templates",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "agencyId",
+              "value": "={{$json.clientInfo.agency_id}}"
+            },
+            {
+              "name": "category",
+              "value": "client_communication"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "get-communication-templates",
+      "name": "Get Communication Templates",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1340,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate personalized communication content\nconst routingData = $input.all()[0].json;\nconst templatesData = $input.first().json.data;\n\nconst workflowType = routingData.workflowType;\nconst clientInfo = routingData.clientInfo;\nconst personalizedData = routingData.personalizedData;\n\n// Find appropriate template\nconst template = templatesData.find(t => \n  t.name.toLowerCase().includes(workflowType.toLowerCase()) ||\n  t.description?.toLowerCase().includes(workflowType.toLowerCase())\n) || templatesData[0]; // Fallback to first template\n\n// Base personalization variables\nconst personalizations = {\n  clientName: personalizedData.primaryContactName,\n  companyName: personalizedData.companyName,\n  industry: personalizedData.industry,\n  relationshipDuration: personalizedData.relationshipDuration,\n  currentDate: new Date().toLocaleDateString(),\n  agencyName: 'Your Marketing Agency' // Would come from agency settings\n};\n\n// Workflow-specific content generation\nlet subject = '';\nlet content = '';\nlet callToAction = '';\nlet attachments = [];\n\nswitch (workflowType) {\n  case 'welcome_sequence':\n    subject = `Welcome to ${personalizations.agencyName}, ${personalizations.clientName}!`;\n    content = `Dear ${personalizations.clientName},\\n\\nWelcome to ${personalizations.agencyName}! We're thrilled to partner with ${personalizations.companyName} on your marketing journey.\\n\\nOver the next few days, you'll receive:\\n• Your dedicated account manager introduction\\n• Project timeline and milestones\\n• Access to your client portal\\n• Our proven ${personalizations.industry} marketing strategies\\n\\nWe're committed to delivering exceptional results for ${personalizations.companyName}.`;\n    callToAction = 'Schedule Your Kick-off Call';\n    break;\n    \n  case 'monthly_checkin':\n    subject = `Monthly Update - ${personalizations.companyName} Performance`;\n    content = `Hi ${personalizations.clientName},\\n\\nHope you're doing well! As part of our commitment to transparent communication, here's your monthly update for ${personalizations.companyName}.\\n\\nThis month's highlights:\\n• Campaign performance metrics\\n• Key achievements and wins\\n• Upcoming strategies and initiatives\\n• Any challenges and our solutions\\n\\nWe've been working together for ${personalizations.relationshipDuration} days and we're excited about the continued growth!`;\n    callToAction = 'View Detailed Report';\n    break;\n    \n  case 'project_completion':\n    subject = `Project Complete - ${personalizations.companyName} Success!`;\n    content = `Congratulations ${personalizations.clientName}!\\n\\nWe're excited to share that your latest project has been completed successfully! The ${personalizations.companyName} campaign exceeded expectations.\\n\\nProject Results:\\n• All deliverables completed on time\\n• Performance metrics exceeded targets\\n• ROI improvement documented\\n• Next phase recommendations prepared\\n\\nThank you for trusting us with ${personalizations.companyName}'s marketing success.`;\n    callToAction = 'View Project Results';\n    break;\n    \n  case 'payment_reminder':\n    subject = `Payment Reminder - ${personalizations.companyName} Account`;\n    content = `Hi ${personalizations.clientName},\\n\\nThis is a friendly reminder that we have an outstanding invoice for ${personalizations.companyName}'s marketing services.\\n\\nInvoice Details:\\n• Due date has passed\\n• Services continue as normal\\n• Quick payment options available\\n• Questions? We're here to help\\n\\nWe appreciate your prompt attention to this matter.`;\n    callToAction = 'Pay Invoice Now';\n    break;\n    \n  case 'renewal_reminder':\n    subject = `Contract Renewal - ${personalizations.companyName}`;\n    content = `Hi ${personalizations.clientName},\\n\\nYour contract with ${personalizations.agencyName} is approaching its renewal date. We've loved working with ${personalizations.companyName} over the past ${Math.floor(personalizations.relationshipDuration / 30)} months!\\n\\nRenewal Benefits:\\n• Continued exceptional service\\n• Locked-in current rates\\n• Priority support and features\\n• Expanded service options\\n\\nLet's schedule a renewal discussion to plan ${personalizations.companyName}'s continued success.`;\n    callToAction = 'Schedule Renewal Call';\n    break;\n    \n  case 'milestone_update':\n    subject = `Milestone Achieved - ${personalizations.companyName}`;\n    content = `Great news, ${personalizations.clientName}!\\n\\n${personalizations.companyName} has reached another important milestone in our marketing partnership.\\n\\nMilestone Highlights:\\n• Target objectives met or exceeded\\n• Timeline maintained perfectly\\n• Quality standards surpassed\\n• Next phase ready to launch\\n\\nYour success is our success, and we're proud to be part of ${personalizations.companyName}'s growth story.`;\n    callToAction = 'View Milestone Report';\n    break;\n    \n  case 'report_delivery':\n    subject = `Performance Report Ready - ${personalizations.companyName}`;\n    content = `Hi ${personalizations.clientName},\\n\\nYour latest performance report for ${personalizations.companyName} is ready for review!\\n\\nThis Report Includes:\\n• Comprehensive analytics dashboard\\n• ROI and performance metrics\\n• Actionable insights and recommendations\\n• Competitive analysis and benchmarks\\n\\nWe're excited to share the positive results and discuss next steps.`;\n    callToAction = 'View Performance Report';\n    attachments = ['performance_report.pdf'];\n    break;\n    \n  case 'issue_resolution':\n    subject = `URGENT: Issue Resolution - ${personalizations.companyName}`;\n    content = `Hi ${personalizations.clientName},\\n\\nWe've identified and resolved an issue affecting ${personalizations.companyName}'s campaign. Our team took immediate action to minimize any impact.\\n\\nIssue Summary:\\n• Issue detected and resolved quickly\\n• Minimal impact on campaign performance\\n• Preventive measures implemented\\n• Full transparency report attached\\n\\nWe apologize for any inconvenience and appreciate your understanding.`;\n    callToAction = 'Schedule Resolution Call';\n    break;\n    \n  case 'feedback_collection':\n    subject = `Your Feedback Matters - ${personalizations.companyName}`;\n    content = `Hi ${personalizations.clientName},\\n\\nWe value your partnership with ${personalizations.companyName} and would love to hear about your experience with ${personalizations.agencyName}.\\n\\nYour Feedback Helps Us:\\n• Improve our service quality\\n• Better serve ${personalizations.industry} clients\\n• Enhance our partnership\\n• Deliver even better results\\n\\nThe survey takes just 2-3 minutes and your insights are invaluable.`;\n    callToAction = 'Share Your Feedback';\n    break;\n    \n  default:\n    subject = `Update from ${personalizations.agencyName} - ${personalizations.companyName}`;\n    content = `Hi ${personalizations.clientName},\\n\\nWe wanted to reach out with an important update regarding ${personalizations.companyName}'s marketing initiatives.\\n\\nWe're continuously working to optimize your results and ensure ${personalizations.companyName} stays ahead of the competition.\\n\\nThank you for being an amazing partner!`;\n    callToAction = 'Contact Your Account Manager';\n}\n\n// Apply template customizations if available\nif (template && template.template) {\n  const templateContent = template.template;\n  \n  // Replace placeholders with personalized content\n  Object.keys(personalizations).forEach(key => {\n    const placeholder = new RegExp(`{{${key}}}`, 'gi');\n    subject = subject.replace(placeholder, personalizations[key]);\n    content = content.replace(placeholder, personalizations[key]);\n    callToAction = callToAction.replace(placeholder, personalizations[key]);\n  });\n}\n\n// Generate email HTML\nconst htmlContent = `\n<!DOCTYPE html>\n<html>\n<head>\n    <meta charset=\"utf-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <title>${subject}</title>\n    <style>\n        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }\n        .container { max-width: 600px; margin: 0 auto; padding: 20px; }\n        .header { background: #667eea; color: white; padding: 20px; text-align: center; }\n        .content { padding: 30px 20px; background: white; }\n        .cta-button { \n            display: inline-block; \n            background: #667eea; \n            color: white; \n            padding: 12px 24px; \n            text-decoration: none; \n            border-radius: 5px; \n            margin: 20px 0;\n        }\n        .footer { padding: 20px; text-align: center; color: #666; font-size: 12px; }\n    </style>\n</head>\n<body>\n    <div class=\"container\">\n        <div class=\"header\">\n            <h1>${personalizations.agencyName}</h1>\n        </div>\n        <div class=\"content\">\n            <p style=\"white-space: pre-line;\">${content}</p>\n            <p><a href=\"#\" class=\"cta-button\">${callToAction}</a></p>\n        </div>\n        <div class=\"footer\">\n            <p>Best regards,<br>The ${personalizations.agencyName} Team</p>\n            <p>This email was sent to ${routingData.clientInfo.primaryContact?.email}</p>\n        </div>\n    </div>\n</body>\n</html>\n`;\n\nreturn [{\n  json: {\n    ...routingData,\n    communicationContent: {\n      subject,\n      content,\n      htmlContent,\n      callToAction,\n      attachments,\n      templateUsed: template?.name || 'default',\n      personalizations\n    }\n  }\n}];"
+      },
+      "id": "generate-personalized-content",
+      "name": "Generate Personalized Content",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/email/campaigns",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "agencyId",
+              "value": "={{$json.clientInfo.agency_id}}"
+            },
+            {
+              "name": "clientId",
+              "value": "={{$json.clientInfo.id}}"
+            },
+            {
+              "name": "name",
+              "value": "Client Communication - {{$json.workflowType}} - {{$json.clientInfo.companyName}}"
+            },
+            {
+              "name": "subject",
+              "value": "={{$json.communicationContent.subject}}"
+            },
+            {
+              "name": "content",
+              "value": "={{$json.communicationContent.htmlContent}}"
+            },
+            {
+              "name": "recipients",
+              "value": "[\"{{$json.clientInfo.primaryContact.email}}\"]"
+            },
+            {
+              "name": "scheduledDate",
+              "value": "={{$json.isImmediate ? null : $json.sendTime}}"
+            },
+            {
+              "name": "trackingSettings",
+              "value": "{\"trackOpens\": true, \"trackClicks\": true, \"trackReplies\": true}"
+            },
+            {
+              "name": "priority",
+              "value": "={{$json.urgency}}"
+            },
+            {
+              "name": "type",
+              "value": "client_communication"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-email-communication",
+      "name": "Send Email Communication",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1780,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "sms-available-check",
+              "leftValue": "={{$json.communicationChannels.includes('sms')}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            },
+            {
+              "id": "urgent-check",
+              "leftValue": "={{$json.urgency}}",
+              "rightValue": "urgent",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "sms-notification-check",
+      "name": "SMS Notification Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Send SMS notification for urgent communications\nconst communicationData = $input.first().json;\nconst clientInfo = communicationData.clientInfo;\nconst content = communicationData.communicationContent;\n\n// Create SMS-friendly message (160 character limit)\nconst smsMessage = `URGENT: ${clientInfo.companyName} - ${content.subject.substring(0, 100)}. Check email for details. - ${communicationData.personalizations.agencyName}`;\n\n// SMS sending would integrate with services like Twilio, AWS SNS, etc.\n// For now, we'll log the SMS and create a notification record\n\nconsole.log('SMS sent to:', clientInfo.primaryContact.phone);\nconsole.log('SMS message:', smsMessage);\n\nreturn [{\n  json: {\n    ...communicationData,\n    smsNotification: {\n      phoneNumber: clientInfo.primaryContact.phone,\n      message: smsMessage,\n      sentAt: new Date().toISOString(),\n      status: 'sent',\n      provider: 'twilio' // Would be actual provider\n    }\n  }\n}];"
+      },
+      "id": "send-sms-notification",
+      "name": "Send SMS Notification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "slack-notification-check",
+              "leftValue": "={{$json.communicationChannels.includes('slack')}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "slack-notification-check",
+      "name": "Slack Notification Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.SLACK_WEBHOOK_URL}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "🚨 *Urgent Client Communication Sent*"
+            },
+            {
+              "name": "attachments",
+              "value": "[{\n  \"color\": \"{{$json.urgency === 'urgent' ? 'danger' : 'good'}}\",\n  \"fields\": [\n    {\n      \"title\": \"Client\",\n      \"value\": \"{{$json.clientInfo.companyName}}\",\n      \"short\": true\n    },\n    {\n      \"title\": \"Communication Type\",\n      \"value\": \"{{$json.workflowType}}\",\n      \"short\": true\n    },\n    {\n      \"title\": \"Urgency\",\n      \"value\": \"{{$json.urgency}}\",\n      \"short\": true\n    },\n    {\n      \"title\": \"Contact\",\n      \"value\": \"{{$json.clientInfo.primaryContact.first_name}} {{$json.clientInfo.primaryContact.last_name}}\",\n      \"short\": true\n    }\n  ]\n}]"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-slack-notification",
+      "name": "Send Slack Team Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        2220,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/communication/activity",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "agencyId",
+              "value": "={{$json.clientInfo.agency_id}}"
+            },
+            {
+              "name": "clientId",
+              "value": "={{$json.clientInfo.id}}"
+            },
+            {
+              "name": "actorId",
+              "value": "system"
+            },
+            {
+              "name": "activityType",
+              "value": "client_communication_sent"
+            },
+            {
+              "name": "description",
+              "value": "Automated {{$json.workflowType}} communication sent to {{$json.clientInfo.companyName}} ({{$json.clientInfo.primaryContact.first_name}} {{$json.clientInfo.primaryContact.last_name}})"
+            },
+            {
+              "name": "metadata",
+              "value": "={{JSON.stringify({\n  communicationType: $json.workflowType,\n  urgency: $json.urgency,\n  channels: $json.communicationChannels,\n  subject: $json.communicationContent.subject,\n  scheduledTime: $json.sendTime,\n  eventTrigger: $json.eventData.eventType\n})}}"
+            },
+            {
+              "name": "relatedId",
+              "value": "={{$json.clientInfo.id}}"
+            },
+            {
+              "name": "relatedType",
+              "value": "client"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "log-communication-activity",
+      "name": "Log Communication Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        2440,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/clients/{{$json.clientInfo.id}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "last_communication_date",
+              "value": "={{new Date().toISOString()}}"
+            },
+            {
+              "name": "communication_frequency",
+              "value": "={{$json.workflowType}}"
+            },
+            {
+              "name": "next_scheduled_communication",
+              "value": "={{new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "update-client-communication-log",
+      "name": "Update Client Communication Log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        2660,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "followup-required-check",
+              "leftValue": "={{['project_completion', 'issue_resolution', 'payment_reminder'].includes($json.workflowType)}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "followup-check",
+      "name": "Follow-up Required Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Schedule follow-up communications\nconst communicationData = $input.first().json;\nconst workflowType = communicationData.workflowType;\n\nlet followUpDelayHours = 0;\nlet followUpType = '';\n\nswitch (workflowType) {\n  case 'project_completion':\n    followUpDelayHours = 72; // 3 days\n    followUpType = 'feedback_collection';\n    break;\n  case 'issue_resolution':\n    followUpDelayHours = 24; // 1 day\n    followUpType = 'resolution_confirmation';\n    break;\n  case 'payment_reminder':\n    followUpDelayHours = 168; // 7 days\n    followUpType = 'payment_followup';\n    break;\n}\n\nconst followUpTime = new Date(Date.now() + followUpDelayHours * 60 * 60 * 1000);\n\n// Create follow-up webhook payload\nconst followUpPayload = {\n  eventType: followUpType,\n  clientId: communicationData.clientInfo.id,\n  originalCommunication: workflowType,\n  scheduledFor: followUpTime.toISOString(),\n  automation: true\n};\n\n// In production, this would schedule the follow-up via a job queue or delayed webhook\nconsole.log('Follow-up scheduled:', followUpPayload);\n\nreturn [{\n  json: {\n    ...communicationData,\n    followUpScheduled: {\n      type: followUpType,\n      scheduledFor: followUpTime.toISOString(),\n      delayHours: followUpDelayHours,\n      payload: followUpPayload\n    }\n  }\n}];"
+      },
+      "id": "schedule-followup",
+      "name": "Schedule Follow-up Communication",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Error handling and recovery\nconst error = $input.first().json;\nconst clientData = $('Get Client Data').item?.json?.data;\n\nconsole.error('Client Communication Workflow Error:', {\n  clientId: clientData?.id,\n  clientName: clientData?.company_name,\n  error: error,\n  timestamp: new Date().toISOString()\n});\n\n// Attempt to notify team about failed communication\nreturn [{\n  json: {\n    error: true,\n    clientId: clientData?.id || 'unknown',\n    clientName: clientData?.company_name || 'unknown',\n    errorMessage: error.message || 'Unknown error occurred',\n    timestamp: new Date().toISOString(),\n    workflow: 'client-communication-automation',\n    requiresManualIntervention: true\n  }\n}];"
+      },
+      "id": "error-handler",
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3320,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/communication/notifications",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "agencyId",
+              "value": "system"
+            },
+            {
+              "name": "recipientId",
+              "value": "admin"
+            },
+            {
+              "name": "title",
+              "value": "Client Communication Workflow Error"
+            },
+            {
+              "name": "message",
+              "value": "Failed to send automated communication to client {{$json.clientName}}. Manual intervention required. Error: {{$json.errorMessage}}"
+            },
+            {
+              "name": "type",
+              "value": "error"
+            },
+            {
+              "name": "priority",
+              "value": "urgent"
+            },
+            {
+              "name": "actionUrl",
+              "value": "/clients/{{$json.clientId}}/communications"
+            },
+            {
+              "name": "actionText",
+              "value": "Review Client Communications"
+            },
+            {
+              "name": "channels",
+              "value": "[\"in_app\", \"email\", \"slack\"]"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-error-alert",
+      "name": "Send Error Alert to Team",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        3540,
+        600
+      ]
+    }
+  ],
+  "connections": {
+    "Client Event Webhook": {
+      "main": [
+        [
+          {
+            "node": "Get Client Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Client Data": {
+      "main": [
+        [
+          {
+            "node": "Communication Router & Scheduler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Communication Router & Scheduler": {
+      "main": [
+        [
+          {
+            "node": "Urgency Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Urgency Check": {
+      "main": [
+        [
+          {
+            "node": "Get Communication Templates",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Schedule Communication Delay",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Communication Delay": {
+      "main": [
+        [
+          {
+            "node": "Get Communication Templates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Communication Templates": {
+      "main": [
+        [
+          {
+            "node": "Generate Personalized Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Personalized Content": {
+      "main": [
+        [
+          {
+            "node": "Send Email Communication",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "SMS Notification Check",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Slack Notification Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email Communication": {
+      "main": [
+        [
+          {
+            "node": "Log Communication Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SMS Notification Check": {
+      "main": [
+        [
+          {
+            "node": "Send SMS Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send SMS Notification": {
+      "main": [
+        [
+          {
+            "node": "Log Communication Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack Notification Check": {
+      "main": [
+        [
+          {
+            "node": "Send Slack Team Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Slack Team Notification": {
+      "main": [
+        [
+          {
+            "node": "Log Communication Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Communication Activity": {
+      "main": [
+        [
+          {
+            "node": "Update Client Communication Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Client Communication Log": {
+      "main": [
+        [
+          {
+            "node": "Follow-up Required Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Follow-up Required Check": {
+      "main": [
+        [
+          {
+            "node": "Schedule Follow-up Communication",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "error-handler"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "client-communication",
+      "name": "Client Relations"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}

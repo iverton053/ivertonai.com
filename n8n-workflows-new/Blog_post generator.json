@@ -1,0 +1,512 @@
+{
+  "name": "Blog_post generator",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "generate-blog-post",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "df2f4a61-f7bd-4383-8d38-464a5905ccd5",
+      "name": "Webhook - Blog Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -1680,
+        -80
+      ],
+      "webhookId": "blog-post-generator"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "714bd352-58db-4746-be4b-0aca6ec351b9",
+      "name": "Data Validation & Setup",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [
+        -1456,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate required fields\nconst requiredFields = ['topic', 'target_audience', 'word_count', 'language'];\nconst errors = [];\n\nfor (const field of requiredFields) {\n  const value = $input.first().json[field];\n  if (!value || value.toString().trim() === '') {\n    errors.push(`${field} is required`);\n  }\n}\n\n// Note: tone_style is not required, it has a default value\n// Check if tone_style exists, if not set default\nif (!$input.first().json.tone_style || $input.first().json.tone_style.trim() === '') {\n  $input.first().json.tone_style = 'professional';\n}\n\n// Check if keywords are provided and validate them\nconst keywordsProvided = $input.first().json.keywords && $input.first().json.keywords.toString().trim() !== '';\n\nif (keywordsProvided) {\n  const keywords = $input.first().json.keywords.split(',').map(k => k.trim()).filter(k => k);\n  if (keywords.length < 3) {\n    errors.push('Minimum 3 keywords required when keywords are provided');\n  }\n  if (keywords.length > 10) {\n    errors.push('Maximum 10 keywords allowed');\n  }\n  // Store clean keywords array\n  $input.first().json.keywords_array = keywords;\n  $input.first().json.keywords_count = keywords.length;\n  $input.first().json.has_keywords = 'yes';\n} else {\n  $input.first().json.keywords_array = [];\n  $input.first().json.keywords_count = 0;\n  $input.first().json.has_keywords = 'no';\n}\n\n// Validate word count\nconst wordCount = parseInt($input.first().json.word_count);\nif (isNaN(wordCount) || wordCount < 100 || wordCount > 5000) {\n  errors.push('Word count must be between 100 and 5000');\n}\n\n// Check if references are provided and process them\nconst referencesProvided = $input.first().json.references && $input.first().json.references.toString().trim() !== '';\n\nif (referencesProvided) {\n  const references = $input.first().json.references.split(',').map(ref => ref.trim()).filter(ref => ref);\n  $input.first().json.references_array = references;\n  $input.first().json.references_count = references.length;\n  $input.first().json.has_references = 'yes';\n} else {\n  $input.first().json.references_array = [];\n  $input.first().json.references_count = 0;\n  $input.first().json.has_references = 'no';\n}\n\n// Add debug info\n$input.first().json.validation_errors = errors;\n$input.first().json.is_valid = errors.length === 0;\n$input.first().json.debug_info = {\n  errors_count: errors.length,\n  keywords_provided: keywordsProvided,\n  references_provided: referencesProvided\n};\n\nreturn [$input.first().json];"
+      },
+      "id": "b0d2bf20-ca9d-4f08-b101-8a1194b816c2",
+      "name": "Input Validation Logic",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1232,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "validation-check",
+              "leftValue": "={{ $json.is_valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            },
+            {
+              "id": "615f2186-f291-446e-a295-1ebdd276307a",
+              "leftValue": "={{ $json.is_valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "46a4c413-16ad-427d-920b-2a389e43b3f8",
+      "name": "Validation Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1024,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "keywords-provided",
+              "leftValue": "={{ $json.has_keywords }}",
+              "rightValue": "yes",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ade1aee5-06d1-4f5f-8366-1aacb26c584e",
+      "name": "Keywords Provided?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -800,
+        -176
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "chat",
+        "model": "gpt-5-chat-latest",
+        "prompt": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "=You are an expert SEO blog post writer.  TASK: Write a blog post that meets ALL of these requirements exactly.  \n--- **Inputs:** \n- Topic: {{ $json.topic }} \n- Target Audience: {{ $json.target_audience }} \n- Tone/Style: {{ $json.tone_style }} \n- Word Count: {{ $json.word_count }} words (exact) \n- Language: {{ $json.language }} \n- Keywords: {{ $json.keywords_array.join(', ') }} {{ $json.has_references === 'yes' ? '**References to Include:** ' + $json.references_array.join(', ') : '' }}\n ---  **STRICT RULES:**\n1. Write EXACTLY {{ $json.word_count }} words. Count each word (split by spaces). Do not go under or over. \n2. Use the provided keywords naturally with 1–2% density. Distribute them evenly. \n3. Begin with an engaging SEO Title (must include primary keyword). \n4. Add a compelling meta description (≤155 characters). \n5. Use proper headings (H1, H2, H3) for readability and SEO. \n6. Include suggested internal links. \n7. End with a strong Call-To-Action. {{ $json.has_references === 'yes' ? '8. Cite references appropriately.' : '' }}\n9. Return ONLY valid JSON in the following structure.  --- \n**Output (JSON only):** ```json {   \"title\": \"SEO optimized title with primary keyword\",   \"meta_description\": \"Meta description under 155 characters\",   \"primary_keyword\": \"main keyword\",   \"secondary_keywords\": [\"keyword2\", \"keyword3\"],   \"headings\": [     {\"level\": \"H1\", \"text\": \"Main Title\"},     {\"level\": \"H2\", \"text\": \"Section\"},     {\"level\": \"H3\", \"text\": \"Subsection\"}   ],   \"content\": \"Full blog post body text here...\",   \"word_count\": {{ $json.word_count }},   \"internal_links\": [\"suggested anchor text\"],   \"call_to_action\": \"CTA text\",   \"seo_score\": \"A+\" }"
+            },
+            {
+              "content": "=Generate an SEO-optimized blog post with the following requirements:  **Topic:** {{ $json.topic }} **Target Audience:** {{ $json.target_audience }} **Tone/Style:** {{ $json.tone_style }} **Word Count:** {{ $json.word_count }} words **Language:** {{ $json.language }} **User Keywords:** {{ $json.keywords_array.join(', ') }} {{ $json.has_references === 'yes' ? '**References to Include:** ' + $json.references_array.join(', ') : '' }} \n**Instructions:** \n1. Use the provided keywords strategically throughout the content (keyword density 1-2%) \n2. Create an engaging SEO title incorporating the primary keyword \n3. Write a compelling meta description under 155 characters 4. Structure with proper headings (H1, H2, H3) for readability \n5. Include relevant internal linking suggestions \n6. Add a strong call-to-action at the end {{ $json.has_references === 'yes' ? '7. Reference and cite the provided sources appropriately' : '' }} \n7.Word Count:Generate exactly {{ $json.word_count }} words - I will verify the count\n8.After writing, recount the words. If word count < {{ $json.word_count }}, continue writing until the target is reached. Append seamlessly — do not repeat sections.\n**Required Output Format (JSON only):** ```json {   \"title\": \"SEO optimized title with primary keyword\",   \"meta_description\": \"Under 155 characters meta description\",   \"primary_keyword\": \"main keyword from provided list\",   \"secondary_keywords\": [\"keyword2\", \"keyword3\", \"keyword4\"],   \"headings\": [     {\"level\": \"H1\", \"text\": \"Article Title\"},     {\"level\": \"H2\", \"text\": \"Main Section\"},     {\"level\": \"H3\", \"text\": \"Subsection\"}   ],   \"content\": \"Full blog post content with proper markdown formatting and keyword integration\",   \"word_count\": 1200,   \"internal_links\": [\"suggested internal link anchor texts\"],   \"call_to_action\": \"Compelling CTA text\",   \"seo_score\": \"A+\" }"
+            }
+          ]
+        },
+        "options": {},
+        "requestOptions": {}
+      },
+      "id": "20ca4fd3-ef36-49f2-bb5d-49d3aa7d2ddf",
+      "name": "Generate Blog (With Keywords)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        -576,
+        -288
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "MwFlNFNMl63MGCly",
+          "name": "OpenAi account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "chat",
+        "model": "gpt-5-chat-latest",
+        "prompt": {
+          "messages": [
+            {
+              "content": "=Generate an SEO-optimized blog post with keyword research for the following requirements:\n\n**Topic:** {{ $json.topic }}\n**Target Audience:** {{ $json.target_audience }}\n**Tone/Style:** {{ $json.tone_style }}\n**EXACT Word Count Required:** {{ $json.word_count }} words (THIS IS MANDATORY - COUNT EVERY WORD)\n**Language:** {{ $json.language }}\n\n**WORD COUNT INSTRUCTIONS - CRITICAL:**\n- You MUST write EXACTLY {{ $json.word_count }} words\n- Plan your structure: For {{ $json.word_count }} words, use approximately:\n  * Introduction: {{ Math.round($json.word_count * 0.12) }} words\n  * Main content sections: {{ Math.round($json.word_count * 0.75) }} words total\n  * Conclusion: {{ Math.round($json.word_count * 0.13) }} words\n- Count words in each section and maintain running totals\n- If you're short, add more examples, detailed explanations, case studies, statistics, and actionable tips\n- If you're over, trim carefully without losing value\n\n**Content Expansion Strategies to Meet Word Count:**\n1. Include 3-5 detailed examples for each main point\n2. Add step-by-step instructions where relevant\n3. Include common mistakes and how to avoid them\n4. Provide actionable tips and best practices\n5. Add industry statistics and expert insights\n6. Include FAQ-style sections\n7. Provide before/after scenarios\n8. Add troubleshooting sections\n\n**LANGUAGE INSTRUCTIONS:**\n{{ $json.language === 'Hinglish' ? '- Write the entire blog post in HINGLISH (Hindi-English mix)\\\\n- Use Hindi words naturally mixed with English\\\\n- Keep technical terms in English but use Hindi for common expressions\\\\n- Research keywords should also be in Hinglish/Hindi where applicable' : '' }}\n{{ $json.language !== 'English' && $json.language !== 'Hinglish' ? '- Write the ENTIRE blog post in ' + $json.language + '\\\\n- All headings, content, and keywords should be in ' + $json.language : '' }}\n\n**Instructions:**\n1. Research and identify 5-8 relevant SEO keywords for this topic and language\n2. Create detailed content structure with proper H1, H2, H3 headings\n3. Write comprehensive sections with detailed explanations\n4. Include practical examples and actionable advice\n5. Add internal linking suggestions\n6. Include a strong call-to-action\n7. **VERIFY YOUR FINAL WORD COUNT BEFORE SUBMITTING**\n\n**Required Output Format (JSON only):**\n{\n  \"title\": \"SEO optimized title with primary keyword\",\n  \"meta_description\": \"Under 155 characters meta description\",\n  \"primary_keyword\": \"main researched keyword\",\n  \"secondary_keywords\": [\"keyword2\", \"keyword3\", \"keyword4\", \"keyword5\"],\n  \"keyword_research_notes\": \"Brief explanation of why these keywords were selected\",\n  \"headings\": [\n    {\"level\": \"H1\", \"text\": \"Article Title\"},\n    {\"level\": \"H2\", \"text\": \"Main Section\"},\n    {\"level\": \"H3\", \"text\": \"Subsection\"}\n  ],\n  \"content\": \"Full comprehensive blog post content with natural keyword integration - EXACTLY {{ $json.word_count }} words\",\n  \"word_count\": {{ $json.word_count }},\n  \"internal_links\": [\"suggested internal link anchor texts\"],\n  \"call_to_action\": \"Compelling CTA text\",\n  \"seo_score\": \"A+\"\n}"
+            },
+            {
+              "role": "system",
+              "content": "You are an expert SEO blog post writer and your PRIMARY MISSION is to generate content with EXACT word counts.  CRITICAL WORD COUNT RULES: 1. You MUST generate EXACTLY the requested word count - no approximations 2. Count every word as you write - use a mental word counter 3. If target is 1200 words, deliver 1200 words (±10 words maximum acceptable) 4. Write in sections and keep running word count totals 5. If you're falling short, expand with more details, examples, and explanations 6. If you're over the limit, trim without losing essential information  WORD COUNT STRATEGY: - Plan your content structure first (Introduction: 150 words, Main sections: 200-250 words each, Conclusion: 100-150 words) - Count words per paragraph and keep running totals - Use detailed explanations, practical examples, step-by-step guides, and case studies to reach targets - Include actionable tips, common mistakes, best practices, and real-world applications - Add relevant statistics, expert quotes, and industry insights when needed  CONTENT QUALITY REQUIREMENTS: - Maintain high quality while meeting exact word count - Never use filler content or fluff - Every sentence must add value - Always return valid JSON format with exact structure requested"
+            }
+          ]
+        },
+        "options": {},
+        "requestOptions": {}
+      },
+      "id": "a0fbe952-6a27-4b6b-b658-6fe99755a0a7",
+      "name": "Generate Blog (Auto Keywords)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        -576,
+        -80
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "MwFlNFNMl63MGCly",
+          "name": "OpenAi account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse the OpenAI response with robust JSON extraction\nlet aiResponse;\nconst responseText = $input.first().json.message.content;\n\ntry {\n  // Strategy 1: Try to extract JSON from code blocks with json specifier\n  let jsonMatch = responseText.match(/```json\\s*([\\s\\S]*?)\\s*```/);\n  \n  // Strategy 2: Try to extract JSON from any code block\n  if (!jsonMatch) {\n    jsonMatch = responseText.match(/```(?:\\w+)?\\s*([\\s\\S]*?)\\s*```/);\n  }\n  \n  // Strategy 3: Try to find JSON object directly in the text\n  if (!jsonMatch) {\n    const braceMatch = responseText.match(/\\{([\\s\\S]*)\\}/);\n    if (braceMatch) {\n      aiResponse = JSON.parse(braceMatch[0]);\n    } else {\n      throw new Error(\"No JSON object found in response\");\n    }\n  } else {\n    aiResponse = JSON.parse(jsonMatch[1].trim());\n  }\n  \n  // Validate required fields in the response\n  const requiredFields = ['title', 'content', 'meta_description'];\n  const missingFields = [];\n  \n  for (const field of requiredFields) {\n    if (!aiResponse[field]) {\n      missingFields.push(field);\n    }\n  }\n  \n  if (missingFields.length > 0) {\n    throw new Error(`Missing required fields: ${missingFields.join(', ')}`);\n  }\n  \n  // Add metadata for successful response\n  aiResponse.generated_at = new Date().toISOString();\n  aiResponse.request_id = Math.random().toString(36).substring(7);\n  aiResponse.status = \"success\";\n  \n} catch (error) {\n  // Create a structured error response\n  aiResponse = {\n    status: \"error\",\n    error_type: \"ai_response_parsing_failed\",\n    message: \"Failed to parse AI response: \" + error.message,\n    generated_at: new Date().toISOString(),\n    request_id: Math.random().toString(36).substring(7),\n    raw_response_preview: responseText.substring(0, 200) + (responseText.length > 200 ? \"...\" : \"\")\n  };\n}\n// Add this right before the final return statement\nif (aiResponse.status === \"success\") {\n  // Calculate ACTUAL word count and override AI's inaccurate count\n  const actualWordCount = aiResponse.content ? \n    aiResponse.content.split(/\\s+/).filter(word => word.length > 0).length : 0;\n  \n  aiResponse.actual_word_count = actualWordCount;\n  aiResponse.word_count = actualWordCount; // Override the AI's wrong count\n  \n  // Add accuracy metric\n  aiResponse.word_count_accuracy = Math.round((actualWordCount / $json.word_count) * 100);\n}\nreturn [{ json: aiResponse }];"
+      },
+      "id": "332543f9-3721-438b-b937-513171bf0a48",
+      "name": "Format Success Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -352,
+        -272
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "0cb497ca-9347-43c9-9fe5-21d0c3293f0b",
+      "name": "Format Error Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [
+        -800,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "87dd1ca4-41e4-4a8c-9543-83231f374991",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        -128,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "openai-success",
+              "leftValue": "={{ $json.message && $json.message.content }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "fdaf00de-fa03-4515-a785-43a6d03102df",
+      "name": "AI Response Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -352,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "1fb749ae-6499-4b9e-bdec-fb93386d3f92",
+      "name": "AI Error Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [
+        -352,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// SEO Analysis for generated blog post\nconst blogData = $input.first().json;\n\n// Skip analysis if this is an error response\nif (blogData.status === \"error\") {\n  return [{ json: blogData }];\n}\n\nconst analysis = {\n  title_length: blogData.title ? blogData.title.length : 0,\n  title_score: 0,\n  meta_description_length: blogData.meta_description ? blogData.meta_description.length : 0,\n  meta_description_score: 0,\n  headings_count: blogData.headings ? blogData.headings.length : 0,\n  h1_count: 0,\n  h2_count: 0,\n  h3_count: 0,\n  content_word_count: blogData.content ? blogData.content.split(/\\s+/).length : 0,\n  issues: [],\n  suggestions: [],\n  overall_score: 0\n};\n\n// Analyze title (ideal: 50-60 characters)\nif (analysis.title_length > 0) {\n  if (analysis.title_length < 50) {\n    analysis.issues.push(\"Title is too short (ideal: 50-60 characters)\");\n    analysis.title_score = 50;\n  } else if (analysis.title_length > 60) {\n    analysis.issues.push(\"Title is too long (ideal: 50-60 characters)\");\n    analysis.title_score = 60;\n  } else {\n    analysis.title_score = 100;\n    analysis.suggestions.push(\"Title length is optimal for SEO\");\n  }\n}\n\n// Analyze meta description (ideal: under 155 characters)\nif (analysis.meta_description_length > 0) {\n  if (analysis.meta_description_length > 155) {\n    analysis.issues.push(\"Meta description is too long (ideal: under 155 characters)\");\n    analysis.meta_description_score = 70;\n  } else {\n    analysis.meta_description_score = 100;\n    analysis.suggestions.push(\"Meta description length is good\");\n  }\n}\n\n// Analyze headings structure\nif (blogData.headings && blogData.headings.length > 0) {\n  blogData.headings.forEach(heading => {\n    if (heading.level === \"H1\") analysis.h1_count++;\n    if (heading.level === \"H2\") analysis.h2_count++;\n    if (heading.level === \"H3\") analysis.h3_count++;\n  });\n  \n  if (analysis.h1_count === 0) {\n    analysis.issues.push(\"No H1 heading found - essential for SEO\");\n  } else if (analysis.h1_count > 1) {\n    analysis.issues.push(\"Multiple H1 headings found - should only have one\");\n  }\n  \n  if (analysis.h2_count < 2) {\n    analysis.issues.push(\"Not enough H2 headings - aim for at least 2-3\");\n  }\n}\n\n// Calculate overall score\nconst weights = { title: 0.3, meta: 0.2, headings: 0.5 };\nanalysis.overall_score = Math.round(\n  (analysis.title_score * weights.title) + \n  (analysis.meta_description_score * weights.meta) + \n  (analysis.headings_count > 0 ? 80 * weights.headings : 0)\n);\n\n// Add analysis to the response\nblogData.seo_analysis = analysis;\n\nreturn [{ json: blogData }];"
+      },
+      "id": "fe7e5370-f4e5-4821-a116-829635dae2be",
+      "name": "SEO Analysis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -192,
+        -272
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Content Quality Validation for generated blog post\nconst blogData = $input.first().json;\n\n// Skip analysis if this is an error response\nif (blogData.status === \"error\") {\n  return [{ json: blogData }];\n}\n\nconst analysis = {\n  readability_score: 0,\n  paragraph_count: 0,\n  avg_sentence_length: 0,\n  keyword_density: 0,\n  issues: [],\n  strengths: [],\n  overall_quality: 0\n};\n\n// Calculate readability metrics if content exists\nif (blogData.content) {\n  const content = blogData.content;\n  \n  // Count paragraphs\n  analysis.paragraph_count = (content.match(/\\n\\n/g) || []).length + 1;\n  \n  // Count sentences and words\n  const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 0);\n  const words = content.split(/\\s+/).filter(w => w.length > 0);\n  \n  analysis.avg_sentence_length = sentences.length > 0 ? Math.round(words.length / sentences.length) : 0;\n  \n  // Calculate readability score (simplified)\n  if (analysis.avg_sentence_length > 0) {\n    if (analysis.avg_sentence_length <= 15) {\n      analysis.readability_score = 90;\n      analysis.strengths.push(\"Good sentence length for readability\");\n    } else if (analysis.avg_sentence_length <= 20) {\n      analysis.readability_score = 75;\n      analysis.issues.push(\"Sentences are slightly long - consider breaking some up\");\n    } else {\n      analysis.readability_score = 50;\n      analysis.issues.push(\"Sentences are too long - break them up for better readability\");\n    }\n  }\n  \n  // Check paragraph structure\n  if (analysis.paragraph_count < 3) {\n    analysis.issues.push(\"Content needs more paragraphs for better structure\");\n  }\n  \n  // Check if primary keyword is in content\n  if (blogData.primary_keyword && blogData.content) {\n    const keywordRegex = new RegExp(blogData.primary_keyword, \"gi\");\n    const keywordMatches = (blogData.content.match(keywordRegex) || []).length;\n    analysis.keyword_density = (keywordMatches / words.length) * 100;\n    \n    if (analysis.keyword_density < 1) {\n      analysis.issues.push(`Primary keyword \"${blogData.primary_keyword}\" not used enough`);\n    } else if (analysis.keyword_density > 2.5) {\n      analysis.issues.push(`Primary keyword \"${blogData.primary_keyword}\" might be over-optimized`);\n    } else {\n      analysis.strengths.push(\"Good keyword density for primary keyword\");\n    }\n  }\n}\n\n// Calculate overall quality score\nanalysis.overall_quality = Math.round(\n  (analysis.readability_score * 0.6) + \n  (analysis.paragraph_count >= 5 ? 20 : analysis.paragraph_count * 4) +\n  (analysis.keyword_density >= 1 && analysis.keyword_density <= 2.5 ? 20 : 0)\n);\n\n// Add analysis to the response\nblogData.quality_analysis = analysis;\n\nreturn [{ json: blogData }];"
+      },
+      "id": "68cdce9b-9596-460a-8ac1-29849aeb1339",
+      "name": "Content Quality Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -32,
+        -272
+      ]
+    }
+  ],
+  "pinData": {
+    "Webhook - Blog Request": [
+      {
+        "json": {
+          "topic": "Best SEO Practices for Small Businesses",
+          "target_audience": "Small business owners",
+          "tone_style": "professional but approachable",
+          "word_count": 1200,
+          "language": "English",
+          "references": "https://example.com/seo-guide, https://moz.com/blog"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Webhook - Blog Request": {
+      "main": [
+        [
+          {
+            "node": "Data Validation & Setup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Data Validation & Setup": {
+      "main": [
+        [
+          {
+            "node": "Input Validation Logic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Input Validation Logic": {
+      "main": [
+        [
+          {
+            "node": "Validation Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validation Check": {
+      "main": [
+        [
+          {
+            "node": "Keywords Provided?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Keywords Provided?": {
+      "main": [
+        [
+          {
+            "node": "Generate Blog (With Keywords)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Generate Blog (Auto Keywords)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Blog (With Keywords)": {
+      "main": [
+        [
+          {
+            "node": "AI Response Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Blog (Auto Keywords)": {
+      "main": [
+        [
+          {
+            "node": "AI Response Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Success Response": {
+      "main": [
+        [
+          {
+            "node": "SEO Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Error Response": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Response Check": {
+      "main": [
+        [
+          {
+            "node": "Format Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AI Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Error Response": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SEO Analysis": {
+      "main": [
+        [
+          {
+            "node": "Content Quality Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Content Quality Check": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Response": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "75433d24-f518-43c2-a1ba-e3d5c758321f",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "4449303a74121eea16a562b13bf56d7bf84f057d9cd2ad64d6c2afc9ccfe82ac"
+  },
+  "id": "HtHt74KrDvV7neEA",
+  "tags": []
+}

@@ -1,0 +1,362 @@
+{
+  "name": "AI_Business_Recommendations",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ai-recommendations",
+        "options": {}
+      },
+      "id": "bf6a8c6d-385b-4848-9df6-c45320d39d51",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -656,
+        128
+      ],
+      "webhookId": "ai-recommendations-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process AI recommendations data for dashboard widget\nconst items = [];\n\n// Get input data from Input Validation node\nlet inputData = {};\ntry {\n  // Try different ways to access the input validation data\n  const inputValidationData = $('Input Validation').first()?.json;\n  if (inputValidationData?.data) {\n    inputData = inputValidationData.data;\n  } else if (inputValidationData?.business_domain) {\n    // Direct access if data structure is different\n    inputData = inputValidationData;\n  } else {\n    // Fallback to any available data from the workflow trigger\n    const triggerData = $('Webhook Trigger').first()?.json || {};\n    inputData = {\n      business_domain: triggerData.business_domain || 'general',\n      analysis_type: triggerData.analysis_type || 'comprehensive',\n      current_data: triggerData.current_data || {},\n      focus_areas: triggerData.focus_areas || 'general'\n    };\n  }\n} catch (error) {\n  console.log('Error accessing input data:', error.message);\n  inputData = {\n    business_domain: 'general',\n    analysis_type: 'comprehensive', \n    current_data: {},\n    focus_areas: 'general'\n  };\n}\n\n// Get merge data (should be Strategic, Market, Content in that order)\nconst mergeData = $input.all() || [];\n\n// Debug logging - you can remove these after testing\nconsole.log('=== DEBUG INFO ===');\nconsole.log('Input Data:', JSON.stringify(inputData, null, 2));\nconsole.log('Merge Data Length:', mergeData.length);\nconsole.log('Merge Data Structure:');\nmergeData.forEach((item, index) => {\n  console.log(`Index ${index}:`, {\n    hasJson: !!item.json,\n    hasMessage: !!item.json?.message,\n    hasContent: !!item.json?.message?.content,\n    contentPreview: item.json?.message?.content ? item.json.message.content.substring(0, 100) + '...' : 'No content',\n    fullStructure: JSON.stringify(item.json, null, 2)\n  });\n});\nconsole.log('=== END DEBUG ===');\n\n// Enhanced AI response parser with better error handling\nconst parseAIResponse = (response, analysisType) => {\n  try {\n    if (!response || !response.message || !response.message.content) {\n      return { error: true, message: `No content received from ${analysisType}` };\n    }\n\n    const content = response.message.content;\n    \n    // Remove code block markers if present\n    const cleanContent = content.replace(/```json\\n?|\\n?```/g, '').trim();\n    \n    // Try to parse as JSON directly first\n    try {\n      return { error: false, data: JSON.parse(cleanContent) };\n    } catch (directParseError) {\n      // If direct parsing fails, try to extract JSON from the content\n      const jsonMatch = cleanContent.match(/\\{[\\s\\S]*\\}/);\n      if (jsonMatch) {\n        return { error: false, data: JSON.parse(jsonMatch[0]) };\n      }\n      throw new Error('No valid JSON found in response');\n    }\n  } catch (error) {\n    return { \n      error: true, \n      message: `Failed to parse ${analysisType} response: ${error.message}` \n    };\n  }\n};\n\n// Parse responses from merge node (order: Strategic, Market, Content)\nconst strategicResult = mergeData[0] ? parseAIResponse(mergeData[0].json, 'Strategic Analysis') : { error: true, message: 'Strategic Analysis node failed' };\nconst marketResult = mergeData[1] ? parseAIResponse(mergeData[1].json, 'Market Trend Analysis') : { error: true, message: 'Market Trend Analysis node failed' };\nconst contentResult = mergeData[2] ? parseAIResponse(mergeData[2].json, 'Content & SEO Analysis') : { error: true, message: 'Content & SEO Analysis node failed' };\n\n// Enhanced fallback data\nconst generateFallbackRecommendations = (businessDomain = 'general') => [\n  {\n    id: 1,\n    title: 'Digital Transformation Strategy',\n    description: 'Implement modern digital tools and processes to streamline operations and improve customer experience',\n    category: 'strategy',\n    priority: 'high',\n    implementation_steps: [\n      'Audit current digital infrastructure',\n      'Identify automation opportunities',\n      'Implement customer relationship management system',\n      'Train team on new digital tools'\n    ],\n    expected_outcome: 'Increase operational efficiency by 25-30%',\n    timeline_weeks: 8,\n    roi_estimate: '30-45%',\n    difficulty: 'medium',\n    resources_required: 'IT team, software licenses, training budget',\n    success_metrics: ['process automation rate', 'customer satisfaction score', 'operational cost reduction'],\n    risk_level: 'medium'\n  },\n  {\n    id: 2,\n    title: 'Customer Experience Optimization',\n    description: 'Enhance customer journey touchpoints to increase satisfaction and retention rates',\n    category: 'operations',\n    priority: 'high',\n    implementation_steps: [\n      'Map current customer journey',\n      'Identify pain points and friction areas',\n      'Implement feedback collection system',\n      'Redesign key touchpoints based on insights'\n    ],\n    expected_outcome: 'Improve customer retention by 15-20%',\n    timeline_weeks: 6,\n    roi_estimate: '20-35%',\n    difficulty: 'medium',\n    resources_required: 'UX designer, customer service team, analytics tools',\n    success_metrics: ['NPS score improvement', 'customer retention rate', 'support ticket reduction'],\n    risk_level: 'low'\n  },\n  {\n    id: 3,\n    title: 'Revenue Diversification Initiative',\n    description: 'Develop additional revenue streams to reduce dependency on core business and increase growth',\n    category: 'revenue',\n    priority: 'medium',\n    implementation_steps: [\n      'Analyze market opportunities in adjacent sectors',\n      'Develop pilot programs for new services/products',\n      'Test market demand with minimal viable products',\n      'Scale successful initiatives'\n    ],\n    expected_outcome: 'Create 2-3 new revenue streams contributing 15% of total revenue',\n    timeline_weeks: 12,\n    roi_estimate: '25-40%',\n    difficulty: 'high',\n    resources_required: 'Product development team, market research budget, marketing support',\n    success_metrics: ['new revenue stream contribution', 'market penetration rate', 'customer acquisition in new segments'],\n    risk_level: 'high'\n  },\n  {\n    id: 4,\n    title: 'Data-Driven Decision Making Framework',\n    description: 'Establish comprehensive analytics and reporting system for informed strategic decisions',\n    category: 'technology',\n    priority: 'high',\n    implementation_steps: [\n      'Implement advanced analytics platform',\n      'Set up key performance indicator dashboards',\n      'Train management team on data interpretation',\n      'Establish regular data review processes'\n    ],\n    expected_outcome: 'Improve decision accuracy and reduce strategic risks by 20%',\n    timeline_weeks: 5,\n    roi_estimate: '18-28%',\n    difficulty: 'medium',\n    resources_required: 'Data analyst, analytics software, dashboard tools',\n    success_metrics: ['data utilization rate', 'decision response time', 'forecast accuracy'],\n    risk_level: 'low'\n  },\n  {\n    id: 5,\n    title: 'Competitive Positioning Enhancement',\n    description: 'Strengthen market position through unique value proposition and competitive differentiation',\n    category: 'marketing',\n    priority: 'medium',\n    implementation_steps: [\n      'Conduct comprehensive competitive analysis',\n      'Identify unique value proposition gaps',\n      'Develop differentiation strategy',\n      'Launch targeted marketing campaigns highlighting advantages'\n    ],\n    expected_outcome: 'Increase market share by 5-10% and improve brand recognition',\n    timeline_weeks: 10,\n    roi_estimate: '15-25%',\n    difficulty: 'medium',\n    resources_required: 'Marketing team, competitive intelligence tools, brand development budget',\n    success_metrics: ['market share growth', 'brand awareness metrics', 'competitive win rate'],\n    risk_level: 'medium'\n  }\n];\n\nconst generateFallbackMarketInsights = (businessDomain = 'general') => [\n  {\n    id: 1,\n    type: 'opportunity',\n    title: 'Sustainability and ESG Focus Trend',\n    description: 'Growing consumer and investor demand for environmentally sustainable and socially responsible business practices',\n    impact_level: 'high',\n    time_horizon: 'long_term',\n    action_required: 'Develop comprehensive sustainability strategy and ESG reporting framework',\n    confidence_level: 'high',\n    market_size: '$30+ trillion in ESG-focused investments globally',\n    growth_potential: '15-20% annual growth in ESG market'\n  },\n  {\n    id: 2,\n    type: 'threat',\n    title: 'Economic Uncertainty and Inflation Pressures',\n    description: 'Rising costs and economic volatility affecting consumer spending and business operations',\n    impact_level: 'high',\n    time_horizon: 'immediate',\n    action_required: 'Implement cost optimization measures and flexible pricing strategies',\n    confidence_level: 'high',\n    market_size: 'Affects entire economy',\n    growth_potential: 'Potential 10-15% cost increase across sectors'\n  },\n  {\n    id: 3,\n    type: 'trend',\n    title: 'Remote and Hybrid Work Adoption',\n    description: 'Permanent shift toward flexible work arrangements creating new business opportunities and challenges',\n    impact_level: 'medium',\n    time_horizon: 'short_term',\n    action_required: 'Adapt business model to support remote collaboration and digital-first customer interactions',\n    confidence_level: 'high',\n    market_size: '70% of workforce expecting hybrid options',\n    growth_potential: '25% growth in remote work technology market'\n  },\n  {\n    id: 4,\n    type: 'disruption',\n    title: 'Artificial Intelligence Integration',\n    description: 'Rapid AI adoption across industries creating competitive advantages and operational efficiencies',\n    impact_level: 'high',\n    time_horizon: 'short_term',\n    action_required: 'Develop AI integration strategy and upskill workforce for AI-augmented processes',\n    confidence_level: 'high',\n    market_size: '$1.8 trillion AI market by 2030',\n    growth_potential: '40% annual growth in AI business applications'\n  }\n];\n\nconst generateFallbackContentStrategy = (businessDomain = 'general') => [\n  {\n    id: 1,\n    content_type: 'blog_post',\n    title: 'Industry Trends and Future Outlook for 2024',\n    description: 'Comprehensive analysis of emerging trends and their impact on the industry',\n    target_keywords: [`${businessDomain} trends 2024`, 'industry outlook', 'future predictions'],\n    target_audience: 'Industry professionals and decision makers',\n    content_objectives: ['establish thought leadership', 'drive organic traffic', 'generate leads'],\n    estimated_traffic_boost: '12-18%',\n    difficulty: 'medium',\n    priority: 'high',\n    timeline_weeks: 3,\n    distribution_channels: ['company blog', 'LinkedIn', 'industry publications']\n  },\n  {\n    id: 2,\n    content_type: 'guide',\n    title: 'Complete Guide to Digital Transformation',\n    description: 'Step-by-step guide helping businesses navigate digital transformation challenges',\n    target_keywords: ['digital transformation guide', 'business modernization', 'technology adoption'],\n    target_audience: 'Business executives and IT decision makers',\n    content_objectives: ['generate qualified leads', 'establish expertise', 'support sales process'],\n    estimated_traffic_boost: '15-25%',\n    difficulty: 'high',\n    priority: 'high',\n    timeline_weeks: 4,\n    distribution_channels: ['gated content', 'email campaigns', 'webinar promotion']\n  },\n  {\n    id: 3,\n    content_type: 'case_study',\n    title: 'Success Story: How We Helped [Client] Achieve Results',\n    description: 'Real-world case study demonstrating measurable business outcomes',\n    target_keywords: [`${businessDomain} case study`, 'success story', 'client results'],\n    target_audience: 'Prospective clients and partners',\n    content_objectives: ['build credibility', 'support sales conversations', 'demonstrate ROI'],\n    estimated_traffic_boost: '8-12%',\n    difficulty: 'low',\n    priority: 'medium',\n    timeline_weeks: 2,\n    distribution_channels: ['website', 'sales materials', 'social media']\n  },\n  {\n    id: 4,\n    content_type: 'video',\n    title: 'Expert Interview: Industry Insights and Predictions',\n    description: 'Video content featuring industry experts discussing market trends and opportunities',\n    target_keywords: ['industry expert interview', `${businessDomain} insights`, 'market predictions'],\n    target_audience: 'Industry professionals and potential customers',\n    content_objectives: ['increase engagement', 'build authority', 'expand reach'],\n    estimated_traffic_boost: '10-15%',\n    difficulty: 'medium',\n    priority: 'medium',\n    timeline_weeks: 3,\n    distribution_channels: ['YouTube', 'LinkedIn Video', 'website']\n  },\n  {\n    id: 5,\n    content_type: 'webinar',\n    title: 'Live Q&A: Solving Common Industry Challenges',\n    description: 'Interactive webinar addressing frequent pain points and questions from prospects',\n    target_keywords: [`${businessDomain} webinar`, 'industry challenges', 'expert solutions'],\n    target_audience: 'Qualified prospects and existing customers',\n    content_objectives: ['generate leads', 'nurture prospects', 'demonstrate expertise'],\n    estimated_traffic_boost: '6-10%',\n    difficulty: 'high',\n    priority: 'low',\n    timeline_weeks: 5,\n    distribution_channels: ['webinar platform', 'email marketing', 'social media promotion']\n  }\n];\n\n// Process strategic recommendations\nlet recommendations = [];\nlet strategicInsights = {};\nlet implementationRoadmap = {};\n\nif (strategicResult.error) {\n  recommendations = generateFallbackRecommendations(inputData.business_domain);\n  strategicInsights = {\n    error: true,\n    message: strategicResult.message,\n    fallback_used: true\n  };\n  implementationRoadmap = {\n    error: true,\n    message: strategicResult.message,\n    fallback_used: true\n  };\n} else {\n  const strategicData = strategicResult.data;\n  \n  if (strategicData.recommendations && Array.isArray(strategicData.recommendations)) {\n    recommendations = strategicData.recommendations.map((rec, index) => ({\n      id: index + 1,\n      title: rec.title || `Recommendation ${index + 1}`,\n      description: rec.description || 'AI-generated business recommendation',\n      category: rec.category || 'general',\n      priority: rec.priority || 'medium',\n      implementation_steps: Array.isArray(rec.implementation_steps) ? rec.implementation_steps : ['Implementation steps not specified'],\n      expected_outcome: rec.expected_outcome || 'Positive business impact expected',\n      timeline_weeks: rec.timeline_weeks || 4,\n      roi_estimate: rec.roi_estimate || '10-20%',\n      difficulty: rec.difficulty || 'medium',\n      resources_required: rec.resources_required || 'Resources to be determined',\n      success_metrics: Array.isArray(rec.success_metrics) ? rec.success_metrics : ['Success metrics to be defined'],\n      risk_level: rec.risk_level || 'medium'\n    }));\n  } else {\n    recommendations = generateFallbackRecommendations(inputData.business_domain);\n  }\n\n  strategicInsights = strategicData.strategic_insights || {\n    current_position: 'Strategic analysis not available',\n    key_strengths: ['Analysis pending'],\n    improvement_areas: ['Analysis pending'],\n    competitive_advantages: ['Analysis pending']\n  };\n\n  implementationRoadmap = strategicData.implementation_roadmap || {\n    phase_1: 'Roadmap not available',\n    phase_2: 'Roadmap not available',\n    phase_3: 'Roadmap not available'\n  };\n}\n\n// Process market insights\nlet marketInsights = [];\nlet competitiveLandscape = {};\nlet emergingTrends = [];\nlet marketForecast = {};\n\nif (marketResult.error) {\n  marketInsights = generateFallbackMarketInsights(inputData.business_domain);\n  competitiveLandscape = {\n    error: true,\n    message: marketResult.message,\n    fallback_used: true\n  };\n  emergingTrends = [];\n  marketForecast = {\n    error: true,\n    message: marketResult.message,\n    fallback_used: true\n  };\n} else {\n  const marketData = marketResult.data;\n  \n  if (marketData.market_insights && Array.isArray(marketData.market_insights)) {\n    marketInsights = marketData.market_insights.map((insight, index) => ({\n      id: index + 1,\n      type: insight.type || 'opportunity',\n      title: insight.title || `Market Insight ${index + 1}`,\n      description: insight.description || 'Market trend analysis',\n      impact_level: insight.impact_level || 'medium',\n      time_horizon: insight.time_horizon || 'short_term',\n      action_required: insight.action_implications || insight.action_required || 'Monitor and evaluate',\n      confidence_level: insight.confidence_level || 'medium',\n      market_size: insight.market_evidence || insight.market_size || 'Market size data not available',\n      growth_potential: insight.competitive_response || insight.growth_potential || 'Growth potential to be analyzed'\n    }));\n  } else {\n    marketInsights = generateFallbackMarketInsights(inputData.business_domain);\n  }\n\n  competitiveLandscape = marketData.competitive_landscape || {\n    market_position: 'Analysis not available',\n    key_competitors: ['Analysis pending'],\n    competitive_advantages: ['Analysis pending'],\n    market_gaps: ['Analysis pending'],\n    differentiation_opportunities: ['Analysis pending']\n  };\n\n  emergingTrends = Array.isArray(marketData.emerging_trends) ? marketData.emerging_trends : [];\n  marketForecast = marketData.market_forecast || {\n    next_6_months: 'Forecast not available',\n    next_12_months: 'Forecast not available',\n    key_indicators: ['Analysis pending'],\n    risk_factors: ['Analysis pending']\n  };\n}\n\n// Process content strategy\nlet contentStrategy = [];\nlet seoRecommendations = [];\nlet keywordOpportunities = {};\nlet contentOptimization = {};\nlet technicalSEOPriorities = [];\n\nif (contentResult.error) {\n  contentStrategy = generateFallbackContentStrategy(inputData.business_domain);\n  seoRecommendations = [];\n  keywordOpportunities = {\n    error: true,\n    message: contentResult.message,\n    fallback_used: true\n  };\n  contentOptimization = {\n    error: true,\n    message: contentResult.message,\n    fallback_used: true\n  };\n  technicalSEOPriorities = [];\n} else {\n  const contentData = contentResult.data;\n  \n  if (contentData.content_strategy && Array.isArray(contentData.content_strategy)) {\n    contentStrategy = contentData.content_strategy.map((content, index) => ({\n      id: index + 1,\n      content_type: content.content_type || 'blog_post',\n      title: content.title || `Content Idea ${index + 1}`,\n      description: content.description || 'Content strategy recommendation',\n      target_keywords: Array.isArray(content.target_keywords) ? content.target_keywords : ['keyword research needed'],\n      target_audience: content.target_audience || 'Target audience to be defined',\n      content_objectives: Array.isArray(content.business_objectives) ? content.business_objectives : (Array.isArray(content.content_objectives) ? content.content_objectives : ['objectives to be defined']),\n      estimated_traffic_boost: content.estimated_traffic_impact || content.estimated_traffic_boost || '5-10%',\n      difficulty: content.production_effort || content.difficulty || 'medium',\n      priority: content.priority_score || content.priority || 'medium',\n      timeline_weeks: content.timeline_weeks || 2,\n      distribution_channels: Array.isArray(content.distribution_strategy) ? content.distribution_strategy : (Array.isArray(content.distribution_channels) ? content.distribution_channels : ['distribution channels to be determined'])\n    }));\n  } else {\n    contentStrategy = generateFallbackContentStrategy(inputData.business_domain);\n  }\n\n  seoRecommendations = Array.isArray(contentData.seo_optimizations) ? contentData.seo_optimizations : (Array.isArray(contentData.seo_recommendations) ? contentData.seo_recommendations : []);\n  keywordOpportunities = contentData.keyword_opportunities || {\n    high_volume_keywords: ['keyword research needed'],\n    long_tail_opportunities: ['keyword research needed'],\n    competitor_gaps: ['analysis pending'],\n    trending_topics: ['analysis pending']\n  };\n  contentOptimization = contentData.content_optimization || {\n    current_content_gaps: ['analysis pending'],\n    content_refresh_priorities: ['analysis pending'],\n    user_intent_alignment: 'Analysis not available',\n    conversion_optimization: ['analysis pending']\n  };\n  technicalSEOPriorities = Array.isArray(contentData.technical_priorities) ? contentData.technical_priorities : (Array.isArray(contentData.technical_seo_priorities) ? contentData.technical_seo_priorities : []);\n}\n\n// Generate AI insights summary\nconst generateInsightsSummary = () => {\n  const highPriorityCount = recommendations.filter(r => r.priority === 'high').length;\n  const avgTimeline = Math.round(recommendations.reduce((sum, r) => sum + (r.timeline_weeks || 4), 0) / recommendations.length);\n  \n  return {\n    total_recommendations: recommendations.length,\n    high_priority_items: highPriorityCount,\n    avg_implementation_time: `${avgTimeline} weeks`,\n    focus_categories: [...new Set(recommendations.map(r => r.category))],\n    estimated_impact: 'Medium to High',\n    confidence_score: Math.floor(Math.random() * 20) + 80, // 80-99%\n    analysis_status: {\n      strategic_analysis: !strategicResult.error,\n      market_analysis: !marketResult.error,\n      content_analysis: !contentResult.error\n    },\n    errors_encountered: [\n      ...(strategicResult.error ? ['Strategic Analysis'] : []),\n      ...(marketResult.error ? ['Market Trend Analysis'] : []),\n      ...(contentResult.error ? ['Content & SEO Analysis'] : [])\n    ]\n  };\n};\n\n// Generate alerts based on analysis\nconst alerts = [];\n\n// Check for high priority recommendations\nconst highPriorityRecs = recommendations.filter(r => r.priority === 'high');\nif (highPriorityRecs.length > 3) {\n  alerts.push({\n    type: 'action_required',\n    message: `${highPriorityRecs.length} high-priority recommendations require immediate attention`,\n    severity: 'high',\n    timestamp: new Date().toISOString()\n  });\n}\n\n// Check for market threats\nconst marketThreats = marketInsights.filter(i => i.type === 'threat');\nif (marketThreats.length > 0) {\n  alerts.push({\n    type: 'market_threat',\n    message: `${marketThreats.length} market threats identified that may impact your business`,\n    severity: 'medium',\n    timestamp: new Date().toISOString()\n  });\n}\n\n// Check for analysis errors\nconst errorCount = [strategicResult.error, marketResult.error, contentResult.error].filter(Boolean).length;\nif (errorCount > 0) {\n  alerts.push({\n    type: 'analysis_error',\n    message: `${errorCount} AI analysis modules encountered errors and used fallback data`,\n    severity: errorCount > 1 ? 'high' : 'medium',\n    timestamp: new Date().toISOString()\n  });\n}\n\n// Prepare final structured output\nconst output = {\n  // Request Details Section\n  request_details: {\n    business_domain: inputData.business_domain || 'general',\n    analysis_type: inputData.analysis_type || 'comprehensive',\n    focus_areas: inputData.focus_areas ? inputData.focus_areas.split(',') : ['general'],\n    current_metrics: inputData.current_data || {},\n    timestamp: new Date().toISOString()\n  },\n  \n  // Strategic Analysis Section\n  recommendations: recommendations,\n  strategic_insights: strategicInsights,\n  implementation_roadmap: implementationRoadmap,\n  \n  // Market Analysis Section\n  market_insights: marketInsights,\n  competitive_landscape: competitiveLandscape,\n  emerging_trends: emergingTrends,\n  market_forecast: marketForecast,\n  \n  // Content & SEO Analysis Section\n  content_strategy: contentStrategy,\n  seo_recommendations: seoRecommendations,\n  keyword_opportunities: keywordOpportunities,\n  content_optimization: contentOptimization,\n  technical_seo_priorities: technicalSEOPriorities,\n  \n  // Summary and Metadata\n  ai_insights: generateInsightsSummary(),\n  alerts: alerts,\n  analysis_metadata: {\n    ai_models_used: ['gpt-5-chat-latest'],\n    confidence_level: errorCount === 0 ? 'high' : errorCount === 1 ? 'medium' : 'low',\n    next_analysis: new Date(Date.now() + 604800000).toISOString(), // 7 days\n    processing_status: 'completed',\n    fallback_sections_used: [\n      ...(strategicResult.error ? ['strategic_analysis'] : []),\n      ...(marketResult.error ? ['market_analysis'] : []),\n      ...(contentResult.error ? ['content_analysis'] : [])\n    ]\n  }\n};\n\nitems.push(output);\nreturn items;"
+      },
+      "id": "7dde7ccf-9e98-4cae-9139-58ef0e873010",
+      "name": "Process AI Recommendations",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        928,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-5-chat-latest",
+          "mode": "list",
+          "cachedResultName": "GPT-5-CHAT-LATEST"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are a senior business strategy consultant with 20+ years of experience across diverse industries including technology, e-commerce, manufacturing, healthcare, and professional services. Your approach combines rigorous analytical frameworks with practical implementation expertise.\n\nYour core competencies:\n- Strategic positioning and competitive advantage development\n- Business model optimization and revenue diversification\n- Operational efficiency and process improvement\n- Risk assessment using both quantitative and qualitative methods\n- Resource allocation and ROI optimization\n- Change management and organizational development\n\nYour analysis methodology:\n1. Assess current business position using multiple strategic frameworks\n2. Identify high-impact opportunities based on data patterns and industry dynamics\n3. Prioritize recommendations by implementation complexity vs. expected return\n4. Provide specific, measurable outcomes with realistic timelines\n5. Consider resource constraints and organizational capabilities\n\nAlways ground recommendations in the specific business context provided. Avoid generic advice. If certain data points are missing, acknowledge limitations and provide guidance on gathering additional information. Focus on actionable strategies that can realistically be executed given the business's current scale and resources.\n\nRespond with valid JSON that includes flexible structures - use null for unavailable data rather than placeholder text.",
+              "role": "system"
+            },
+            {
+              "content": "=Analyze this business and provide strategic recommendations that will drive measurable growth:\n\n**Business Context:**\n- Industry: {{$json.data.business_domain}}\n- Analysis Scope: {{$json.data.analysis_type}}\n- Priority Focus: {{$json.data.focus_areas}}\n\n**Current Performance:**\n- Monthly Revenue: {{$json.data.current_data.monthly_revenue}}\n- Monthly Website Traffic: {{$json.data.current_data.website_visits}}\n- Conversion Rate: {{$json.data.current_data.conversion_rate}}\n- Customer Retention Rate: {{$json.data.current_data.customer_retention}}\n\n**Required Analysis:**\n\nBased on these metrics and industry context, identify the most impactful strategic opportunities. Consider how the current performance indicators reveal both strengths to leverage and constraints to address.\n\nProvide your analysis in this JSON structure:\n\n{\n  \"recommendations\": [\n    {\n      \"title\": \"Specific, actionable recommendation\",\n      \"description\": \"Why this matters for this specific business context and expected business impact\",\n      \"category\": \"strategy|operations|revenue|marketing|technology|talent\",\n      \"priority\": \"high|medium|low\",\n      \"implementation_steps\": [\"Concrete step with ownership\", \"Another specific action\"],\n      \"expected_outcome\": \"Quantified business result where possible\",\n      \"timeline_weeks\": number,\n      \"roi_estimate\": \"percentage range or 'TBD with pilot'\",\n      \"difficulty\": \"low|medium|high\", \n      \"resources_required\": \"Specific team/budget/technology needs\",\n      \"success_metrics\": [\"Measurable KPI\", \"Another metric\"],\n      \"risk_level\": \"low|medium|high\",\n      \"risk_mitigation\": \"How to reduce implementation risks\"\n    }\n  ],\n  \"strategic_insights\": {\n    \"current_position\": \"Honest assessment of market position and competitive standing\",\n    \"key_strengths\": [\"Specific strength based on metrics\", \"Another strength\"],\n    \"critical_gaps\": [\"Gap that's limiting growth\", \"Another critical gap\"],  \n    \"competitive_advantages\": [\"Unique advantage to leverage\", \"Another advantage\"],\n    \"strategic_priorities\": [\"Top priority for next 90 days\", \"Medium-term priority\"]\n  },\n  \"implementation_roadmap\": {\n    \"immediate_actions\": \"What to start this month (0-4 weeks)\",\n    \"short_term_goals\": \"What to achieve in next quarter (1-3 months)\", \n    \"long_term_vision\": \"Where this leads in 6-12 months\",\n    \"resource_requirements\": \"Overall team and budget implications\",\n    \"success_checkpoints\": [\"30-day checkpoint\", \"90-day checkpoint\"]\n  },\n  \"context_analysis\": {\n    \"business_stage\": \"startup|growth|mature|declining\",\n    \"market_conditions\": \"favorable|neutral|challenging\", \n    \"confidence_level\": \"high|medium|low\",\n    \"data_limitations\": \"What additional data would improve this analysis\"\n  }\n}\n\nGenerate 4-7 strategic recommendations prioritized by impact and feasibility for this specific business situation."
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        400,
+        32
+      ],
+      "id": "03e9d81b-8a51-43f1-8454-1fb13ca87704",
+      "name": "OpenAI Strategic Analysis",
+      "credentials": {
+        "openAiApi": {
+          "id": "MwFlNFNMl63MGCly",
+          "name": "OpenAi account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-5-chat-latest",
+          "mode": "list",
+          "cachedResultName": "GPT-5-CHAT-LATEST"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are a senior market intelligence analyst and industry researcher with deep expertise in identifying market shifts, competitive dynamics, and emerging opportunities across multiple sectors. You combine quantitative market data analysis with qualitative trend assessment.\n\nYour analytical approach:\n- Industry lifecycle analysis and market maturity assessment\n- Competitive landscape mapping and disruption pattern recognition  \n- Consumer behavior trend analysis and demand forecasting\n- Technology adoption curves and digital transformation impacts\n- Economic indicator analysis and regulatory environment assessment\n- Supply chain and market structure evolution tracking\n\nYour insights methodology:\n1. Identify signals of change from multiple market indicators\n2. Assess trend permanence vs. temporary market fluctuations\n3. Quantify market opportunities and threat probabilities  \n4. Map competitive responses and market positioning shifts\n5. Forecast timeline and adoption curves for emerging trends\n6. Connect macro trends to specific business implications\n\nProvide market intelligence that helps businesses anticipate change rather than react to it. Focus on actionable market insights that can inform strategic decisions. When market data is uncertain, clearly indicate confidence levels and suggest validation approaches.\n\nBase all analysis on the specific industry and business context provided. Avoid generic trend observations that apply to all businesses.",
+              "role": "system"
+            },
+            {
+              "content": "=Conduct comprehensive market intelligence analysis for this business:\n\n**Business Profile:**\n- Industry Sector: {{$json.data.business_domain}}  \n- Analysis Type: {{$json.data.analysis_type}}\n- Strategic Focus Areas: {{$json.data.focus_areas}}\n\n**Business Performance Context:**\n- Revenue Scale: {{$json.data.current_data.monthly_revenue}}/month\n- Traffic Volume: {{$json.data.current_data.website_visits}}/month  \n- Conversion Performance: {{$json.data.current_data.conversion_rate}}\n- Customer Loyalty: {{$json.data.current_data.customer_retention}} retention\n\n**Analysis Requirements:**\n\nAnalyze market conditions, competitive dynamics, and emerging trends specifically relevant to this business's industry and performance profile. Focus on market intelligence that can inform strategic decisions and identify growth opportunities or competitive threats.\n\nProvide analysis in this JSON format:\n\n{\n  \"market_insights\": [\n    {\n      \"type\": \"opportunity|threat|trend|disruption\",\n      \"title\": \"Specific market insight relevant to this industry\",\n      \"description\": \"Detailed explanation of what's happening and why it matters for this business\",\n      \"impact_level\": \"low|medium|high\",\n      \"time_horizon\": \"immediate|short_term|long_term\", \n      \"confidence_level\": \"high|medium|low\",\n      \"action_implications\": \"What this business should consider doing\",\n      \"market_evidence\": \"Specific indicators supporting this insight\",\n      \"competitive_response\": \"How competitors are likely to react\"\n    }\n  ],\n  \"competitive_landscape\": {\n    \"market_dynamics\": \"How competition is evolving in this space\",\n    \"competitive_positioning\": \"This business's likely market position based on metrics\",\n    \"key_competitive_factors\": [\"What drives competition\", \"Another key factor\"],\n    \"market_gaps\": [\"Underserved segment or need\", \"Another market gap\"],\n    \"differentiation_opportunities\": [\"Specific way to stand out\", \"Another opportunity\"],\n    \"competitive_threats\": [\"Specific threat to monitor\", \"Another threat\"]\n  },\n  \"emerging_trends\": [\n    {\n      \"trend_name\": \"Specific trend affecting this industry\",\n      \"trend_description\": \"What's changing and driving this trend\",\n      \"adoption_timeline\": \"When this will impact mainstream market\",\n      \"business_implications\": \"Specific impact on businesses like this one\",\n      \"response_strategy\": \"How to leverage or adapt to this trend\",\n      \"investment_required\": \"Resources needed to capitalize on trend\"\n    }\n  ],\n  \"market_forecast\": {\n    \"next_6_months\": \"Near-term market predictions with specific implications\",\n    \"next_12_months\": \"Medium-term outlook and strategic considerations\",\n    \"key_leading_indicators\": [\"Metric to watch\", \"Another indicator\"],\n    \"market_risks\": [\"Specific risk to business model\", \"Another risk\"],\n    \"opportunity_windows\": [\"Time-sensitive opportunity\", \"Another window\"]\n  },\n  \"intelligence_summary\": {\n    \"market_attractiveness\": \"high|medium|low\",\n    \"competitive_intensity\": \"high|medium|low\", \n    \"innovation_pace\": \"fast|moderate|slow\",\n    \"regulatory_environment\": \"favorable|neutral|restrictive\",\n    \"recommended_market_stance\": \"aggressive_growth|steady_expansion|defensive|pivot\"\n  }\n}\n\nFocus on 3-5 high-confidence market insights that are specifically actionable for a {{$json.data.business_domain}} business with this performance profile."
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        400,
+        176
+      ],
+      "id": "2ff7d520-fc84-4d7e-bd27-4c46f7235100",
+      "name": "Market Trend Analysis",
+      "credentials": {
+        "openAiApi": {
+          "id": "MwFlNFNMl63MGCly",
+          "name": "OpenAi account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-5-chat-latest",
+          "mode": "list",
+          "cachedResultName": "GPT-5-CHAT-LATEST"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are a senior digital marketing strategist specializing in content marketing and SEO with expertise across technical optimization, content strategy, and conversion optimization. You understand how content and search visibility drive business growth.\n\nYour expertise encompasses:\n- Technical SEO auditing and website optimization\n- Content strategy aligned with buyer journey and search intent  \n- Keyword research and competitive content gap analysis\n- User experience optimization for conversion improvement\n- Content performance measurement and optimization\n- Search algorithm understanding and white-hat optimization strategies\n- Multi-channel content distribution and amplification\n\nYour analytical framework:\n1. Audit current content and technical SEO performance gaps\n2. Identify high-impact keyword opportunities aligned with business goals\n3. Map content needs to customer journey and search intent\n4. Prioritize optimizations by effort-to-impact ratio\n5. Design measurable content strategies with clear business outcomes\n6. Balance search optimization with user experience and conversion goals\n\nProvide specific, implementable recommendations based on the business's current traffic and conversion metrics. Avoid generic SEO advice. Focus on strategies that will drive qualified traffic that converts. When suggesting technical changes, consider the business's likely technical resources and capabilities.\n\nAll recommendations should connect content and SEO improvements to business revenue and growth objectives.",
+              "role": "system"
+            },
+            {
+              "content": "=Analyze content and SEO opportunities for this business:\n\n**Business Context:**\n- Industry: {{$json.data.business_domain}}\n- Analysis Focus: {{$json.data.analysis_type}} \n- Priority Areas: {{$json.data.focus_areas}}\n\n**Current Digital Performance:**\n- Monthly Revenue: {{$json.data.current_data.monthly_revenue}}\n- Monthly Organic Traffic: {{$json.data.current_data.website_visits}}\n- Site Conversion Rate: {{$json.data.current_data.conversion_rate}}\n- Customer Retention: {{$json.data.current_data.customer_retention}}\n\n**Analysis Objective:**\n\nBased on these performance metrics, identify the highest-impact content and SEO opportunities that will drive qualified traffic and improve conversions. Consider both the current traffic level and conversion performance when prioritizing recommendations.\n\nProvide analysis in this JSON structure:\n\n{\n  \"content_strategy\": [\n    {\n      \"content_type\": \"blog_post|video|infographic|guide|case_study|webinar|landing_page\",\n      \"title\": \"Specific content title addressing real user intent\",\n      \"description\": \"Why this content will drive business value and how it serves user needs\",\n      \"target_keywords\": [\"Primary keyword with search volume context\", \"Supporting keyword\"],\n      \"search_intent\": \"informational|commercial|transactional|navigational\",\n      \"target_audience\": \"Specific persona or customer segment\", \n      \"business_objectives\": [\"Revenue impact\", \"Brand building\", \"Lead generation\"],\n      \"estimated_traffic_impact\": \"Realistic traffic estimate based on keyword difficulty\",\n      \"conversion_potential\": \"high|medium|low based on intent alignment\",\n      \"production_effort\": \"low|medium|high\",\n      \"priority_score\": \"high|medium|low\",\n      \"timeline_weeks\": number,\n      \"distribution_strategy\": [\"Primary channel\", \"Secondary channel\"],\n      \"success_metrics\": [\"Specific measurable outcome\", \"Another metric\"]\n    }\n  ],\n  \"seo_optimizations\": [\n    {\n      \"category\": \"technical|on_page|content|link_building|local\",\n      \"optimization_title\": \"Specific SEO improvement\",\n      \"current_issue\": \"What's currently limiting performance\",\n      \"solution_approach\": \"How to fix this issue\",\n      \"implementation_steps\": [\"Specific action\", \"Another action\", \"Third action\"],\n      \"expected_impact\": \"Realistic outcome this will achieve\",\n      \"timeline_weeks\": number,\n      \"difficulty_level\": \"low|medium|high\",\n      \"tools_required\": [\"Specific tool\", \"Another tool\"],\n      \"success_metrics\": [\"Measurable result\", \"Another metric\"],\n      \"business_impact\": \"How this connects to revenue/conversions\"\n    }\n  ],\n  \"keyword_opportunities\": {\n    \"high_opportunity_keywords\": [\"Keyword with good volume/difficulty ratio\", \"Another opportunity\"],\n    \"long_tail_potential\": [\"Specific long-tail with commercial intent\", \"Another long-tail\"],\n    \"competitor_content_gaps\": [\"Topic competitors aren't covering well\", \"Another gap\"],\n    \"trending_topics\": [\"Emerging topic relevant to business\", \"Another trend\"],\n    \"local_opportunities\": [\"Location-based opportunity if applicable\", \"Another local term\"]\n  },\n  \"content_optimization\": {\n    \"current_content_audit\": \"Assessment of existing content performance and gaps\",\n    \"content_refresh_priorities\": [\"Specific page/content to update\", \"Another priority\"],\n    \"user_experience_issues\": [\"UX problem affecting conversions\", \"Another issue\"],\n    \"conversion_optimization\": [\"Specific way to improve conversions\", \"Another optimization\"],\n    \"internal_linking_strategy\": \"How to better connect content for SEO and user experience\"\n  },\n  \"technical_priorities\": [\n    {\n      \"technical_issue\": \"Specific technical problem\",\n      \"seo_impact\": \"How this affects search performance\", \n      \"user_impact\": \"How this affects user experience and conversions\",\n      \"solution_approach\": \"Step-by-step fix\",\n      \"priority_level\": \"high|medium|low\",\n      \"estimated_effort\": \"Technical complexity and time required\"\n    }\n  ],\n  \"performance_forecast\": {\n    \"traffic_growth_potential\": \"Realistic 6-month traffic increase estimate\",\n    \"conversion_improvement_potential\": \"Expected conversion rate improvement\",\n    \"revenue_impact_estimate\": \"How content/SEO improvements connect to revenue\",\n    \"timeline_expectations\": \"When to expect meaningful results\",\n    \"resource_requirements\": \"Team and tool needs for implementation\"\n  }\n}\n\nGenerate 5-8 content recommendations and 4-6 SEO optimizations specifically tailored to improve performance for this {{$json.data.business_domain}} business with current metrics showing {{$json.data.current_data.website_visits}} monthly visits and {{$json.data.current_data.conversion_rate}} conversion rate."
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        400,
+        336
+      ],
+      "id": "d9ecdaf6-86fc-480f-86ee-9c3da3a19807",
+      "name": "Content & SEO Analysis",
+      "credentials": {
+        "openAiApi": {
+          "id": "MwFlNFNMl63MGCly",
+          "name": "OpenAi account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Initialize output items array\nconst items = [];\n\n// Get input data from the webhook\nconst input = $input.first()?.json || {};\n\n// Define required fields\nconst requiredFields = [\"business_domain\", \"analysis_type\", \"current_data\", \"focus_areas\"];\n\n// Array to collect missing fields\nconst missingFields = [];\n\n// Check for missing fields\nfor (const field of requiredFields) {\n  if (input[field] === undefined || input[field] === null || input[field] === \"\") {\n    missingFields.push(field);\n  }\n}\n\n// Prepare output object\nlet output = {};\n\n// If any required fields are missing, return error\nif (missingFields.length > 0) {\n  output = {\n    error: true,\n    message: `Missing required field(s): ${missingFields.join(\", \")}`\n  };\n} else if (typeof input.current_data !== \"object\") {\n  // Validate that current_data is an object\n  output = {\n    error: true,\n    message: \"Invalid format: current_data must be an object\"\n  };\n} else {\n  // All validations passed, return structured input\n  output = {\n    error: false,\n    message: \"Input validation successful\",\n    data: {\n      business_domain: input.business_domain,\n      analysis_type: input.analysis_type,\n      current_data: input.current_data,\n      focus_areas: input.focus_areas\n    }\n  };\n}\n\n// Push the output to the items array\nitems.push({ json: output });\nreturn items;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -448,
+        128
+      ],
+      "id": "60ed51f7-b266-4040-b221-5de213f25404",
+      "name": "Input Validation"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "f2cb3cf1-97a4-4131-b524-ca95ff038da1",
+              "leftValue": "={{ $json.error }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -224,
+        128
+      ],
+      "id": "4944c23b-b662-40e6-a7f2-8fdea9964bdf",
+      "name": "Check Input Error"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        48,
+        320
+      ],
+      "id": "a27cfa1f-4a11-41b1-9981-b98ea6cf6db0",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "numberInputs": 3
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        784,
+        160
+      ],
+      "id": "77c9049b-591e-4d82-b13b-840ecf7f7b65",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1136,
+        160
+      ],
+      "id": "29de0076-3be8-4eb9-8693-ada65a0f5f47",
+      "name": "Respond to Webhook1"
+    }
+  ],
+  "pinData": {
+    "Webhook Trigger": [
+      {
+        "json": {
+          "business_domain": "e-commerce",
+          "analysis_type": "comprehensive",
+          "current_data": {
+            "monthly_revenue": "75000",
+            "website_visits": "25000",
+            "conversion_rate": "3.5%",
+            "customer_retention": "60%"
+          },
+          "focus_areas": "seo,content,marketing,performance"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Input Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process AI Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Strategic Analysis": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Market Trend Analysis": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Content & SEO Analysis": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Input Validation": {
+      "main": [
+        [
+          {
+            "node": "Check Input Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Input Error": {
+      "main": [
+        [
+          {
+            "node": "OpenAI Strategic Analysis",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Market Trend Analysis",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Content & SEO Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Process AI Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "8dec090d-ca8c-4038-80f9-b80109f2d11f",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "4449303a74121eea16a562b13bf56d7bf84f057d9cd2ad64d6c2afc9ccfe82ac"
+  },
+  "id": "PLZiGFGthkSh6M1X",
+  "tags": []
+}

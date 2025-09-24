@@ -1,0 +1,406 @@
+{
+  "name": "market_trend_global",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "market-analysis",
+        "options": {}
+      },
+      "id": "b2dae241-a714-4bf2-8d01-e643e2796b3f",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -752,
+        176
+      ],
+      "webhookId": "market-analysis"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Extended Validate & Parse Input node with sector/theme mapping\nconst inputData = $input.first().json;\n\n// Extract parameters\nlet market = inputData.market?.toLowerCase();\nlet location = inputData.location?.toUpperCase();\nconst timeRange = inputData.time_range || inputData.timeRange;\n\n// Validation for base fields\nif (!market || !timeRange) {\n  return [{\n    json: {\n      error: true,\n      message: \"Missing required fields: market, time_range\",\n      requiredFormat: {\n        market: \"stock/crypto/forex/commodity/sector/index/fund/etc\",\n        location: \"Optional for sectors/indices/funds\",\n        time_range: \"1W/1M/3M/6M/1Y/2Y\"\n      }\n    }\n  }];\n}\n\n// Country name to code mapping\nconst countryMapping = {\n  'UNITED STATES': 'US', 'USA': 'US', 'AMERICA': 'US', 'CANADA': 'CA',\n  'UNITED KINGDOM': 'UK', 'UK': 'UK', 'ENGLAND': 'UK',\n  'GERMANY': 'DE', 'FRANCE': 'FR', 'ITALY': 'IT', 'SPAIN': 'ES',\n  'INDIA': 'IN', 'CHINA': 'CN', 'JAPAN': 'JP', 'SOUTH KOREA': 'KR'\n};\nlocation = countryMapping[location] || location;\n\n// Valid time ranges\nconst validTimeRanges = ['1W', '1M', '3M', '6M', '1Y', '2Y'];\nif (!validTimeRanges.includes(timeRange)) {\n  return [{\n    json: {\n      error: true,\n      message: `Invalid time range. Valid options: ${validTimeRanges.join(', ')}`\n    }\n  }];\n}\n\n// Market type mapping\nconst marketTypes = {\n  'stock': 'stock', 'stocks': 'stock', 'equity': 'stock',\n  'crypto': 'crypto', 'cryptocurrency': 'crypto',\n  'forex': 'forex', 'currency': 'forex',\n  'commodity': 'commodity', 'commodities': 'commodity',\n  // new types\n  'sector': 'sector', 'index': 'index', 'fund': 'fund'\n};\n\n// Theme mapping to symbols\nconst themeSymbols = {\n  // Sectors\n  'energy': 'XLE', 'technology': 'XLK', 'financials': 'XLF',\n  'healthcare': 'XLV', 'utilities': 'XLU', 'consumer goods': 'XLP',\n  'consumer services': 'XLY', 'industrials': 'XLI', 'materials': 'XLB',\n  'real estate': 'XLRE', 'communications': 'XLC',\n\n  // Commodities\n  'gold': 'GC=F', 'silver': 'SI=F', 'oil': 'CL=F',\n  'natural gas': 'NG=F', 'copper': 'HG=F',\n\n  // Indices\n  'sp500': '^GSPC', 'nasdaq': '^IXIC', 'dow jones': '^DJI', 'russell 2000': '^RUT',\n\n  // Funds\n  'mutual funds': 'VTSAX', 'global fund': 'VT', 'bond fund': 'BND'\n};\n\n// Default symbol mapping by market type & location (existing logic)\nfunction getDefaultSymbol(marketType, country) {\n  const defaults = {\n    stock: { 'US': 'AAPL', 'IN': 'RELIANCE.NS', 'JP': '6758.T', 'default': 'AAPL' },\n    crypto: { 'US': 'BTC-USD', 'IN': 'BTC-INR', 'default': 'BTC-USD' },\n    forex: { 'US': 'EURUSD=X', 'JP': 'USDJPY=X', 'default': 'EURUSD=X' },\n    commodity: { 'default': 'GC=F' }\n  };\n  return defaults[marketType]?.[country] || defaults[marketType]?.['default'] || 'AAPL';\n}\n\nlet normalizedMarket = marketTypes[market] || 'stock';\nlet symbol = themeSymbols[market] || getDefaultSymbol(normalizedMarket, location);\n\n// Date range calculation\nconst endDate = new Date();\nconst startDate = new Date();\nif (timeRange === '1W') startDate.setDate(endDate.getDate() - 7);\nif (timeRange === '1M') startDate.setMonth(endDate.getMonth() - 1);\nif (timeRange === '3M') startDate.setMonth(endDate.getMonth() - 3);\nif (timeRange === '6M') startDate.setMonth(endDate.getMonth() - 6);\nif (timeRange === '1Y') startDate.setFullYear(endDate.getFullYear() - 1);\nif (timeRange === '2Y') startDate.setFullYear(endDate.getFullYear() - 2);\n\nreturn [{\n  json: {\n    originalInput: inputData,\n    market: normalizedMarket,\n    location,\n    timeRange,\n    symbol,\n    fromDate: Math.floor(startDate.getTime() / 1000),\n    toDate: Math.floor(endDate.getTime() / 1000),\n    fromDateString: startDate.toISOString().split('T')[0],\n    toDateString: endDate.toISOString().split('T')[0],\n    timestamp: new Date().toISOString(),\n    debug: { normalizedMarket, location, symbol }\n  }\n}];"
+      },
+      "id": "f7468202-9292-496e-b331-18048aed3ae7",
+      "name": "Validate & Parse Input",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        -544,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.error}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "7486c31f-0405-496c-abbe-728be282adec",
+      "name": "Check Validation Error",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -352,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "05529132-58fc-48d1-84b4-4543ece34725",
+      "name": "Return Validation Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        -144,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://finnhub.io/api/v1/stock/candle",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "=AAPL"
+            },
+            {
+              "name": "resolution",
+              "value": "D"
+            },
+            {
+              "name": "from",
+              "value": "={{ $json.fromDate }}"
+            },
+            {
+              "name": "to",
+              "value": "={{ $json.toDate }}"
+            },
+            {
+              "name": "token",
+              "value": "d2ee1jhr01qlu2qu8k50d2ee1jhr01qlu2qu8k5g"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "cfc5c88a-a094-4989-813e-8ddcc7a67656",
+      "name": "1. Try Finnhub API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -144,
+        272
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "url": "=https://query1.finance.yahoo.com/v8/finance/chart/{{ $('Validate & Parse Input').item.json.symbol }}?period1={{ $('Validate & Parse Input').item.json.fromDate }}&period2={{ $('Validate & Parse Input').item.json.toDate }}&interval=1d",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "674814e6-20b4-4dec-97e2-c82075158f19",
+      "name": "2. Try Yahoo Finance API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        64,
+        272
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "url": "=https://api.marketstack.com/v1/eod?symbols={{ $('Validate & Parse Input').item.json.symbol }}&date_from={{ $('Validate & Parse Input').item.json.fromDateString }}&date_to={{ $('Validate & Parse Input').item.json.toDateString }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "access_key",
+              "value": "4111c1bbc1b92d14a24b7b58d31055e0"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "b4dc8455-5d2e-48c9-93ec-6dc9f80e8b20",
+      "name": "3. Try Marketstack API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        256,
+        272
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "url": "=https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol={{ $('Validate & Parse Input').item.json.symbol }}&outputsize=compact",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "XN3Z9FQJ6AZ44QHM"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "96643bb8-74ae-4855-9599-327949ef398c",
+      "name": "4. Try Alpha Vantage API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        464,
+        272
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "url": "=https://api.polygon.io/v2/aggs/ticker/{{ $('Validate & Parse Input').item.json.symbol }}/range/1/day/{{ $('Validate & Parse Input').item.json.fromDateString }}/{{ $('Validate & Parse Input').item.json.toDateString }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "apiKey",
+              "value": "JY7B1UXh6EbGs5y2W3LLDZ0pLJy_c82e"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "741c9975-7dd9-4203-992c-8cc4a857a65e",
+      "name": "5. Try Polygon API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        656,
+        272
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "functionCode": "// file: n8n/advanced-market-analysis-engine.js\n// Purpose: Merge & summarize multiple HTTP API responses (Finnhub, Yahoo, Marketstack, AlphaVantage, Polygon)\n// Behavior: Dynamic fallback. Works even if some sources fail. Emits numeric stats + short textual analysis.\n\n// ---- Helpers ----\nfunction safeItems(name) {\n  try {\n    return $items(name, 0, $runIndex) || [];\n  } catch (_) {\n    return [];\n  }\n}\n\nfunction takeJsonArray(items) {\n  return (items || []).map(i => (i.json ?? i)).filter(Boolean);\n}\n\nfunction hasErrorPayload(obj) {\n  const j = obj?.json ?? obj;\n  return !!(j?.error && typeof j.error === 'object');\n}\n\nfunction normalizeData(apiResponse, source) {\n  const out = [];\n  try {\n    switch (source) {\n      case 'finnhub': {\n        const r = apiResponse;\n        if (Array.isArray(r?.c) && Array.isArray(r?.t)) {\n          for (let i = 0; i < r.c.length; i++) {\n            if (r.c[i] == null) continue;\n            out.push({\n              date: new Date(r.t[i] * 1000).toISOString().slice(0, 10),\n              open: r.o?.[i] ?? r.c[i],\n              high: r.h?.[i] ?? r.c[i],\n              low: r.l?.[i] ?? r.c[i],\n              close: r.c[i],\n              volume: r.v?.[i] ?? 0,\n            });\n          }\n        }\n        break;\n      }\n      case 'yahoo': {\n        const r = apiResponse?.chart?.result?.[0];\n        const ts = r?.timestamp || [];\n        const q = r?.indicators?.quote?.[0] || {};\n        for (let i = 0; i < ts.length; i++) {\n          const close = q.close?.[i];\n          if (close == null) continue;\n          out.push({\n            date: new Date(ts[i] * 1000).toISOString().slice(0, 10),\n            open: q.open?.[i] ?? close,\n            high: q.high?.[i] ?? close,\n            low: q.low?.[i] ?? close,\n            close,\n            volume: q.volume?.[i] ?? 0,\n          });\n        }\n        break;\n      }\n      case 'marketstack': {\n        const arr = apiResponse?.data;\n        if (Array.isArray(arr)) {\n          for (const d of arr) {\n            if (d?.close == null) continue;\n            out.push({\n              date: String(d.date).slice(0, 10),\n              open: d.open ?? d.close,\n              high: d.high ?? d.close,\n              low: d.low ?? d.close,\n              close: d.close,\n              volume: d.volume ?? 0,\n            });\n          }\n        }\n        break;\n      }\n      case 'alpha': {\n        const tsd = apiResponse?.['Time Series (Daily)'];\n        if (tsd && typeof tsd === 'object') {\n          for (const [date, d] of Object.entries(tsd)) {\n            const close = parseFloat(d['4. close']);\n            if (Number.isNaN(close)) continue;\n            out.push({\n              date,\n              open: parseFloat(d['1. open']) || close,\n              high: parseFloat(d['2. high']) || close,\n              low: parseFloat(d['3. low']) || close,\n              close,\n              volume: parseInt(d['5. volume']) || 0,\n            });\n          }\n        }\n        break;\n      }\n      case 'polygon': {\n        const arr = apiResponse?.results;\n        if (Array.isArray(arr)) {\n          for (const d of arr) {\n            if (d?.c == null) continue;\n            out.push({\n              date: new Date(d.t).toISOString().slice(0, 10),\n              open: d.o ?? d.c,\n              high: d.h ?? d.c,\n              low: d.l ?? d.c,\n              close: d.c,\n              volume: d.v ?? 0,\n            });\n          }\n        }\n        break;\n      }\n    }\n  } catch (e) {\n    // Only warn on unexpected shapes\n    console.log(`normalizeData(${source}) failed:`, e.message);\n  }\n  return out;\n}\n\nfunction avg(nums) {\n  const arr = nums.filter(n => Number.isFinite(n));\n  return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;\n}\n\nfunction stdDev(nums) {\n  const arr = nums.filter(n => Number.isFinite(n));\n  if (arr.length < 2) return 0;\n  const m = avg(arr);\n  const v = avg(arr.map(x => (x - m) ** 2));\n  return Math.sqrt(v);\n}\n\nfunction pickSymbol({ yahooMeta, marketstackFirst, alphaMeta, polygonTop, fallback }) {\n  return (\n    yahooMeta?.symbol ||\n    marketstackFirst?.symbol ||\n    alphaMeta?.symbol ||\n    polygonTop?.ticker ||\n    fallback ||\n    'UNKNOWN'\n  );\n}\n\n// ---- Collect node outputs explicitly (dynamic fallback) ----\nconst finnhubItems = takeJsonArray(safeItems('1. Try Finnhub API'));\nconst yahooItems = takeJsonArray(safeItems('2. Try Yahoo Finance API'));\nconst marketstackItems = takeJsonArray(safeItems('3. Try Marketstack API'));\nconst alphaItems = takeJsonArray(safeItems('4. Try Alpha Vantage API'));\nconst polygonItems = takeJsonArray(safeItems('5. Try Polygon API'));\nconst validateItems = takeJsonArray(safeItems('Validate & Parse Input'));\n\n// Recover original request if present\nlet original = validateItems?.[0]?.json ?? validateItems?.[0] ?? {};\n\n// Track errors for transparency\nconst errorSources = [];\nfor (const [name, arr] of Object.entries({\n  finnhub: finnhubItems,\n  yahoo: yahooItems,\n  marketstack: marketstackItems,\n  alpha: alphaItems,\n  polygon: polygonItems,\n})) {\n  if (arr.some(hasErrorPayload)) errorSources.push(name);\n}\n\n// Normalize each source\nconst normalized = [];\nlet sourcesUsed = [];\n\nif (finnhubItems.length && !finnhubItems.some(hasErrorPayload)) {\n  normalized.push(...normalizeData(finnhubItems?.[0], 'finnhub'));\n  if (normalized.length) sourcesUsed.push('finnhub');\n}\nif (yahooItems.length && !yahooItems.some(hasErrorPayload)) {\n  normalized.push(...normalizeData(yahooItems?.[0], 'yahoo'));\n  if (normalized.length) sourcesUsed.push('yahoo');\n}\nif (marketstackItems.length && !marketstackItems.some(hasErrorPayload)) {\n  normalized.push(...normalizeData(marketstackItems?.[0], 'marketstack'));\n  if (normalized.length) sourcesUsed.push('marketstack');\n}\nif (alphaItems.length && !alphaItems.some(hasErrorPayload)) {\n  normalized.push(...normalizeData(alphaItems?.[0], 'alpha'));\n  if (normalized.length) sourcesUsed.push('alpha');\n}\nif (polygonItems.length && !polygonItems.some(hasErrorPayload)) {\n  normalized.push(...normalizeData(polygonItems?.[0], 'polygon'));\n  if (normalized.length) sourcesUsed.push('polygon');\n}\n\nif (!normalized.length) {\n  return [{ json: { error: true, message: 'No valid data from any API', errorSources } }];\n}\n\n// Merge by date (per-date average) and sort\nconst byDate = new Map();\nfor (const p of normalized) {\n  const d = p.date;\n  const entry = byDate.get(d) || { opens: [], highs: [], lows: [], closes: [], volume: 0 };\n  entry.opens.push(p.open);\n  entry.highs.push(p.high);\n  entry.lows.push(p.low);\n  entry.closes.push(p.close);\n  entry.volume += Number(p.volume) || 0;\n  byDate.set(d, entry);\n}\n\nconst dates = Array.from(byDate.keys()).sort((a, b) => new Date(a) - new Date(b));\nconst prices = dates.map(d => {\n  const e = byDate.get(d);\n  return {\n    date: d,\n    open: +avg(e.opens).toFixed(4),\n    high: Math.max(...e.highs.filter(Number.isFinite)),\n    low: Math.min(...e.lows.filter(Number.isFinite)),\n    close: +avg(e.closes).toFixed(4),\n    volume: e.volume,\n  };\n});\n\n// Derive request fallback if original missing\nconst yahooMeta = yahooItems?.[0]?.chart?.result?.[0]?.meta;\nconst marketstackFirst = marketstackItems?.[0]?.data?.[0];\nconst alphaMetaRaw = alphaItems?.[0]?.['Meta Data'];\nconst alphaMeta = alphaMetaRaw ? { symbol: alphaMetaRaw['2. Symbol'] } : undefined;\nconst polygonTop = polygonItems?.[0];\n\nconst derivedSymbol = pickSymbol({ yahooMeta, marketstackFirst, alphaMeta, polygonTop, fallback: original?.symbol });\nconst fromDateString = prices[0].date;\nconst toDateString = prices[prices.length - 1].date;\n\nif (!original || !original.market) {\n  original = {\n    ...(original || {}),\n    symbol: derivedSymbol,\n    fromDateString,\n    toDateString,\n  };\n}\n\n// Stats\nconst firstClose = prices[0].close;\nconst lastClose = prices[prices.length - 1].close;\nconst change = +(lastClose - firstClose).toFixed(4);\nconst pctChange = +(firstClose ? (change / firstClose) * 100 : 0).toFixed(2);\nconst high = Math.max(...prices.map(p => p.high));\nconst low = Math.min(...prices.map(p => p.low));\nconst avgClose = +avg(prices.map(p => p.close)).toFixed(4);\nconst volStd = +stdDev(prices.map(p => p.close)).toFixed(4);\n\n// Textual analysis (brief & actionable)\nlet trend = 'sideways movement';\nif (pctChange > 5) trend = 'strong bullish trend';\nelse if (pctChange > 0) trend = 'mild upward trend';\nelse if (pctChange < -5) trend = 'bearish trend';\n\nconst volatility = volStd > avgClose * 0.02 ? 'elevated volatility' : 'stable volatility';\nconst analysisText = `From ${fromDateString} to ${toDateString}, ${derivedSymbol} shows a ${trend} (${pctChange}% change). Range ${low.toFixed(2)}–${high.toFixed(2)} with ${volatility}.`;\n\n// Emit single item for webhook\nreturn [{\n  json: {\n    request: original,\n    summary: {\n      firstClose,\n      lastClose,\n      change,\n      pctChange,\n      high,\n      low,\n      avgClose,\n      volatilityStd: volStd,\n      dataPoints: prices.length,\n      sourcesUsed: Array.from(new Set(sourcesUsed)),\n      errorSources,\n      aggregation: 'per-date average',\n    },\n    analysis: analysisText,\n    prices,\n  }\n}];"
+      },
+      "id": "d96362f0-7834-4197-8772-a260c46e9841",
+      "name": "Advanced Market Analysis Engine",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1072,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "c816276d-1679-41aa-ab7b-c696239d7986",
+      "name": "Return Final Analysis",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1264,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "numberInputs": 5
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        864,
+        272
+      ],
+      "id": "566e5b2a-e144-4472-bf05-b41404b9a61f",
+      "name": "Merge"
+    }
+  ],
+  "pinData": {
+    "Webhook Trigger": [
+      {
+        "json": {
+          "market": "Technology",
+          "location": "India",
+          "time_range": "6M"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Validate & Parse Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate & Parse Input": {
+      "main": [
+        [
+          {
+            "node": "Check Validation Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Validation Error": {
+      "main": [
+        [
+          {
+            "node": "Return Validation Error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "1. Try Finnhub API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Try Finnhub API": {
+      "main": [
+        [
+          {
+            "node": "2. Try Yahoo Finance API",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Try Yahoo Finance API": {
+      "main": [
+        [
+          {
+            "node": "3. Try Marketstack API",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "3. Try Marketstack API": {
+      "main": [
+        [
+          {
+            "node": "4. Try Alpha Vantage API",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "4. Try Alpha Vantage API": {
+      "main": [
+        [
+          {
+            "node": "5. Try Polygon API",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "5. Try Polygon API": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 4
+          }
+        ]
+      ]
+    },
+    "Advanced Market Analysis Engine": {
+      "main": [
+        [
+          {
+            "node": "Return Final Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Advanced Market Analysis Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "5653e0d0-385b-4576-b962-5375cfec6e7f",
+  "meta": {
+    "instanceId": "892ac801f9cd1033acf424fd4efdd9c93b5867f66fd44caab7b86f5d0099f7b2"
+  },
+  "id": "8pVRNUY7lvgqKtlQ",
+  "tags": []
+}

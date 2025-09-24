@@ -1,0 +1,201 @@
+/* Theme Integration CSS */
+
+/* CSS Custom Properties for Dynamic Theming */
+:root {
+  /* Default colors (will be overridden by useThemeIntegration) */
+  --color-primary: 139 92 246; /* purple-600 default */
+  --color-primary-rgb: 139, 92, 246;
+  
+  /* Primary color variations */
+  --color-primary-50: 245 243 255;
+  --color-primary-100: 237 233 254;
+  --color-primary-200: 221 214 254;
+  --color-primary-300: 196 181 253;
+  --color-primary-400: 167 139 250;
+  --color-primary-500: 139 92 246;
+  --color-primary-600: 124 58 237;
+  --color-primary-700: 109 40 217;
+  --color-primary-800: 91 33 182;
+  --color-primary-900: 76 29 149;
+}
+
+/* Dynamic Primary Color Classes */
+.bg-primary { background-color: hsl(var(--color-primary)); }
+.bg-primary-50 { background-color: hsl(var(--color-primary-50)); }
+.bg-primary-100 { background-color: hsl(var(--color-primary-100)); }
+.bg-primary-200 { background-color: hsl(var(--color-primary-200)); }
+.bg-primary-300 { background-color: hsl(var(--color-primary-300)); }
+.bg-primary-400 { background-color: hsl(var(--color-primary-400)); }
+.bg-primary-500 { background-color: hsl(var(--color-primary-500)); }
+.bg-primary-600 { background-color: hsl(var(--color-primary-600)); }
+.bg-primary-700 { background-color: hsl(var(--color-primary-700)); }
+.bg-primary-800 { background-color: hsl(var(--color-primary-800)); }
+.bg-primary-900 { background-color: hsl(var(--color-primary-900)); }
+
+.text-primary { color: hsl(var(--color-primary)); }
+.text-primary-50 { color: hsl(var(--color-primary-50)); }
+.text-primary-100 { color: hsl(var(--color-primary-100)); }
+.text-primary-200 { color: hsl(var(--color-primary-200)); }
+.text-primary-300 { color: hsl(var(--color-primary-300)); }
+.text-primary-400 { color: hsl(var(--color-primary-400)); }
+.text-primary-500 { color: hsl(var(--color-primary-500)); }
+.text-primary-600 { color: hsl(var(--color-primary-600)); }
+.text-primary-700 { color: hsl(var(--color-primary-700)); }
+.text-primary-800 { color: hsl(var(--color-primary-800)); }
+.text-primary-900 { color: hsl(var(--color-primary-900)); }
+
+.border-primary { border-color: hsl(var(--color-primary)); }
+.ring-primary { --tw-ring-color: hsl(var(--color-primary)); }
+
+/* Hover states */
+.hover\:bg-primary:hover { background-color: hsl(var(--color-primary)); }
+.hover\:text-primary:hover { color: hsl(var(--color-primary)); }
+.hover\:border-primary:hover { border-color: hsl(var(--color-primary)); }
+
+/* Focus states */
+.focus\:ring-primary:focus { --tw-ring-color: hsl(var(--color-primary)); }
+.focus\:border-primary:focus { border-color: hsl(var(--color-primary)); }
+
+/* Compact Mode */
+.compact-mode {
+  --spacing-multiplier: 0.75;
+}
+
+.compact-mode .p-1 { padding: calc(0.25rem * var(--spacing-multiplier)); }
+.compact-mode .p-2 { padding: calc(0.5rem * var(--spacing-multiplier)); }
+.compact-mode .p-3 { padding: calc(0.75rem * var(--spacing-multiplier)); }
+.compact-mode .p-4 { padding: calc(1rem * var(--spacing-multiplier)); }
+.compact-mode .p-5 { padding: calc(1.25rem * var(--spacing-multiplier)); }
+.compact-mode .p-6 { padding: calc(1.5rem * var(--spacing-multiplier)); }
+
+.compact-mode .m-1 { margin: calc(0.25rem * var(--spacing-multiplier)); }
+.compact-mode .m-2 { margin: calc(0.5rem * var(--spacing-multiplier)); }
+.compact-mode .m-3 { margin: calc(0.75rem * var(--spacing-multiplier)); }
+.compact-mode .m-4 { margin: calc(1rem * var(--spacing-multiplier)); }
+.compact-mode .m-5 { margin: calc(1.25rem * var(--spacing-multiplier)); }
+.compact-mode .m-6 { margin: calc(1.5rem * var(--spacing-multiplier)); }
+
+/* No Animations */
+.no-animations *,
+.no-animations *::before,
+.no-animations *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* Performance Mode */
+.performance-mode {
+  --animation-speed: 0.1s;
+}
+
+.performance-mode * {
+  animation-duration: var(--animation-speed) !important;
+  transition-duration: var(--animation-speed) !important;
+}
+
+.performance-mode .blur,
+.performance-mode .backdrop-blur {
+  backdrop-filter: none !important;
+  filter: none !important;
+}
+
+/* Battery Mode */
+.battery-mode {
+  --animation-speed: 0.5s;
+}
+
+.battery-mode * {
+  animation-duration: var(--animation-speed) !important;
+  transition-duration: var(--animation-speed) !important;
+}
+
+.battery-mode .shadow,
+.battery-mode [class*="shadow"] {
+  box-shadow: none !important;
+}
+
+.battery-mode .gradient,
+.battery-mode [class*="gradient"] {
+  background: var(--fallback-bg, #1f2937) !important;
+}
+
+/* Sidebar Collapsed State */
+[data-sidebar].collapsed {
+  width: 64px !important;
+  min-width: 64px !important;
+}
+
+[data-sidebar].collapsed .sidebar-text {
+  opacity: 0;
+  pointer-events: none;
+}
+
+[data-sidebar].collapsed .sidebar-icon {
+  margin: 0 auto;
+}
+
+/* Settings Visual Feedback */
+.settings-changed {
+  position: relative;
+}
+
+.settings-changed::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  background: #10b981;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Override existing purple classes to use dynamic primary */
+.bg-purple-500 { background-color: hsl(var(--color-primary)) !important; }
+.bg-purple-600 { background-color: hsl(var(--color-primary-600)) !important; }
+.bg-purple-700 { background-color: hsl(var(--color-primary-700)) !important; }
+
+.text-purple-400 { color: hsl(var(--color-primary-400)) !important; }
+.text-purple-500 { color: hsl(var(--color-primary)) !important; }
+.text-purple-600 { color: hsl(var(--color-primary-600)) !important; }
+
+.border-purple-500 { border-color: hsl(var(--color-primary)) !important; }
+.border-purple-600 { border-color: hsl(var(--color-primary-600)) !important; }
+
+.hover\:bg-purple-700:hover { background-color: hsl(var(--color-primary-700)) !important; }
+.hover\:text-purple-300:hover { color: hsl(var(--color-primary-300)) !important; }
+
+/* Ring colors */
+.ring-purple-500 { --tw-ring-color: hsl(var(--color-primary)) !important; }
+.focus\:ring-purple-500:focus { --tw-ring-color: hsl(var(--color-primary)) !important; }
+
+/* Shadow colors */
+.shadow-purple-600\/25 { --tw-shadow-color: rgb(var(--color-primary-rgb) / 0.25) !important; }
+
+/* Gradients */
+.from-purple-500 { --tw-gradient-from: hsl(var(--color-primary)) !important; }
+.to-purple-600 { --tw-gradient-to: hsl(var(--color-primary-600)) !important; }
+
+/* Theme transition effects */
+* {
+  transition-property: background-color, border-color, color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+
+/* Make sure theme transitions are smooth */
+html {
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+body {
+  transition: background-color 0.3s ease, color 0.3s ease;
+}

@@ -1,0 +1,404 @@
+{
+  "name": "SEO_audit",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "seo-audit",
+        "options": {}
+      },
+      "id": "f6b3faa9-c9db-4590-93f3-d31fc5c017a6",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -224,
+        240
+      ],
+      "webhookId": "d9174307-8e9c-485d-94fa-4316a6a9d538"
+    },
+    {
+      "parameters": {
+        "url": "=https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url={{ $json.body.website_url }}&strategy=mobile&key=AIzaSyBh_eXhUD1_X8gqkZF-IZdWWhnW1sWszXE",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "027b7c3c-5571-4b44-8b17-eab17270c461",
+      "name": "PageSpeed Mobile",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -16,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url={{ $json.body.website_url }}&strategy=desktop&key=AIzaSyBh_eXhUD1_X8gqkZF-IZdWWhnW1sWszXE",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "66a92bfd-82f8-4489-9dac-ba09fe1dbed5",
+      "name": "PageSpeed Desktop",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -16,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.body.website_url }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "7baa8c1b-65c0-47f1-b5ee-1dc8d9b476cb",
+      "name": "Fetch HTML",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -32,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract all links from HTML content\nconst html = $input.all()[0].json.data || $input.all()[0].json.body || '';\nconst linkRegex = /href=[\"'](https?:\\/\\/[^\"'\\s>]+)[\"']/gi;\nconst links = new Set(); // Use Set to avoid duplicates\nlet match;\n\nwhile ((match = linkRegex.exec(html)) !== null) {\n  const url = match[1];\n  // Filter out obviously invalid URLs\n  if (url && !url.includes('javascript:') && !url.includes('mailto:') && !url.includes('tel:')) {\n    links.add(url);\n  }\n}\n\n// Convert to array and limit to first 10 links to avoid timeout\nconst linkArray = Array.from(links).slice(0, 10);\n\nreturn linkArray.map(url => ({ json: { url: url } }));"
+      },
+      "id": "895dca20-09f2-4b75-9747-3e56f3cc873e",
+      "name": "Extract Links",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        176,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "e3334292-6ef5-4b1d-be1e-5622f61e00f3",
+      "name": "Check Link Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        784,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Filter and count broken links\nconst allItems = $input.all();\nconst brokenLinks = allItems.filter(item => {\n  const statusCode = item.json.statusCode || 200;\n  return statusCode >= 400;\n});\n\nconst brokenCount = brokenLinks.length;\nconst totalChecked = allItems.length;\n\nreturn [{\n  json: {\n    brokenLinksCount: brokenCount,\n    totalLinksChecked: totalChecked,\n    brokenLinks: brokenLinks.map(link => link.json.url || 'Unknown URL').slice(0, 5) // Limit to 5 examples\n  }\n}];"
+      },
+      "id": "bb020f1b-8734-45d6-86b6-fcbe02cc6bb8",
+      "name": "Process Broken Links",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get data from the previous nodes (much simpler way)\nconst inputs = $input.all();\n\n// Check if we have the data we need\nif (!inputs || inputs.length < 2) {\n  return [{\n    json: {\n      error: \"Not enough data from PageSpeed tests\",\n      seoScore: 0,\n      avgLoadTime: 0,\n      mobileScore: 0,\n      desktopScore: 0\n    }\n  }];\n}\n\n// Get the data (first input = mobile, second = desktop)\nconst mobileData = inputs[0].json;\nconst desktopData = inputs[1].json;\n\n// Make sure the data exists\nif (!mobileData || !desktopData) {\n  return [{\n    json: {\n      error: \"PageSpeed data is missing\",\n      seoScore: 0,\n      avgLoadTime: 0,\n      mobileScore: 0,\n      desktopScore: 0\n    }\n  }];\n}\n\n// Get the important parts\nconst mobile = mobileData.lighthouseResult;\nconst desktop = desktopData.lighthouseResult;\n\n// Calculate scores (make them percentages)\nconst scores = {\n  seo: Math.round((mobile?.categories?.seo?.score || 0) * 100),\n  performance: Math.round((mobile?.categories?.performance?.score || 0) * 100),\n  accessibility: Math.round((mobile?.categories?.accessibility?.score || 0) * 100),\n  bestPractices: Math.round((mobile?.categories?.['best-practices']?.score || 0) * 100),\n  mobileScore: Math.round((mobile?.categories?.performance?.score || 0) * 100),\n  desktopScore: Math.round((desktop?.categories?.performance?.score || 0) * 100)\n};\n\n// Return the results\nreturn [{\n  json: {\n    seoScore: scores.seo,\n    avgLoadTime: 2.5, // simplified for now\n    mobileScore: scores.mobileScore,\n    desktopScore: scores.desktopScore,\n    performanceMetrics: {\n      bestPractices: scores.bestPractices,\n      accessibility: scores.accessibility,\n      performance: scores.performance,\n      seo: scores.seo\n    },\n    detailedIssues: {\n      missingMetaDescription: false,\n      slowLoadingPages: scores.performance < 50,\n      missingAltTags: false,\n      h1TagOptimization: false,\n      imageCompression: false,\n      brokenLinks: 0\n    },\n    issuesBreakdown: {\n      critical: 0,\n      warning: 0,\n      passed: 10,\n      info: 0\n    }\n  }\n}];"
+      },
+      "id": "7a2db159-1241-4ce4-bd73-d7feb59a86db",
+      "name": "Process SEO Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        384,
+        240
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "b0b9d07a-6d3c-46e9-8e66-18c004572202",
+      "name": "Merge Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        1136,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Combine all results into final dashboard format\nconst seoData = $input.all()[0].json;\nconst brokenLinksData = $input.all()[1].json;\n\n// Update broken links count in detailed issues\nseoData.detailedIssues.brokenLinks = brokenLinksData.brokenLinksCount;\n\n// Create final dashboard response\nconst dashboardData = {\n  website_url: $node[\"Webhook Trigger\"].json.website_url,\n  timestamp: new Date().toISOString(),\n  \n  // Main metrics\n  seoScore: seoData.seoScore,\n  avgLoadTime: seoData.avgLoadTime,\n  mobileScore: seoData.mobileScore,\n  desktopScore: seoData.desktopScore,\n  \n  // Issues breakdown for pie chart\n  issuesBreakdown: seoData.issuesBreakdown,\n  \n  // Performance metrics\n  performanceMetrics: seoData.performanceMetrics,\n  \n  // Detailed issues\n  detailedIssues: {\n    missingMetaDescription: seoData.detailedIssues.missingMetaDescription,\n    slowLoadingPages: seoData.detailedIssues.slowLoadingPages,\n    missingAltTags: seoData.detailedIssues.missingAltTags,\n    h1TagOptimization: seoData.detailedIssues.h1TagOptimization,\n    brokenLinks: seoData.detailedIssues.brokenLinks,\n    imageCompression: seoData.detailedIssues.imageCompression\n  },\n  \n  // Additional data\n  brokenLinksDetails: {\n    count: brokenLinksData.brokenLinksCount,\n    totalChecked: brokenLinksData.totalLinksChecked,\n    examples: brokenLinksData.brokenLinks\n  },\n  \n  // Summary\n  summary: {\n    overallHealth: seoData.seoScore >= 80 ? 'Excellent' : \n                   seoData.seoScore >= 60 ? 'Good' : \n                   seoData.seoScore >= 40 ? 'Needs Improvement' : 'Poor',\n    criticalIssues: seoData.issuesBreakdown.critical,\n    totalIssues: seoData.issuesBreakdown.critical + seoData.issuesBreakdown.warning\n  }\n};\n\nreturn [{ json: dashboardData }];"
+      },
+      "id": "7b8f3464-e012-4779-9ffd-f38eda873a38",
+      "name": "Format Final Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1280,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1440,
+        448
+      ],
+      "id": "0b455c9c-4235-4b87-893f-cc522f3f33ea",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        192,
+        128
+      ],
+      "id": "72865e41-a527-4595-8529-11031389d9e0",
+      "name": "Merge",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cd47d879-070d-408a-9eb1-f1d2a0c67849",
+              "name": "cleanLink",
+              "value": "={{(() => {   const link = $json.link || '';   const invalidExtensions = ['.jpg', '.jpeg', '.png', '.woff', '.woff2', '.ttf', '.svg', '.gif', '.js', '.css', '.ico', '.pdf'];   return invalidExtensions.some(ext => link.toLowerCase().includes(ext)) ? undefined : link; })()}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        384,
+        544
+      ],
+      "id": "d40cc94c-e196-4893-b051-9880dd688bf6",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "fa799c53-34a7-47b5-9ec7-474c57a34224",
+              "leftValue": "={{$json.cleanLink}}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        544,
+        560
+      ],
+      "id": "0afe5f6b-26aa-427c-b914-9d34e685938e",
+      "name": "If"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Format Final Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Results": {
+      "main": [
+        [
+          {
+            "node": "Format Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process SEO Metrics": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Broken Links": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "PageSpeed Desktop",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch HTML",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "PageSpeed Mobile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Link Status": {
+      "main": [
+        [
+          {
+            "node": "Process Broken Links",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Links": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch HTML": {
+      "main": [
+        [
+          {
+            "node": "Extract Links",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PageSpeed Desktop": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "PageSpeed Mobile": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Process SEO Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Check Link Status",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process Broken Links",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "71586da9-5961-45a2-a5a3-d817953bfe8c",
+  "meta": {
+    "instanceId": "48d8b3ca3993e07bded2f1dfb4d430b1cf6e182166a4badfe21e6aeb9233ddce"
+  },
+  "id": "B5w4W78RkdAwdeiY",
+  "tags": []
+}

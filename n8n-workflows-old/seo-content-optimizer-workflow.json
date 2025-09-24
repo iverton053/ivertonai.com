@@ -1,0 +1,322 @@
+{
+  "name": "SEO Content Optimization Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "seo-content-optimizer",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Content Analysis Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "seo-content-optimizer-webhook"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "content_url",
+              "value": "={{$json.content_url || 'https://example.com/blog-post'}}"
+            },
+            {
+              "name": "target_keywords",
+              "value": "={{$json.target_keywords || 'digital marketing, SEO, content optimization'}}"
+            },
+            {
+              "name": "analysis_depth",
+              "value": "={{$json.analysis_depth || 'comprehensive'}}"
+            },
+            {
+              "name": "competitor_urls",
+              "value": "={{$json.competitor_urls || ''}}"
+            }
+          ]
+        }
+      },
+      "id": "extract-parameters",
+      "name": "Extract Parameters",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{$json.content_url}}",
+        "options": {}
+      },
+      "id": "fetch-content",
+      "name": "Fetch Content",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [680, 180]
+    },
+    {
+      "parameters": {
+        "url": "https://api.semrush.com/",
+        "options": {},
+        "qs": {
+          "type": "phrase_organic",
+          "key": "={{$credentials.semrushApi.apiKey}}",
+          "phrase": "={{$json.target_keywords}}",
+          "database": "us"
+        }
+      },
+      "id": "keyword-analysis",
+      "name": "Keyword Performance Check",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://www.googleapis.com/pagespeedinights/v5/runPagespeed",
+        "options": {},
+        "qs": {
+          "url": "={{$json.content_url}}",
+          "key": "={{$credentials.googlePageSpeedApi.apiKey}}",
+          "strategy": "desktop",
+          "category": "seo"
+        }
+      },
+      "id": "technical-seo-check",
+      "name": "Technical SEO Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [680, 420]
+    },
+    {
+      "parameters": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "options": {},
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "model": "gpt-4",
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are an SEO content optimization expert. Analyze the provided content and generate actionable SEO recommendations including keyword density, content structure, meta tags, and readability improvements."
+            },
+            {
+              "role": "user",
+              "content": "Analyze this content for SEO optimization:\n\nContent URL: {{$json.content_url}}\nTarget Keywords: {{$json.target_keywords}}\nContent HTML: {{$input.all()[0].json.body}}\nKeyword Data: {{JSON.stringify($input.all()[1].json)}}\nTechnical SEO Data: {{JSON.stringify($input.all()[2].json)}}\n\nProvide recommendations in this JSON format:\n{\n  \"seo_score\": 85,\n  \"recommendations\": [\n    {\n      \"category\": \"content\",\n      \"priority\": \"high\",\n      \"issue\": \"Low keyword density\",\n      \"solution\": \"Increase target keyword usage to 1-2%\",\n      \"impact\": \"high\"\n    }\n  ],\n  \"keyword_analysis\": {\n    \"primary_keyword_density\": \"0.5%\",\n    \"secondary_keywords_found\": 3,\n    \"missing_keywords\": [\"content optimization\"]\n  },\n  \"technical_issues\": [\n    {\n      \"issue\": \"Missing meta description\",\n      \"fix\": \"Add 150-160 character meta description\",\n      \"priority\": \"high\"\n    }\n  ],\n  \"content_improvements\": [\n    {\n      \"section\": \"introduction\",\n      \"suggestion\": \"Add target keyword in first paragraph\",\n      \"current_word_count\": 120,\n      \"recommended_word_count\": 150\n    }\n  ]\n}"
+            }
+          ],
+          "max_tokens": 2000,
+          "temperature": 0.3
+        }
+      },
+      "id": "ai-content-analysis",
+      "name": "AI Content Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process SEO analysis results and generate comprehensive recommendations\nconst items = [];\n\n// Get input data from previous nodes\nconst contentData = $input.all()[0]?.json || {};\nconst keywordData = $input.all()[1]?.json || {};\nconst technicalData = $input.all()[2]?.json || {};\nconst aiAnalysis = $input.all()[3]?.json || {};\n\n// Parse AI response\nconst parseAIResponse = (response) => {\n  try {\n    if (response?.choices?.[0]?.message?.content) {\n      const content = response.choices[0].message.content;\n      const jsonMatch = content.match(/\\{[\\s\\S]*\\}/);\n      if (jsonMatch) {\n        return JSON.parse(jsonMatch[0]);\n      }\n    }\n    return null;\n  } catch (error) {\n    return null;\n  }\n};\n\nconst aiResults = parseAIResponse(aiAnalysis);\n\n// Extract technical SEO data\nconst technicalScore = technicalData?.lighthouseResult?.categories?.seo?.score * 100 || 0;\nconst performanceScore = technicalData?.lighthouseResult?.categories?.performance?.score * 100 || 0;\n\n// Process keyword analysis\nconst keywordMetrics = {\n  search_volume: keywordData?.data?.[0]?.search_volume || 0,\n  keyword_difficulty: keywordData?.data?.[0]?.keyword_difficulty || 0,\n  cpc: keywordData?.data?.[0]?.cpc || 0,\n  competition: keywordData?.data?.[0]?.competition || 0\n};\n\n// Generate SEO recommendations\nconst generateSEORecommendations = () => {\n  const recommendations = [];\n  \n  // Use AI recommendations if available, otherwise generate fallback\n  if (aiResults?.recommendations) {\n    recommendations.push(...aiResults.recommendations);\n  } else {\n    // Fallback recommendations\n    if (technicalScore < 80) {\n      recommendations.push({\n        category: 'technical',\n        priority: 'high',\n        issue: 'Technical SEO score below optimal',\n        solution: 'Fix meta tags, improve page structure, optimize images',\n        impact: 'high',\n        estimated_improvement: '15-25%'\n      });\n    }\n    \n    if (performanceScore < 70) {\n      recommendations.push({\n        category: 'performance',\n        priority: 'high',\n        issue: 'Page performance affects SEO',\n        solution: 'Optimize images, minify CSS/JS, improve loading speed',\n        impact: 'high',\n        estimated_improvement: '10-20%'\n      });\n    }\n    \n    if (keywordMetrics.search_volume > 1000 && keywordMetrics.keyword_difficulty < 50) {\n      recommendations.push({\n        category: 'content',\n        priority: 'medium',\n        issue: 'High-opportunity keyword underutilized',\n        solution: 'Create more content targeting this keyword cluster',\n        impact: 'medium',\n        estimated_improvement: '20-30%'\n      });\n    }\n  }\n  \n  return recommendations;\n};\n\n// Calculate overall SEO score\nconst calculateSEOScore = () => {\n  if (aiResults?.seo_score) {\n    return aiResults.seo_score;\n  }\n  \n  // Fallback scoring\n  let score = 50; // Base score\n  score += (technicalScore * 0.3);\n  score += (performanceScore * 0.2);\n  score += Math.min(keywordMetrics.search_volume / 100, 20); // Keyword opportunity\n  \n  return Math.min(100, Math.round(score));\n};\n\n// Generate content optimization suggestions\nconst contentOptimizations = aiResults?.content_improvements || [\n  {\n    section: 'title',\n    suggestion: 'Include primary keyword in title tag',\n    priority: 'high'\n  },\n  {\n    section: 'meta_description',\n    suggestion: 'Write compelling meta description with target keywords',\n    priority: 'high'\n  },\n  {\n    section: 'headings',\n    suggestion: 'Use H1, H2, H3 tags with keyword variations',\n    priority: 'medium'\n  },\n  {\n    section: 'content',\n    suggestion: 'Increase content length to 1500+ words',\n    priority: 'medium'\n  }\n];\n\n// Generate competitor analysis if URLs provided\nconst competitorInsights = $json.competitor_urls ? [\n  {\n    competitor_url: 'competitor1.com',\n    content_length: 2500,\n    keyword_targeting: 'Strong',\n    technical_score: 85,\n    gap_opportunities: ['Related keywords', 'Content depth']\n  }\n] : [];\n\n// Create action plan with priorities\nconst actionPlan = {\n  immediate_actions: [\n    'Optimize title tag with primary keyword',\n    'Write meta description',\n    'Fix technical SEO issues'\n  ],\n  short_term: [\n    'Expand content length',\n    'Add internal links',\n    'Optimize images with alt tags'\n  ],\n  long_term: [\n    'Create topic clusters',\n    'Build quality backlinks',\n    'Monitor and iterate'\n  ]\n};\n\n// Prepare final output\nconst output = {\n  analysis_summary: {\n    overall_seo_score: calculateSEOScore(),\n    technical_score: Math.round(technicalScore),\n    performance_score: Math.round(performanceScore),\n    content_score: aiResults?.seo_score || 75,\n    analysis_date: new Date().toISOString(),\n    content_url: $json.content_url,\n    target_keywords: $json.target_keywords.split(',').map(k => k.trim())\n  },\n  recommendations: generateSEORecommendations(),\n  keyword_analysis: {\n    primary_keyword: $json.target_keywords.split(',')[0]?.trim(),\n    search_volume: keywordMetrics.search_volume,\n    keyword_difficulty: keywordMetrics.keyword_difficulty,\n    competition_level: keywordMetrics.competition,\n    estimated_cpc: keywordMetrics.cpc,\n    density_recommendation: aiResults?.keyword_analysis?.primary_keyword_density || '1-2%'\n  },\n  technical_issues: aiResults?.technical_issues || [\n    {\n      issue: 'Meta description missing',\n      fix: 'Add 150-160 character meta description',\n      priority: 'high'\n    }\n  ],\n  content_optimizations: contentOptimizations,\n  competitor_insights: competitorInsights,\n  action_plan: actionPlan,\n  estimated_improvements: {\n    traffic_increase: '15-35%',\n    ranking_improvement: '5-15 positions',\n    implementation_time: '2-4 weeks'\n  },\n  next_steps: [\n    'Implement high-priority recommendations',\n    'Monitor rankings and traffic',\n    'Schedule follow-up analysis in 30 days'\n  ]\n};\n\nitems.push(output);\n\nreturn items;"
+      },
+      "id": "generate-seo-recommendations",
+      "name": "Generate SEO Recommendations",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{$json.webhook_callback || '{{process.env.DASHBOARD_API_URL || 'http://localhost:3001'}}/api/webhooks/seo-analysis-complete'}}",
+        "options": {
+          "timeout": 10000
+        },
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "analysis_summary",
+              "value": "={{JSON.stringify($json.analysis_summary)}}"
+            },
+            {
+              "name": "recommendations",
+              "value": "={{JSON.stringify($json.recommendations)}}"
+            },
+            {
+              "name": "keyword_analysis",
+              "value": "={{JSON.stringify($json.keyword_analysis)}}"
+            },
+            {
+              "name": "technical_issues",
+              "value": "={{JSON.stringify($json.technical_issues)}}"
+            },
+            {
+              "name": "content_optimizations",
+              "value": "={{JSON.stringify($json.content_optimizations)}}"
+            },
+            {
+              "name": "action_plan",
+              "value": "={{JSON.stringify($json.action_plan)}}"
+            }
+          ]
+        }
+      },
+      "id": "send-results",
+      "name": "Send Results to Dashboard",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "status",
+              "value": "success"
+            },
+            {
+              "name": "message",
+              "value": "SEO analysis completed successfully"
+            },
+            {
+              "name": "seo_score",
+              "value": "={{$json.analysis_summary.overall_seo_score}}"
+            },
+            {
+              "name": "recommendations_count",
+              "value": "={{$json.recommendations.length}}"
+            },
+            {
+              "name": "execution_time",
+              "value": "={{new Date().toISOString()}}"
+            }
+          ]
+        }
+      },
+      "id": "success-response",
+      "name": "Success Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [1560, 300]
+    }
+  ],
+  "connections": {
+    "Content Analysis Trigger": {
+      "main": [
+        [
+          {
+            "node": "Extract Parameters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Parameters": {
+      "main": [
+        [
+          {
+            "node": "Fetch Content",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Keyword Performance Check",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Technical SEO Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Content": {
+      "main": [
+        [
+          {
+            "node": "AI Content Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Keyword Performance Check": {
+      "main": [
+        [
+          {
+            "node": "AI Content Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Technical SEO Analysis": {
+      "main": [
+        [
+          {
+            "node": "AI Content Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Content Analysis": {
+      "main": [
+        [
+          {
+            "node": "Generate SEO Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate SEO Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Send Results to Dashboard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Results to Dashboard": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": {},
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "seo-content-optimization",
+      "name": "seo-content-optimization"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}

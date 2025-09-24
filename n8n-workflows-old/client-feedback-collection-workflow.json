@@ -1,0 +1,1060 @@
+{
+  "name": "Client Feedback Collection Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "client-feedback-trigger",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Feedback Trigger Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "client-feedback-webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "trigger-type-condition",
+              "leftValue": "={{ $json.triggerType }}",
+              "rightValue": "project_completion",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "trigger-type-router",
+      "name": "Feedback Trigger Router",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/client-management/get-client-details",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $json.apiKey }}"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "clientId",
+              "value": "={{ $json.clientId }}"
+            },
+            {
+              "name": "includeProjects",
+              "value": "true"
+            },
+            {
+              "name": "includeTeam",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000,
+          "retry": {
+            "enabled": true,
+            "maxAttempts": 3,
+            "waitBetween": 1000
+          }
+        }
+      },
+      "id": "get-client-data",
+      "name": "Get Client Details",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 180]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate dynamic feedback survey based on trigger type and client data\nconst clientData = $json.clientData || $json;\nconst triggerType = $json.triggerType || 'monthly_survey';\nconst projectData = $json.projectData || {};\n\n// Survey configuration based on trigger type\nlet surveyConfig = {\n  clientId: clientData.id || $json.clientId,\n  clientName: clientData.name || clientData.companyName,\n  clientEmail: clientData.email || clientData.contactEmail,\n  triggerType: triggerType,\n  surveyType: '',\n  surveyTitle: '',\n  questions: [],\n  followUpRules: {},\n  customization: {\n    branding: {\n      logo: clientData.brandingLogo || 'https://youragency.com/logo.png',\n      colors: {\n        primary: clientData.brandColors?.primary || '#3B82F6',\n        secondary: clientData.brandColors?.secondary || '#10B981'\n      }\n    },\n    thankyouMessage: '',\n    redirectUrl: clientData.portalUrl || 'https://portal.youragency.com'\n  }\n};\n\n// Configure survey based on trigger type\nswitch (triggerType) {\n  case 'project_completion':\n    surveyConfig.surveyType = 'project_satisfaction';\n    surveyConfig.surveyTitle = `How was your experience with the ${projectData.name || 'recent project'}?`;\n    surveyConfig.questions = [\n      {\n        id: 'nps_score',\n        type: 'nps',\n        question: 'How likely are you to recommend our services to a colleague or friend?',\n        required: true,\n        scale: { min: 0, max: 10, labels: { min: 'Not likely', max: 'Extremely likely' } }\n      },\n      {\n        id: 'project_satisfaction',\n        type: 'rating',\n        question: 'How satisfied are you with the project outcome?',\n        required: true,\n        scale: { min: 1, max: 5, labels: { 1: 'Very Dissatisfied', 5: 'Very Satisfied' } }\n      },\n      {\n        id: 'timeline_satisfaction',\n        type: 'rating',\n        question: 'How satisfied are you with the project timeline?',\n        required: true,\n        scale: { min: 1, max: 5 }\n      },\n      {\n        id: 'communication_rating',\n        type: 'rating',\n        question: 'How would you rate the communication throughout the project?',\n        required: true,\n        scale: { min: 1, max: 5 }\n      },\n      {\n        id: 'team_performance',\n        type: 'rating',\n        question: 'How would you rate our team\\'s performance?',\n        required: true,\n        scale: { min: 1, max: 5 }\n      },\n      {\n        id: 'project_feedback',\n        type: 'text',\n        question: 'What did you like most about working with us on this project?',\n        required: false,\n        maxLength: 500\n      },\n      {\n        id: 'improvement_suggestions',\n        type: 'text',\n        question: 'What could we have done better?',\n        required: false,\n        maxLength: 500\n      },\n      {\n        id: 'testimonial_consent',\n        type: 'boolean',\n        question: 'May we use your feedback as a testimonial on our website or marketing materials?',\n        required: false\n      },\n      {\n        id: 'future_projects',\n        type: 'multiple_choice',\n        question: 'Are you planning any future projects we could help with?',\n        required: false,\n        options: ['Yes, within 3 months', 'Yes, within 6 months', 'Yes, within a year', 'Not sure', 'No']\n      }\n    ];\n    surveyConfig.customization.thankyouMessage = 'Thank you for your feedback! We truly value your partnership and look forward to working together again.';\n    break;\n    \n  case 'monthly_survey':\n    surveyConfig.surveyType = 'relationship_health';\n    surveyConfig.surveyTitle = 'Monthly Check-in: How are we doing?';\n    surveyConfig.questions = [\n      {\n        id: 'nps_score',\n        type: 'nps',\n        question: 'How likely are you to recommend our services to others?',\n        required: true,\n        scale: { min: 0, max: 10 }\n      },\n      {\n        id: 'overall_satisfaction',\n        type: 'rating',\n        question: 'How satisfied are you with our services overall?',\n        required: true,\n        scale: { min: 1, max: 5 }\n      },\n      {\n        id: 'communication_satisfaction',\n        type: 'rating',\n        question: 'How satisfied are you with our communication?',\n        required: true,\n        scale: { min: 1, max: 5 }\n      },\n      {\n        id: 'results_satisfaction',\n        type: 'rating',\n        question: 'How satisfied are you with the results we\\'re delivering?',\n        required: true,\n        scale: { min: 1, max: 5 }\n      },\n      {\n        id: 'support_rating',\n        type: 'rating',\n        question: 'How would you rate our responsiveness to your needs?',\n        required: true,\n        scale: { min: 1, max: 5 }\n      },\n      {\n        id: 'monthly_feedback',\n        type: 'text',\n        question: 'What\\'s working well in our partnership?',\n        required: false,\n        maxLength: 300\n      },\n      {\n        id: 'improvement_areas',\n        type: 'text',\n        question: 'What areas would you like us to focus on improving?',\n        required: false,\n        maxLength: 300\n      },\n      {\n        id: 'additional_services',\n        type: 'multiple_choice',\n        question: 'Are there additional services you\\'d be interested in exploring?',\n        required: false,\n        options: ['Social Media Management', 'Content Creation', 'SEO/SEM', 'Email Marketing', 'Analytics & Reporting', 'Web Development', 'Other']\n      }\n    ];\n    surveyConfig.customization.thankyouMessage = 'Thank you for taking the time to provide feedback. Your input helps us serve you better!';\n    break;\n    \n  case 'annual_review':\n    surveyConfig.surveyType = 'comprehensive_review';\n    surveyConfig.surveyTitle = 'Annual Partnership Review';\n    surveyConfig.questions = [\n      {\n        id: 'nps_score',\n        type: 'nps',\n        question: 'Based on your experience this year, how likely are you to recommend us?',\n        required: true,\n        scale: { min: 0, max: 10 }\n      },\n      {\n        id: 'annual_satisfaction',\n        type: 'rating',\n        question: 'How would you rate your overall experience this year?',\n        required: true,\n        scale: { min: 1, max: 5 }\n      },\n      {\n        id: 'goal_achievement',\n        type: 'rating',\n        question: 'How well did we help you achieve your business goals?',\n        required: true,\n        scale: { min: 1, max: 5 }\n      },\n      {\n        id: 'roi_satisfaction',\n        type: 'rating',\n        question: 'How satisfied are you with the return on your investment with us?',\n        required: true,\n        scale: { min: 1, max: 5 }\n      },\n      {\n        id: 'year_highlights',\n        type: 'text',\n        question: 'What were the highlights of working with us this year?',\n        required: false,\n        maxLength: 500\n      },\n      {\n        id: 'next_year_goals',\n        type: 'text',\n        question: 'What are your main goals for next year that we could help with?',\n        required: false,\n        maxLength: 500\n      },\n      {\n        id: 'contract_renewal',\n        type: 'multiple_choice',\n        question: 'How likely are you to continue working with us next year?',\n        required: true,\n        options: ['Definitely will continue', 'Probably will continue', 'Might continue', 'Probably won\\'t continue', 'Definitely won\\'t continue']\n      }\n    ];\n    surveyConfig.customization.thankyouMessage = 'Thank you for a great year of partnership. We look forward to achieving even more together!';\n    break;\n    \n  case 'issue_resolution':\n    surveyConfig.surveyType = 'support_satisfaction';\n    surveyConfig.surveyTitle = 'How did we handle your recent concern?';\n    surveyConfig.questions = [\n      {\n        id: 'resolution_satisfaction',\n        type: 'rating',\n        question: 'How satisfied are you with how we resolved your issue?',\n        required: true,\n        scale: { min: 1, max: 5 }\n      },\n      {\n        id: 'response_time',\n        type: 'rating',\n        question: 'How satisfied are you with our response time?',\n        required: true,\n        scale: { min: 1, max: 5 }\n      },\n      {\n        id: 'support_quality',\n        type: 'rating',\n        question: 'How would you rate the quality of support you received?',\n        required: true,\n        scale: { min: 1, max: 5 }\n      },\n      {\n        id: 'issue_feedback',\n        type: 'text',\n        question: 'Is there anything else you\\'d like us to know about how we handled this issue?',\n        required: false,\n        maxLength: 300\n      }\n    ];\n    surveyConfig.customization.thankyouMessage = 'Thank you for your feedback. We\\'re committed to providing excellent support.';\n    break;\n}\n\n// Configure follow-up rules based on survey type\nsurveyConfig.followUpRules = {\n  nps: {\n    promoters: { // Score 9-10\n      actions: ['request_testimonial', 'referral_program', 'case_study_invitation'],\n      delay: 2, // days\n      priority: 'medium'\n    },\n    passives: { // Score 7-8\n      actions: ['improvement_consultation', 'relationship_review'],\n      delay: 3,\n      priority: 'medium'\n    },\n    detractors: { // Score 0-6\n      actions: ['urgent_consultation', 'account_manager_call', 'retention_strategy'],\n      delay: 1,\n      priority: 'high'\n    }\n  },\n  satisfaction: {\n    high: { // 4-5 rating\n      actions: ['upsell_opportunity', 'referral_request'],\n      delay: 7,\n      priority: 'low'\n    },\n    medium: { // 3 rating\n      actions: ['check_in_call', 'service_optimization'],\n      delay: 3,\n      priority: 'medium'\n    },\n    low: { // 1-2 rating\n      actions: ['immediate_intervention', 'service_recovery'],\n      delay: 1,\n      priority: 'urgent'\n    }\n  }\n};\n\n// Add survey metadata\nsurveyConfig.metadata = {\n  createdAt: new Date().toISOString(),\n  projectId: projectData.id || null,\n  expectedResponseTime: '5-7 minutes',\n  reminderSchedule: {\n    firstReminder: 3, // days\n    secondReminder: 7,\n    finalReminder: 14\n  },\n  expirationDate: new Date(Date.now() + (30 * 24 * 60 * 60 * 1000)).toISOString() // 30 days\n};\n\nreturn [{ json: surveyConfig }];"
+      },
+      "id": "survey-generator",
+      "name": "Generate Survey Configuration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/communication/create-survey",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $json.apiKey }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "surveyConfig",
+              "value": "={{ $json }}"
+            },
+            {
+              "name": "platform",
+              "value": "typeform"
+            },
+            {
+              "name": "generateLink",
+              "value": true
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000,
+          "retry": {
+            "enabled": true,
+            "maxAttempts": 3,
+            "waitBetween": 2000
+          }
+        }
+      },
+      "id": "create-survey",
+      "name": "Create Survey (Typeform)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "business-hours-condition",
+              "leftValue": "={{ new Date().getHours() }}",
+              "rightValue": "9",
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            },
+            {
+              "id": "business-hours-end",
+              "leftValue": "={{ new Date().getHours() }}",
+              "rightValue": "17",
+              "operator": {
+                "type": "number",
+                "operation": "lte"
+              }
+            },
+            {
+              "id": "weekday-check",
+              "leftValue": "={{ new Date().getDay() }}",
+              "rightValue": "0",
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            },
+            {
+              "id": "weekend-check",
+              "leftValue": "={{ new Date().getDay() }}",
+              "rightValue": "6",
+              "operator": {
+                "type": "number",
+                "operation": "lt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "business-hours-check",
+      "name": "Business Hours Optimizer",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/communication/send-survey-invitation",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $json.apiKey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "clientId",
+              "value": "={{ $json.clientId }}"
+            },
+            {
+              "name": "clientEmail",
+              "value": "={{ $json.clientEmail }}"
+            },
+            {
+              "name": "clientName",
+              "value": "={{ $json.clientName }}"
+            },
+            {
+              "name": "surveyUrl",
+              "value": "={{ $json.surveyUrl }}"
+            },
+            {
+              "name": "surveyType",
+              "value": "={{ $json.surveyType }}"
+            },
+            {
+              "name": "emailTemplate",
+              "value": "survey_invitation"
+            },
+            {
+              "name": "personalization",
+              "value": "={{ { projectName: $json.projectData?.name, surveyTitle: $json.surveyTitle, estimatedTime: $json.metadata?.expectedResponseTime } }}"
+            },
+            {
+              "name": "sendImmediately",
+              "value": true
+            },
+            {
+              "name": "trackOpens",
+              "value": true
+            },
+            {
+              "name": "trackClicks",
+              "value": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-immediate-survey",
+      "name": "Send Survey Immediately",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Calculate optimal send time based on client timezone and preferences\nconst clientData = $json;\nconst currentTime = new Date();\nconst clientTimezone = clientData.timezone || 'America/New_York';\nconst preferredTime = clientData.communicationPreferences?.surveyTime || '10:00';\n\n// Calculate next business day at preferred time\nlet scheduledTime = new Date();\nscheduledTime.setDate(currentTime.getDate() + 1); // Next day\nscheduledTime.setHours(parseInt(preferredTime.split(':')[0]), parseInt(preferredTime.split(':')[1]), 0, 0);\n\n// If it's Friday, schedule for Monday\nif (scheduledTime.getDay() === 6) { // Saturday\n  scheduledTime.setDate(scheduledTime.getDate() + 2);\n} else if (scheduledTime.getDay() === 0) { // Sunday\n  scheduledTime.setDate(scheduledTime.getDate() + 1);\n}\n\nconst scheduledData = {\n  ...clientData,\n  scheduledSendTime: scheduledTime.toISOString(),\n  schedulingReason: 'outside_business_hours',\n  optimizedForTimezone: clientTimezone\n};\n\nreturn [{ json: scheduledData }];"
+      },
+      "id": "schedule-optimizer",
+      "name": "Calculate Optimal Send Time",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 400]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/communication/schedule-survey",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $json.apiKey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "clientId",
+              "value": "={{ $json.clientId }}"
+            },
+            {
+              "name": "surveyUrl",
+              "value": "={{ $json.surveyUrl }}"
+            },
+            {
+              "name": "scheduledTime",
+              "value": "={{ $json.scheduledSendTime }}"
+            },
+            {
+              "name": "surveyType",
+              "value": "={{ $json.surveyType }}"
+            },
+            {
+              "name": "reminderSchedule",
+              "value": "={{ $json.metadata?.reminderSchedule }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "schedule-survey",
+      "name": "Schedule Survey for Optimal Time",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 400]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "survey-response",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "response-webhook",
+      "name": "Survey Response Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 600],
+      "webhookId": "survey-response-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process survey response and calculate scores\nconst responseData = $json;\nconst responses = responseData.responses || responseData.answers || {};\n\n// Initialize processed response\nlet processedResponse = {\n  clientId: responseData.clientId,\n  surveyId: responseData.surveyId,\n  responseId: responseData.responseId || `resp_${Date.now()}`,\n  submittedAt: responseData.submittedAt || new Date().toISOString(),\n  surveyType: responseData.surveyType,\n  rawResponses: responses,\n  calculatedScores: {},\n  followUpActions: [],\n  insights: {},\n  testimonialCandidate: false,\n  riskFlags: []\n};\n\n// Extract and calculate NPS score\nif (responses.nps_score !== undefined) {\n  const npsScore = parseInt(responses.nps_score);\n  processedResponse.calculatedScores.nps = npsScore;\n  \n  // Categorize NPS response\n  if (npsScore >= 9) {\n    processedResponse.calculatedScores.npsCategory = 'promoter';\n    processedResponse.followUpActions.push({\n      type: 'testimonial_request',\n      priority: 'medium',\n      scheduledDelay: 2,\n      message: 'Request testimonial and referral opportunity'\n    });\n    processedResponse.testimonialCandidate = true;\n  } else if (npsScore >= 7) {\n    processedResponse.calculatedScores.npsCategory = 'passive';\n    processedResponse.followUpActions.push({\n      type: 'improvement_consultation',\n      priority: 'medium',\n      scheduledDelay: 3,\n      message: 'Schedule consultation to improve satisfaction'\n    });\n  } else {\n    processedResponse.calculatedScores.npsCategory = 'detractor';\n    processedResponse.followUpActions.push({\n      type: 'urgent_intervention',\n      priority: 'high',\n      scheduledDelay: 1,\n      message: 'Immediate attention required - client at risk'\n    });\n    processedResponse.riskFlags.push({\n      type: 'low_nps',\n      severity: 'high',\n      value: npsScore,\n      threshold: 7\n    });\n  }\n}\n\n// Calculate overall satisfaction score\nconst satisfactionQuestions = [\n  'overall_satisfaction', 'project_satisfaction', 'annual_satisfaction',\n  'communication_satisfaction', 'results_satisfaction', 'resolution_satisfaction'\n];\n\nlet totalSatisfaction = 0;\nlet satisfactionCount = 0;\n\nsatisfactionQuestions.forEach(question => {\n  if (responses[question] !== undefined) {\n    totalSatisfaction += parseInt(responses[question]);\n    satisfactionCount++;\n  }\n});\n\nif (satisfactionCount > 0) {\n  const avgSatisfaction = totalSatisfaction / satisfactionCount;\n  processedResponse.calculatedScores.averageSatisfaction = avgSatisfaction;\n  \n  // Flag low satisfaction\n  if (avgSatisfaction < 3) {\n    processedResponse.riskFlags.push({\n      type: 'low_satisfaction',\n      severity: 'high',\n      value: avgSatisfaction,\n      threshold: 3\n    });\n    processedResponse.followUpActions.push({\n      type: 'service_recovery',\n      priority: 'urgent',\n      scheduledDelay: 1,\n      message: 'Implement service recovery plan immediately'\n    });\n  } else if (avgSatisfaction >= 4) {\n    processedResponse.followUpActions.push({\n      type: 'upsell_opportunity',\n      priority: 'low',\n      scheduledDelay: 7,\n      message: 'Explore additional service opportunities'\n    });\n  }\n}\n\n// Process text feedback for sentiment and key themes\nconst textResponses = [];\nObject.keys(responses).forEach(key => {\n  if (typeof responses[key] === 'string' && responses[key].length > 10) {\n    textResponses.push({\n      question: key,\n      response: responses[key]\n    });\n  }\n});\n\nprocessedResponse.textFeedback = textResponses;\n\n// Analyze for testimonial potential\nif (textResponses.length > 0) {\n  const positiveKeywords = ['excellent', 'amazing', 'outstanding', 'exceeded', 'impressed', 'recommend', 'fantastic', 'professional'];\n  const testimonialScore = textResponses.reduce((score, item) => {\n    const text = item.response.toLowerCase();\n    return score + positiveKeywords.filter(keyword => text.includes(keyword)).length;\n  }, 0);\n  \n  if (testimonialScore >= 2 && processedResponse.calculatedScores.nps >= 8) {\n    processedResponse.testimonialCandidate = true;\n    processedResponse.insights.testimonialPotential = 'high';\n  }\n}\n\n// Check for renewal/retention indicators\nif (responses.contract_renewal) {\n  const renewalResponse = responses.contract_renewal;\n  if (renewalResponse.includes('Definitely will') || renewalResponse.includes('Probably will')) {\n    processedResponse.insights.renewalLikelihood = 'high';\n  } else if (renewalResponse.includes('won\\'t')) {\n    processedResponse.riskFlags.push({\n      type: 'renewal_risk',\n      severity: 'critical',\n      value: renewalResponse,\n      threshold: 'negative_renewal_intent'\n    });\n    processedResponse.followUpActions.push({\n      type: 'retention_meeting',\n      priority: 'urgent',\n      scheduledDelay: 1,\n      message: 'Schedule immediate retention meeting with account manager'\n    });\n  }\n}\n\n// Check consent for testimonial use\nif (responses.testimonial_consent === true || responses.testimonial_consent === 'true') {\n  processedResponse.insights.testimonialConsent = true;\n  if (processedResponse.testimonialCandidate) {\n    processedResponse.followUpActions.push({\n      type: 'collect_testimonial',\n      priority: 'medium',\n      scheduledDelay: 3,\n      message: 'Client has consented to testimonial use - collect detailed testimonial'\n    });\n  }\n}\n\n// Calculate overall health score (0-100)\nlet healthScore = 50; // Base score\n\nif (processedResponse.calculatedScores.nps !== undefined) {\n  healthScore += (processedResponse.calculatedScores.nps - 5) * 3; // NPS contributes heavily\n}\n\nif (processedResponse.calculatedScores.averageSatisfaction !== undefined) {\n  healthScore += (processedResponse.calculatedScores.averageSatisfaction - 2.5) * 10;\n}\n\n// Adjust for risk flags\nprocessedResponse.riskFlags.forEach(flag => {\n  if (flag.severity === 'critical') healthScore -= 25;\n  else if (flag.severity === 'high') healthScore -= 15;\n  else healthScore -= 5;\n});\n\n// Ensure score is within bounds\nprocessedResponse.calculatedScores.healthScore = Math.max(0, Math.min(100, healthScore));\n\n// Set overall risk level\nif (processedResponse.riskFlags.length === 0 && healthScore >= 80) {\n  processedResponse.insights.riskLevel = 'low';\n} else if (processedResponse.riskFlags.length <= 1 && healthScore >= 60) {\n  processedResponse.insights.riskLevel = 'medium';\n} else {\n  processedResponse.insights.riskLevel = 'high';\n}\n\nreturn [{ json: processedResponse }];"
+      },
+      "id": "response-processor",
+      "name": "Process Survey Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 600]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/crm/update-client-satisfaction",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $json.apiKey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "clientId",
+              "value": "={{ $json.clientId }}"
+            },
+            {
+              "name": "satisfactionData",
+              "value": "={{ $json.calculatedScores }}"
+            },
+            {
+              "name": "npsScore",
+              "value": "={{ $json.calculatedScores.nps }}"
+            },
+            {
+              "name": "healthScore",
+              "value": "={{ $json.calculatedScores.healthScore }}"
+            },
+            {
+              "name": "riskLevel",
+              "value": "={{ $json.insights.riskLevel }}"
+            },
+            {
+              "name": "riskFlags",
+              "value": "={{ $json.riskFlags }}"
+            },
+            {
+              "name": "lastSurveyDate",
+              "value": "={{ $json.submittedAt }}"
+            },
+            {
+              "name": "testimonialCandidate",
+              "value": "={{ $json.testimonialCandidate }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "update-crm",
+      "name": "Update CRM with Feedback",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 600]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "risk-condition",
+              "leftValue": "={{ $json.insights.riskLevel }}",
+              "rightValue": "high",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "risk-assessment",
+      "name": "Risk Level Assessment",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 600]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/communication/send-urgent-alert",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $json.apiKey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "clientId",
+              "value": "={{ $json.clientId }}"
+            },
+            {
+              "name": "alertType",
+              "value": "client_satisfaction_risk"
+            },
+            {
+              "name": "severity",
+              "value": "high"
+            },
+            {
+              "name": "riskFlags",
+              "value": "={{ $json.riskFlags }}"
+            },
+            {
+              "name": "healthScore",
+              "value": "={{ $json.calculatedScores.healthScore }}"
+            },
+            {
+              "name": "recommendedActions",
+              "value": "={{ $json.followUpActions }}"
+            },
+            {
+              "name": "channels",
+              "value": "=['slack', 'email']"
+            },
+            {
+              "name": "recipients",
+              "value": "=['account_manager', 'team_lead', 'customer_success']"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "urgent-alert",
+      "name": "Send Urgent Risk Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 500]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/communication/schedule-follow-ups",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $json.apiKey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "clientId",
+              "value": "={{ $json.clientId }}"
+            },
+            {
+              "name": "followUpActions",
+              "value": "={{ $json.followUpActions }}"
+            },
+            {
+              "name": "basedOnSurvey",
+              "value": "={{ $json.surveyType }}"
+            },
+            {
+              "name": "responseData",
+              "value": "={{ $json.calculatedScores }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "schedule-follow-ups",
+      "name": "Schedule Follow-up Actions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 700]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 1 * *"
+            }
+          ]
+        }
+      },
+      "id": "monthly-trigger",
+      "name": "Monthly Survey Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 800]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/client-management/get-active-clients",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ process.env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "monthlyStatus",
+              "value": "active"
+            },
+            {
+              "name": "surveyEligible",
+              "value": "true"
+            },
+            {
+              "name": "lastSurveyOlderThan",
+              "value": "25"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "get-monthly-clients",
+      "name": "Get Monthly Survey Candidates",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 800]
+    },
+    {
+      "parameters": {
+        "batchSize": 10,
+        "options": {}
+      },
+      "id": "split-clients",
+      "name": "Split Client List",
+      "type": "n8n-nodes-base.itemLists",
+      "typeVersion": 3,
+      "position": [680, 800]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate monthly survey request for each client\nconst clients = $json.clients || [$json];\n\nconst monthlyRequests = clients.map(client => ({\n  triggerType: 'monthly_survey',\n  clientId: client.id,\n  clientData: client,\n  apiKey: process.env.INTERNAL_API_KEY,\n  source: 'automated_monthly_trigger'\n}));\n\nreturn monthlyRequests.map(request => ({ json: request }));"
+      },
+      "id": "monthly-prep",
+      "name": "Prepare Monthly Survey Requests",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 800]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "response-merge",
+      "name": "Merge Response Data",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2.1,
+      "position": [1340, 600]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/analytics/store-feedback-data",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $json.apiKey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "responseData",
+              "value": "={{ $json }}"
+            },
+            {
+              "name": "analyticsType",
+              "value": "feedback_collection"
+            },
+            {
+              "name": "includeInReporting",
+              "value": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "store-analytics",
+      "name": "Store Feedback Analytics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 600]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"success\": true,\n  \"message\": \"Feedback processing completed successfully\",\n  \"clientId\": \"{{ $json.clientId }}\",\n  \"surveyType\": \"{{ $json.surveyType }}\",\n  \"healthScore\": {{ $json.calculatedScores.healthScore }},\n  \"riskLevel\": \"{{ $json.insights.riskLevel }}\",\n  \"testimonialCandidate\": {{ $json.testimonialCandidate }},\n  \"followUpActions\": {{ $json.followUpActions.length }},\n  \"processedAt\": \"{{ $now }}\"\n}",
+        "options": {}
+      },
+      "id": "response-webhook-reply",
+      "name": "Response Webhook Reply",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1780, 600]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "final-merge",
+      "name": "Final Survey Merge",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2.1,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"success\": true,\n  \"message\": \"Survey creation and delivery completed\",\n  \"clientId\": \"{{ $json.clientId }}\",\n  \"surveyUrl\": \"{{ $json.surveyUrl }}\",\n  \"surveyType\": \"{{ $json.surveyType }}\",\n  \"deliveryMethod\": \"{{ $json.sendImmediately ? 'immediate' : 'scheduled' }}\",\n  \"scheduledTime\": \"{{ $json.scheduledSendTime }}\",\n  \"expirationDate\": \"{{ $json.metadata.expirationDate }}\",\n  \"createdAt\": \"{{ $now }}\"\n}",
+        "options": {}
+      },
+      "id": "survey-webhook-response",
+      "name": "Survey Creation Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/automation/log-activity",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $json.apiKey || process.env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "workflowName",
+              "value": "client-feedback-collection"
+            },
+            {
+              "name": "activityType",
+              "value": "feedback_workflow_completed"
+            },
+            {
+              "name": "clientId",
+              "value": "={{ $json.clientId }}"
+            },
+            {
+              "name": "details",
+              "value": "={{ { surveyType: $json.surveyType, healthScore: $json.calculatedScores?.healthScore, riskLevel: $json.insights?.riskLevel, followUpActions: $json.followUpActions?.length } }}"
+            },
+            {
+              "name": "status",
+              "value": "success"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "log-workflow-activity",
+      "name": "Log Workflow Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1780, 800]
+    }
+  ],
+  "connections": {
+    "webhook-trigger": {
+      "main": [
+        [
+          {
+            "node": "trigger-type-router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "trigger-type-router": {
+      "main": [
+        [
+          {
+            "node": "get-client-data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "survey-generator",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "get-client-data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "survey-generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get-client-data": {
+      "main": [
+        [
+          {
+            "node": "survey-generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "survey-generator": {
+      "main": [
+        [
+          {
+            "node": "create-survey",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "create-survey": {
+      "main": [
+        [
+          {
+            "node": "business-hours-check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "business-hours-check": {
+      "main": [
+        [
+          {
+            "node": "send-immediate-survey",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "schedule-optimizer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "send-immediate-survey": {
+      "main": [
+        [
+          {
+            "node": "final-merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "schedule-optimizer": {
+      "main": [
+        [
+          {
+            "node": "schedule-survey",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "schedule-survey": {
+      "main": [
+        [
+          {
+            "node": "final-merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "response-webhook": {
+      "main": [
+        [
+          {
+            "node": "response-processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "response-processor": {
+      "main": [
+        [
+          {
+            "node": "update-crm",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "update-crm": {
+      "main": [
+        [
+          {
+            "node": "risk-assessment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "risk-assessment": {
+      "main": [
+        [
+          {
+            "node": "urgent-alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "schedule-follow-ups",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "schedule-follow-ups",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "urgent-alert": {
+      "main": [
+        [
+          {
+            "node": "response-merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "schedule-follow-ups": {
+      "main": [
+        [
+          {
+            "node": "response-merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "monthly-trigger": {
+      "main": [
+        [
+          {
+            "node": "get-monthly-clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get-monthly-clients": {
+      "main": [
+        [
+          {
+            "node": "split-clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "split-clients": {
+      "main": [
+        [
+          {
+            "node": "monthly-prep",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "monthly-prep": {
+      "main": [
+        [
+          {
+            "node": "survey-generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "response-merge": {
+      "main": [
+        [
+          {
+            "node": "store-analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "store-analytics": {
+      "main": [
+        [
+          {
+            "node": "response-webhook-reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "final-merge": {
+      "main": [
+        [
+          {
+            "node": "survey-webhook-response",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "log-workflow-activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-01-15T10:00:00.000Z",
+      "updatedAt": "2024-01-15T10:00:00.000Z",
+      "id": "client-feedback-collection",
+      "name": "Client Feedback Collection"
+    }
+  ],
+  "triggerCount": 3,
+  "updatedAt": "2024-01-15T10:00:00.000Z",
+  "versionId": "1.0.0"
+}

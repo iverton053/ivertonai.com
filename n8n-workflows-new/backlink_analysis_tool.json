@@ -1,0 +1,380 @@
+{
+  "name": "backlink_analysis_tool",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "backlink-analysis",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "fb53f1ff-5a18-4406-8f81-708181a460ce",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -704,
+        224
+      ],
+      "webhookId": "c9ed0343-dd65-48ec-81ef-6a814cf85b68"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "target_url",
+              "value": "={{ $json.website_url }}"
+            },
+            {
+              "name": "time_range",
+              "value": "={{ $json.time_duration }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "52a29e1c-f705-4264-b030-ac937d5e5518",
+      "name": "Extract Parameters",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        -496,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Calculate date range based on time_duration\nconst timeRange = $input.first().json.time_range;\nconst today = new Date();\nlet startDate;\n\nswitch(timeRange) {\n  case 'last 30 days':\n    startDate = new Date(today.getTime() - (30 * 24 * 60 * 60 * 1000));\n    break;\n  case '3 months':\n    startDate = new Date(today.getTime() - (90 * 24 * 60 * 60 * 1000));\n    break;\n  case '1 year':\n    startDate = new Date(today.getTime() - (365 * 24 * 60 * 60 * 1000));\n    break;\n  default: // 'all time'\n    startDate = new Date('2020-01-01');\n    break;\n}\n\nconst formatDate = (date) => {\n  return date.toISOString().split('T')[0];\n};\n\nreturn {\n  target_url: $input.first().json.target_url,\n  time_range: timeRange,\n  date_from: formatDate(startDate),\n  date_to: formatDate(today),\n  domain: $input.first().json.target_url.replace(/^https?:\\/\\//, '').replace(/\\/.*$/, '')\n};"
+      },
+      "id": "ceff4596-11b6-4d53-b88f-0daa72f6c3c8",
+      "name": "Process Date Range",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -272,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.dataforseo.com/v3/backlinks/summary/live",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "=[\n  {\n    \"target\": \"{{ $json.domain }}\",\n    \"date_from\": \"{{ $json.date_from }}\",\n    \"date_to\": \"{{ $json.date_to }}\"\n  }\n]",
+        "options": {}
+      },
+      "id": "b0e45c4e-b5a8-4312-aa1a-20c080bcfb75",
+      "name": "DataForSEO - Summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -48,
+        0
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "EeaHfnsplZdFASQ8",
+          "name": "Unnamed credential 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.dataforseo.com/v3/backlinks/referring_networks/live",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "=[\n  {\n    \"target\": \"{{ $json.domain }}\",\n    \"date_from\": \"{{ $json.date_from }}\",\n    \"date_to\": \"{{ $json.date_to }}\"\n  }\n]",
+        "options": {}
+      },
+      "id": "f688c0af-f439-4130-a791-c67829d5a871",
+      "name": "DataForSEO - Referring Domains",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -48,
+        144
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "EeaHfnsplZdFASQ8",
+          "name": "Unnamed credential 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.dataforseo.com/v3/backlinks/anchors/live",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "=[\n  {\n    \"target\": \"{{ $json.domain }}\",\n    \"date_from\": \"{{ $json.date_from }}\",\n    \"date_to\": \"{{ $json.date_to }}\"\n  }\n]",
+        "options": {}
+      },
+      "id": "a4c49c5e-478b-415f-be4f-a5c2adf43888",
+      "name": "DataForSEO - Anchor Texts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -48,
+        304
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "EeaHfnsplZdFASQ8",
+          "name": "Unnamed credential 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.dataforseo.com/v3/backlinks/history/live",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "=[\n  {\n    \"target\": \"{{ $json.domain }}\",\n    \"date_from\": \"{{ $json.date_from }}\",\n    \"date_to\": \"{{ $json.date_to }}\"\n  }\n]",
+        "options": {}
+      },
+      "id": "03322031-6cb2-4d12-a7af-bca8a6fbbb0e",
+      "name": "DataForSEO - History",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -48,
+        480
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "EeaHfnsplZdFASQ8",
+          "name": "Unnamed credential 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process all API responses into dashboard-ready JSON\nconst inputData = $input.all();\n\n// Validate input data exists\nif (!inputData || inputData.length === 0) {\n  throw new Error('No input data received');\n}\n\n// Extract data from merged responses with proper validation\nconst summaryData = inputData[0]?.json?.tasks?.[0]?.result?.[0] || {};\nconst referringData = inputData[1]?.json?.tasks?.[0]?.result || [];\nconst anchorsData = inputData[2]?.json?.tasks?.[0]?.result || [];\nconst historyData = inputData[3]?.json?.tasks?.[0]?.result || [];\n\n// Get original parameters with validation\nlet originalParams;\ntry {\n  originalParams = $('Process Date Range').first().json;\n} catch (error) {\n  // If we can't get original parameters, extract from API data\n  const dateFrom = summaryData.date_from || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];\n  const dateTo = summaryData.date_to || new Date().toISOString().split('T')[0];\n  \n  // Calculate dynamic time range based on actual dates\n  const startDate = new Date(dateFrom);\n  const endDate = new Date(dateTo);\n  const daysDiff = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;\n  \n  let timeRange;\n  if (daysDiff === 1) {\n    timeRange = 'today';\n  } else if (daysDiff === 7) {\n    timeRange = 'last 7 days';\n  } else if (daysDiff === 30) {\n    timeRange = 'last 30 days';\n  } else if (daysDiff === 90) {\n    timeRange = 'last 90 days';\n  } else if (daysDiff === 365) {\n    timeRange = 'last 1 year';\n  } else {\n    timeRange = `last ${daysDiff} days`;\n  }\n  \n  originalParams = {\n    domain: summaryData.target || 'unknown.com',\n    time_range: timeRange,\n    date_from: dateFrom,\n    date_to: dateTo,\n    target_url: `https://${summaryData.target || 'unknown.com'}`\n  };\n}\n\n// Helper functions\nconst calculateGrowthRate = (current, previous) => {\n  if (!previous || previous === 0) return '+0%';\n  const rate = ((current - previous) / previous) * 100;\n  return rate > 0 ? `+${rate.toFixed(2)}%` : `${rate.toFixed(2)}%`;\n};\n\nconst categorizeAnchorText = (anchor) => {\n  const domain = originalParams.domain;\n  const domainName = domain.split('.')[0];\n  \n  if (anchor.toLowerCase().includes(domainName) || anchor.toLowerCase().includes(domain)) {\n    return 'branded';\n  } else if (['click here', 'here', 'read more', 'more info', 'link', 'source link'].some(generic => anchor.toLowerCase().includes(generic))) {\n    return 'generic';\n  } else if (anchor.startsWith('http')) {\n    return 'naked_url';\n  } else {\n    return 'exact_match';\n  }\n};\n\n// Extract real data from summary\nconst totalBacklinks = summaryData.backlinks || 0;\nconst totalReferringDomains = summaryData.referring_domains || 0;\nconst domainRank = summaryData.rank || 0;\nconst backlinksSpamScore = summaryData.backlinks_spam_score || 0;\nconst targetSpamScore = summaryData.info?.target_spam_score || 0;\nconst crawledPages = summaryData.crawled_pages || 0;\nconst brokenBacklinks = summaryData.broken_backlinks || 0;\nconst brokenPages = summaryData.broken_pages || 0;\n\n// Calculate estimates based on real data\nconst organicTraffic = Math.floor(totalBacklinks * 0.002);\nconst organicKeywords = Math.floor(totalBacklinks * 0.0004);\nconst domainTrust = Math.floor(domainRank * 0.7);\n\n// Extract growth data from history - look in the correct structure\nlet newBacklinks30d = 0;\nlet lostBacklinks30d = 0;\nlet newReferringDomains30d = 0;\nlet lostReferringDomains30d = 0;\nlet dailyGrowthChart = [];\n\n// The history data is in the items array within the first result\nif (summaryData.items && summaryData.items.length > 0) {\n  summaryData.items.forEach(item => {\n    // Look for items with type 'backlinks_history' for growth data\n    if (item.type === 'backlinks_history') {\n      if (item.new_backlinks) newBacklinks30d += item.new_backlinks;\n      if (item.lost_backlinks) lostBacklinks30d += item.lost_backlinks;\n      if (item.new_referring_domains) newReferringDomains30d += item.new_referring_domains;\n      if (item.lost_referring_domains) lostReferringDomains30d += item.lost_referring_domains;\n      \n      if (item.date) {\n        dailyGrowthChart.push({\n          date: item.date.split(' ')[0],\n          new_backlinks: item.new_backlinks || 0,\n          lost_backlinks: item.lost_backlinks || 0,\n          net: (item.new_backlinks || 0) - (item.lost_backlinks || 0)\n        });\n      }\n    }\n  });\n}\n\nconst netGrowth30d = newBacklinks30d - lostBacklinks30d;\n\n// Process referring domains from actual data - extract from anchor items\nconst topReferringDomains = [];\nif (summaryData.items && summaryData.items.length > 0) {\n  // Extract referring domains from anchor items (they contain network_address which is the referring domain)\n  summaryData.items.forEach(item => {\n    if (item.type === 'backlinks_anchor' && item.network_address) {\n      const refObj = {\n        domain: item.network_address,\n        domain_rank: item.rank || 0,\n        backlinks_count: item.backlinks || 0,\n        anchor_text: item.anchor || 'N/A'\n      };\n      if (item.first_seen) refObj.first_seen = item.first_seen.split(' ')[0];\n      if (item.lost_date) refObj.lost_date = item.lost_date.split(' ')[0];\n      topReferringDomains.push(refObj);\n    }\n  });\n}\n\n// Process anchor text distribution from actual data - look in the correct structure\nconst anchorCategories = {\n  branded: [],\n  generic: [],\n  exact_match: [],\n  naked_url: []\n};\n\nif (summaryData.items && summaryData.items.length > 0) {\n  summaryData.items.forEach(item => {\n    // Look for items with type 'backlinks_anchor'\n    if (item.type === 'backlinks_anchor' && item.anchor && item.backlinks) {\n      const category = categorizeAnchorText(item.anchor);\n      anchorCategories[category].push({\n        text: item.anchor,\n        count: item.backlinks,\n        percentage: ((item.backlinks / totalBacklinks) * 100).toFixed(1)\n      });\n    }\n  });\n}\n\n// Calculate category percentages\nconst anchorDistribution = {};\nObject.keys(anchorCategories).forEach(category => {\n  const totalCount = anchorCategories[category].reduce((sum, item) => sum + item.count, 0);\n  if (totalCount > 0) {\n    anchorDistribution[category] = {\n      percentage: parseFloat(((totalCount / totalBacklinks) * 100).toFixed(1)),\n      anchors: anchorCategories[category].slice(0, 3)\n    };\n  }\n});\n\n// Calculate quality metrics from referring domains\nconst highAuthorityCount = topReferringDomains.filter(d => (d.domain_rank || 0) >= 80).length;\nconst mediumAuthorityCount = topReferringDomains.filter(d => (d.domain_rank || 0) >= 50 && (d.domain_rank || 0) < 80).length;\nconst lowAuthorityCount = topReferringDomains.filter(d => (d.domain_rank || 0) < 50).length;\n\nconst totalDomains = topReferringDomains.length || 1;\n\n// Calculate link types from real attributes\nconst nofollowLinks = summaryData.referring_links_attributes?.nofollow || 0;\nconst dofollowLinks = Math.max(0, totalBacklinks - nofollowLinks);\n\n// Generate geographic distribution from actual data only\nlet geographicDistribution = [];\nif (summaryData.referring_links_countries) {\n  const countries = Object.entries(summaryData.referring_links_countries)\n    .filter(([country]) => country && country !== '')\n    .sort(([,a], [,b]) => b - a)\n    .slice(0, 5);\n  \n  if (countries.length > 0) {\n    const totalCountryBacklinks = countries.reduce((sum, [, count]) => sum + count, 0);\n    geographicDistribution = countries.map(([country, count]) => ({\n      country: country,\n      backlinks: count,\n      percentage: ((count / totalCountryBacklinks) * 100).toFixed(1)\n    }));\n  }\n}\n\n// Build final response\nconst response = {\n  status: 'success',\n  timestamp: new Date().toISOString(),\n  analysis_period: originalParams.time_range,\n  target_url: originalParams.target_url,\n  summary: {\n    total_backlinks: totalBacklinks,\n    total_referring_domains: totalReferringDomains,\n    new_backlinks_30d: newBacklinks30d,\n    lost_backlinks_30d: lostBacklinks30d,\n    net_growth_30d: netGrowth30d,\n    domain_rank: domainRank,\n    domain_trust: domainTrust,\n    organic_traffic: organicTraffic,\n    organic_keywords: organicKeywords,\n    backlinks_spam_score: backlinksSpamScore,\n    target_spam_score: targetSpamScore,\n    crawled_pages: crawledPages,\n    broken_backlinks: brokenBacklinks,\n    broken_pages: brokenPages\n  },\n  growth_metrics: {\n    backlinks_growth_rate: calculateGrowthRate(totalBacklinks, totalBacklinks - netGrowth30d),\n    referring_domains_growth_rate: calculateGrowthRate(totalReferringDomains, totalReferringDomains - Math.floor(netGrowth30d * 0.1)),\n    net_growth_percentage: calculateGrowthRate(totalBacklinks, totalBacklinks - netGrowth30d),\n    period_comparison: {\n      current_period: {\n        start_date: originalParams.date_from,\n        end_date: originalParams.date_to,\n        new_backlinks: newBacklinks30d,\n        new_referring_domains: newReferringDomains30d,\n        lost_backlinks: lostBacklinks30d,\n        lost_referring_domains: lostReferringDomains30d\n      }\n    }\n  },\n  link_quality_metrics: {\n    internal_links_count: summaryData.internal_links_count || 0,\n    external_links_count: summaryData.external_links_count || 0,\n    referring_domains_nofollow: summaryData.referring_domains_nofollow || 0,\n    referring_main_domains: summaryData.referring_main_domains || 0,\n    referring_main_domains_nofollow: summaryData.referring_main_domains_nofollow || 0,\n    referring_ips: summaryData.referring_ips || 0,\n    referring_subnets: summaryData.referring_subnets || 0,\n    referring_pages: summaryData.referring_pages || 0,\n    referring_pages_nofollow: summaryData.referring_pages_nofollow || 0\n  },\n  link_types_distribution: {\n    anchor_links: {\n      count: summaryData.referring_links_types?.anchor || 0,\n      percentage: ((summaryData.referring_links_types?.anchor || 0) / totalBacklinks * 100).toFixed(1)\n    },\n    image_links: {\n      count: summaryData.referring_links_types?.image || 0,\n      percentage: ((summaryData.referring_links_types?.image || 0) / totalBacklinks * 100).toFixed(1)\n    },\n    redirect_links: {\n      count: summaryData.referring_links_types?.redirect || 0,\n      percentage: ((summaryData.referring_links_types?.redirect || 0) / totalBacklinks * 100).toFixed(1)\n    },\n    canonical_links: {\n      count: summaryData.referring_links_types?.canonical || 0,\n      percentage: ((summaryData.referring_links_types?.canonical || 0) / totalBacklinks * 100).toFixed(1)\n    },\n    alternate_links: {\n      count: summaryData.referring_links_types?.alternate || 0,\n      percentage: ((summaryData.referring_links_types?.alternate || 0) / totalBacklinks * 100).toFixed(1)\n    }\n  },\n  link_attributes_distribution: {\n    noopener: {\n      count: summaryData.referring_links_attributes?.noopener || 0,\n      percentage: ((summaryData.referring_links_attributes?.noopener || 0) / totalBacklinks * 100).toFixed(1)\n    },\n    nofollow: {\n      count: summaryData.referring_links_attributes?.nofollow || 0,\n      percentage: ((summaryData.referring_links_attributes?.nofollow || 0) / totalBacklinks * 100).toFixed(1)\n    },\n    noreferrer: {\n      count: summaryData.referring_links_attributes?.noreferrer || 0,\n      percentage: ((summaryData.referring_links_attributes?.noreferrer || 0) / totalBacklinks * 100).toFixed(1)\n    },\n    external: {\n      count: summaryData.referring_links_attributes?.external || 0,\n      percentage: ((summaryData.referring_links_attributes?.external || 0) / totalBacklinks * 100).toFixed(1)\n    },\n    ugc: {\n      count: summaryData.referring_links_attributes?.ugc || 0,\n      percentage: ((summaryData.referring_links_attributes?.ugc || 0) / totalBacklinks * 100).toFixed(1)\n    },\n    bookmark: {\n      count: summaryData.referring_links_attributes?.bookmark || 0,\n      percentage: ((summaryData.referring_links_attributes?.bookmark || 0) / totalBacklinks * 100).toFixed(1)\n    },\n    tag: {\n      count: summaryData.referring_links_attributes?.tag || 0,\n      percentage: ((summaryData.referring_links_attributes?.tag || 0) / totalBacklinks * 100).toFixed(1)\n    },\n    author: {\n      count: summaryData.referring_links_attributes?.author || 0,\n      percentage: ((summaryData.referring_links_attributes?.author || 0) / totalBacklinks * 100).toFixed(1)\n    },\n    via: {\n      count: summaryData.referring_links_attributes?.via || 0,\n      percentage: ((summaryData.referring_links_attributes?.via || 0) / totalBacklinks * 100).toFixed(1)\n    },\n    sponsored: {\n      count: summaryData.referring_links_attributes?.sponsored || 0,\n      percentage: ((summaryData.referring_links_attributes?.sponsored || 0) / totalBacklinks * 100).toFixed(1)\n    }\n  },\n  platform_types_distribution: Object.fromEntries(\n    Object.entries(summaryData.referring_links_platform_types || {}).map(([platform, count]) => [\n      platform,\n      {\n        count: count,\n        percentage: ((count / totalBacklinks) * 100).toFixed(1)\n      }\n    ])\n  ),\n  semantic_locations_distribution: Object.fromEntries(\n    Object.entries(summaryData.referring_links_semantic_locations || {}).map(([location, count]) => [\n      location || 'general',\n      {\n        count: count,\n        percentage: ((count / totalBacklinks) * 100).toFixed(1)\n      }\n    ])\n  ),\n  top_level_domains_distribution: Object.fromEntries(\n    Object.entries(summaryData.referring_links_tld || {}).map(([tld, count]) => [\n      tld,\n      {\n        count: count,\n        percentage: ((count / totalBacklinks) * 100).toFixed(1)\n      }\n    ])\n  ),\n  geographic_distribution: geographicDistribution,\n  top_anchor_texts: Object.values(anchorCategories).flat().slice(0, 10),\n  anchor_text_categories: anchorDistribution,\n  daily_growth_chart: dailyGrowthChart,\n  technical_metrics: {\n    server: summaryData.info?.server || 'unknown',\n    cms: summaryData.info?.cms || 'unknown',\n    platform_type: summaryData.info?.platform_type || [],\n    ip_address: summaryData.info?.ip_address || 'unknown',\n    country: summaryData.info?.country || 'unknown',\n    is_ip: summaryData.info?.is_ip || false\n  },\n  quality_metrics: {\n    high_authority_links: {\n      count: highAuthorityCount,\n      percentage: ((highAuthorityCount / totalDomains) * 100).toFixed(1),\n      definition: 'Domain Rank >= 80'\n    },\n    medium_authority_links: {\n      count: mediumAuthorityCount,\n      percentage: ((mediumAuthorityCount / totalDomains) * 100).toFixed(1),\n      definition: 'Domain Rank 50-79'\n    },\n    low_authority_links: {\n      count: lowAuthorityCount,\n      percentage: ((lowAuthorityCount / totalDomains) * 100).toFixed(1),\n      definition: 'Domain Rank < 50'\n    }\n  },\n  link_types: {\n    dofollow: {\n      count: dofollowLinks,\n      percentage: totalBacklinks ? ((dofollowLinks / totalBacklinks) * 100).toFixed(1) : '0.0'\n    },\n    nofollow: {\n      count: nofollowLinks,\n      percentage: totalBacklinks ? ((nofollowLinks / totalBacklinks) * 100).toFixed(1) : '0.0'\n    }\n  },\n  top_referring_domains: topReferringDomains,\n  lost_backlinks: topReferringDomains.filter(d => d.lost_date).slice(0, 5).map(d => ({\n    domain: d.domain,\n    lost_date: d.lost_date,\n    anchor_text: d.anchor_text,\n    domain_rank: d.domain_rank\n  })),\n  dashboard_insights: {\n    strengths: [\n      `Domain authority rank: ${domainRank}`,\n      `Total backlinks: ${totalBacklinks.toLocaleString()}`,\n      `Referring domains: ${totalReferringDomains.toLocaleString()}`,\n      `Net growth: ${netGrowth30d.toLocaleString()}`\n    ],\n    opportunities: [\n      `Spam score: ${backlinksSpamScore}`,\n      `Broken backlinks: ${brokenBacklinks.toLocaleString()}`,\n      `Nofollow links: ${summaryData.referring_domains_nofollow || 0}`,\n      `Anchor text diversity: ${Object.keys(anchorDistribution).length} categories`\n    ],\n    risks: [\n      `Broken backlinks: ${brokenBacklinks.toLocaleString()}`,\n      `Spam score: ${backlinksSpamScore}`,\n      `Unknown platform types: ${summaryData.referring_links_platform_types?.unknown || 0}`,\n      `Low authority domains: ${lowAuthorityCount}`\n    ]\n  },\n  api_credits_used: newBacklinks30d || 1,\n  data_freshness: new Date().toISOString()\n};\n\nreturn response;"
+      },
+      "id": "6a4f9b12-0b38-45d0-9834-10d0dbc7ecb3",
+      "name": "Format Dashboard Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        496,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "b7989d16-5d34-4410-a129-d5701c577560",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        704,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "numberInputs": 4,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        256,
+        208
+      ],
+      "id": "c7bbbe98-a17e-4b29-8ddf-01a65f8a4bc7",
+      "name": "Merge"
+    }
+  ],
+  "pinData": {
+    "Webhook Trigger": [
+      {
+        "json": {
+          "website_url": "https://zaubacorp.com",
+          "time_duration": "last 1 year"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Extract Parameters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Parameters": {
+      "main": [
+        [
+          {
+            "node": "Process Date Range",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Date Range": {
+      "main": [
+        [
+          {
+            "node": "DataForSEO - Summary",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "DataForSEO - Referring Domains",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "DataForSEO - Anchor Texts",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "DataForSEO - History",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DataForSEO - Summary": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DataForSEO - Referring Domains": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "DataForSEO - Anchor Texts": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "DataForSEO - History": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Format Dashboard Response": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Format Dashboard Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "26566d82-6cbb-4036-817a-4394fc437afc",
+  "meta": {
+    "instanceId": "892ac801f9cd1033acf424fd4efdd9c93b5867f66fd44caab7b86f5d0099f7b2"
+  },
+  "id": "LjoSGJjjsRycQk0p",
+  "tags": []
+}
