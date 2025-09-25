@@ -81,10 +81,9 @@
 
   Low Priority
 
-  1. Performance optimizations - Already well-optimized
-  2. Additional file format support - Nice to have
-  3. Advanced analytics features - Enhancement
-
+  1. Performance optimizations 
+  2. Additional file format support 
+  3. Advanced analytics features 
   ---
   Backend Requirements
 

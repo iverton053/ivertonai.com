@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Upload,
@@ -18,16 +18,25 @@ import {
   Eye,
   Download,
   Shield,
-  Clock
+  Clock,
+  Zap
 } from 'lucide-react';
 import { useBrandAssetsStore } from '../../stores/brandAssetsStore';
-import { 
-  BrandAssetType, 
-  BrandAssetVariant, 
-  BrandAssetFormat, 
+import {
+  BrandAssetType,
+  BrandAssetVariant,
+  BrandAssetFormat,
   AssetUsageContext,
-  DEFAULT_ASSET_TYPES 
+  DEFAULT_ASSET_TYPES
 } from '../../types/brandAssets';
+import {
+  generateThumbnail,
+  compressFile,
+  validateFileFormat,
+  extractAssetMetadata,
+  performanceMonitor,
+  PERFORMANCE_CONFIG
+} from '../../utils/asset-performance';
 
 interface BrandAssetUploadProps {
   isOpen?: boolean;
@@ -69,15 +78,34 @@ const BrandAssetUpload: React.FC<BrandAssetUploadProps> = ({
     getSupabaseStatus
   } = useBrandAssetsStore();
 
-  const getFileIcon = (file: File) => {
+  const getFileIcon = useCallback((file: File) => {
+    const extension = file.name.split('.').pop()?.toLowerCase() || '';
     const type = file.type;
-    if (type.startsWith('image/')) return <Image className="text-green-500" size={20} />;
-    if (type.startsWith('video/')) return <Film className="text-purple-500" size={20} />;
-    if (type.startsWith('audio/')) return <Music className="text-blue-500" size={20} />;
-    if (type.includes('pdf')) return <FileText className="text-red-500" size={20} />;
-    if (type.includes('zip') || type.includes('rar')) return <Archive className="text-orange-500" size={20} />;
+
+    // Extended file type detection
+    if (['png', 'jpg', 'jpeg', 'webp', 'avif', 'gif', 'svg', 'tiff', 'bmp', 'ico'].includes(extension) || type.startsWith('image/')) {
+      return <Image className="text-green-500" size={20} />;
+    }
+    if (['mp4', 'mov', 'webm', 'avi', 'mkv'].includes(extension) || type.startsWith('video/')) {
+      return <Film className="text-purple-500" size={20} />;
+    }
+    if (['mp3', 'wav', 'ogg', 'flac'].includes(extension) || type.startsWith('audio/')) {
+      return <Music className="text-blue-500" size={20} />;
+    }
+    if (['pdf', 'docx', 'xlsx', 'pptx', 'txt'].includes(extension)) {
+      return <FileText className="text-red-500" size={20} />;
+    }
+    if (['zip', 'rar', '7z', 'tar'].includes(extension)) {
+      return <Archive className="text-orange-500" size={20} />;
+    }
+    if (['psd', 'ai', 'sketch', 'figma', 'xd'].includes(extension)) {
+      return <Palette className="text-purple-400" size={20} />;
+    }
+    if (['otf', 'ttf', 'woff', 'woff2'].includes(extension)) {
+      return <Type className="text-orange-400" size={20} />;
+    }
     return <File className="text-slate-500" size={20} />;
-  };
+  }, []);
 
   const getAssetTypeIcon = (type: BrandAssetType) => {
     switch (type) {

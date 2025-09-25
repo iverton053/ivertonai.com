@@ -118,17 +118,34 @@ const defaultSettings: BrandAssetSettings = {
   requireGuidelines: true,
   enforceNaming: false,
   namingTemplate: '{client}_{type}_{variant}_v{version}',
-  allowedFormats: ['png', 'jpg', 'svg', 'pdf', 'eps', 'ai', 'psd'],
+  allowedFormats: [
+    // Image formats
+    'png', 'jpg', 'jpeg', 'webp', 'avif', 'svg', 'gif', 'tiff', 'bmp', 'ico',
+    // Vector & Design formats
+    'pdf', 'eps', 'ai', 'psd', 'sketch', 'figma', 'xd', 'indd', 'idml',
+    // Video formats
+    'mp4', 'mov', 'webm', 'avi', 'mkv',
+    // Font formats
+    'otf', 'ttf', 'woff', 'woff2', 'eot',
+    // Archive formats
+    'zip', 'rar', '7z', 'tar',
+    // Document formats
+    'docx', 'xlsx', 'pptx', 'txt', 'json', 'xml', 'csv',
+    // CAD formats
+    'dwg', 'dxf'
+  ],
   maxFileSize: 100 * 1024 * 1024, // 100MB
   enableVersioning: true,
   enableUsageTracking: true,
   enableExpirationReminders: true,
   defaultTags: ['brand', 'approved'],
   compressionSettings: {
-    enabled: false,
-    quality: 90,
+    enabled: true,
+    quality: 85,
     maxWidth: 2000,
     maxHeight: 2000,
+    enableWebP: true,
+    enableAVIF: false, // Experimental
   },
 };
 

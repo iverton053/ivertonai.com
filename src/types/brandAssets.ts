@@ -22,19 +22,49 @@ export type BrandAssetVariant =
   | 'icon-only'
   | 'text-only';
 
-export type BrandAssetFormat = 
-  | 'png' 
-  | 'jpg' 
-  | 'svg' 
-  | 'pdf' 
-  | 'eps' 
+export type BrandAssetFormat =
+  | 'png'
+  | 'jpg'
+  | 'jpeg'
+  | 'webp'
+  | 'avif'
+  | 'svg'
+  | 'pdf'
+  | 'eps'
   | 'ai'
   | 'psd'
   | 'sketch'
   | 'figma'
+  | 'xd'
   | 'mp4'
   | 'mov'
-  | 'gif';
+  | 'webm'
+  | 'avi'
+  | 'mkv'
+  | 'gif'
+  | 'tiff'
+  | 'bmp'
+  | 'ico'
+  | 'indd'
+  | 'idml'
+  | 'dwg'
+  | 'dxf'
+  | 'otf'
+  | 'ttf'
+  | 'woff'
+  | 'woff2'
+  | 'eot'
+  | 'zip'
+  | 'rar'
+  | '7z'
+  | 'tar'
+  | 'docx'
+  | 'xlsx'
+  | 'pptx'
+  | 'txt'
+  | 'json'
+  | 'xml'
+  | 'csv';
 
 export type AssetUsageContext = 
   | 'social-media'
@@ -222,6 +252,8 @@ export interface BrandAssetSettings {
     quality: number;
     maxWidth: number;
     maxHeight: number;
+    enableWebP: boolean;
+    enableAVIF: boolean;
   };
 }
 
