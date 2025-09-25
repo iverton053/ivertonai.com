@@ -391,15 +391,15 @@ const CampaignCreationWizard: React.FC<CampaignCreationWizardProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 pl-64">
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-gray-800 rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden border border-gray-700"
+        className="glass-effect rounded-2xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-700 bg-gradient-to-r from-purple-900/50 to-blue-900/50">
+        <div className="flex items-center justify-between p-6 border-b border-purple-500/20 bg-gradient-to-r from-purple-900/50 to-purple-700/50">
           <div className="flex items-center space-x-4">
             <div className="w-10 h-10 bg-gradient-to-r from-purple-600 to-blue-600 rounded-lg flex items-center justify-center">
               <Target className="w-6 h-6 text-white" />
@@ -419,14 +419,14 @@ const CampaignCreationWizard: React.FC<CampaignCreationWizardProps> = ({
         </div>
 
         {/* Progress Bar */}
-        <div className="px-6 py-4 border-b border-gray-700">
+        <div className="px-6 py-4 border-b border-purple-500/20 flex-shrink-0">
           <div className="flex items-center justify-between mb-3">
             <span className="text-sm text-gray-400">Step {currentStep + 1} of {steps.length}</span>
             <span className="text-sm text-gray-400">{Math.round((currentStep / (steps.length - 1)) * 100)}% Complete</span>
           </div>
-          <div className="w-full bg-gray-700 rounded-full h-2">
+          <div className="w-full bg-gray-700/50 rounded-full h-2">
             <div
-              className="bg-gradient-to-r from-purple-600 to-blue-600 h-2 rounded-full transition-all duration-300"
+              className="bg-gradient-to-r from-purple-600 to-purple-400 h-2 rounded-full transition-all duration-300"
               style={{ width: `${(currentStep / (steps.length - 1)) * 100}%` }}
             />
           </div>
@@ -447,7 +447,7 @@ const CampaignCreationWizard: React.FC<CampaignCreationWizardProps> = ({
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto min-h-0">
           <AnimatePresence mode="wait">
             <motion.div
               key={currentStep}
@@ -1436,7 +1436,7 @@ const CampaignCreationWizard: React.FC<CampaignCreationWizardProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between p-6 border-t border-gray-700 bg-gray-900/50">
+        <div className="flex items-center justify-between p-6 border-t border-purple-500/20 bg-purple-900/20 flex-shrink-0">
           <button
             onClick={prevStep}
             disabled={currentStep === 0}
@@ -1451,7 +1451,7 @@ const CampaignCreationWizard: React.FC<CampaignCreationWizardProps> = ({
               <button
                 onClick={nextStep}
                 disabled={!canProceed()}
-                className="flex items-center space-x-2 px-6 py-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                className="flex items-center space-x-2 px-6 py-2 bg-gradient-to-r from-purple-600 to-purple-400 hover:from-purple-700 hover:to-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
               >
                 <span>Continue</span>
                 <ChevronRight className="w-4 h-4" />
@@ -1460,7 +1460,7 @@ const CampaignCreationWizard: React.FC<CampaignCreationWizardProps> = ({
               <button
                 onClick={handleFinish}
                 disabled={!canProceed()}
-                className="flex items-center space-x-2 px-6 py-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                className="flex items-center space-x-2 px-6 py-2 bg-gradient-to-r from-purple-600 to-purple-400 hover:from-purple-700 hover:to-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
               >
                 <Zap className="w-4 h-4" />
                 <span>Create Campaign</span>

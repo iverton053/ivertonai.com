@@ -310,15 +310,15 @@ const AudienceTargeting: React.FC<AudienceTargetingProps> = ({
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 rounded-xl p-6 border border-blue-200 dark:border-blue-800"
+        className="glass-effect rounded-xl p-6"
       >
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-500/20 rounded-lg">
+            <div className="p-2 bg-purple-500/20 rounded-lg">
               <BarChart3 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
             </div>
             <div>
-              <h3 className="font-semibold text-gray-900 dark:text-white">
+              <h3 className="font-semibold text-white">
                 Estimated Audience Reach
               </h3>
               <p className="text-sm text-gray-600 dark:text-gray-400">
@@ -329,7 +329,7 @@ const AudienceTargeting: React.FC<AudienceTargetingProps> = ({
           <button
             onClick={estimateAudienceReach}
             disabled={isEstimating}
-            className="p-2 text-blue-600 hover:text-blue-800 dark:text-blue-400 disabled:opacity-50"
+            className="p-2 text-purple-400 hover:text-purple-300 disabled:opacity-50"
           >
             <RefreshCw className={`w-5 h-5 ${isEstimating ? 'animate-spin' : ''}`} />
           </button>
@@ -337,7 +337,7 @@ const AudienceTargeting: React.FC<AudienceTargetingProps> = ({
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="text-center">
-            <div className="text-2xl font-bold text-gray-900 dark:text-white">
+            <div className="text-2xl font-bold text-white">
               {isEstimating ? (
                 <div className="animate-pulse">---</div>
               ) : (
@@ -348,7 +348,7 @@ const AudienceTargeting: React.FC<AudienceTargetingProps> = ({
           </div>
 
           <div className="text-center">
-            <div className="text-2xl font-bold text-gray-900 dark:text-white">
+            <div className="text-2xl font-bold text-white">
               {isEstimating ? (
                 <div className="animate-pulse">---</div>
               ) : (
@@ -405,8 +405,8 @@ const AudienceTargeting: React.FC<AudienceTargetingProps> = ({
           {activeTab === 'demographics' && (
             <div className="space-y-6">
               {/* Age Range */}
-              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-                <h4 className="font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+              <div className="glass-effect rounded-lg p-6">
+                <h4 className="font-medium text-white mb-4 flex items-center gap-2">
                   <Calendar className="w-5 h-5 text-blue-500" />
                   Age Range
                 </h4>
@@ -444,8 +444,8 @@ const AudienceTargeting: React.FC<AudienceTargetingProps> = ({
               </div>
 
               {/* Gender */}
-              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-                <h4 className="font-medium text-gray-900 dark:text-white mb-4">Gender</h4>
+              <div className="glass-effect rounded-lg p-6">
+                <h4 className="font-medium text-white mb-4">Gender</h4>
                 <div className="flex gap-3">
                   {['all', 'male', 'female', 'non-binary'].map((gender) => (
                     <button
@@ -466,8 +466,8 @@ const AudienceTargeting: React.FC<AudienceTargetingProps> = ({
                       }}
                       className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors capitalize ${
                         audienceData.demographics.gender.includes(gender)
-                          ? 'bg-blue-500 text-white'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+                          ? 'bg-purple-500 text-white'
+                          : 'bg-gray-800/50 text-gray-300 hover:bg-gray-700/50'
                       }`}
                     >
                       {gender}
@@ -477,8 +477,8 @@ const AudienceTargeting: React.FC<AudienceTargetingProps> = ({
               </div>
 
               {/* Locations */}
-              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-                <h4 className="font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+              <div className="glass-effect rounded-lg p-6">
+                <h4 className="font-medium text-white mb-4 flex items-center gap-2">
                   <MapPin className="w-5 h-5 text-blue-500" />
                   Locations
                 </h4>
@@ -543,7 +543,7 @@ const AudienceTargeting: React.FC<AudienceTargetingProps> = ({
           {activeTab === 'interests' && (
             <div className="space-y-6">
               {/* Interest Categories */}
-              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+              <div className="glass-effect rounded-lg p-6">
                 <h4 className="font-medium text-gray-900 dark:text-white mb-4">Interest Categories</h4>
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                   {interestCategories.map((category) => (
@@ -573,7 +573,7 @@ const AudienceTargeting: React.FC<AudienceTargetingProps> = ({
               </div>
 
               {/* Custom Keywords */}
-              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+              <div className="glass-effect rounded-lg p-6">
                 <h4 className="font-medium text-gray-900 dark:text-white mb-4">Custom Keywords</h4>
                 <div className="space-y-4">
                   <div className="flex gap-2">
@@ -603,7 +603,7 @@ const AudienceTargeting: React.FC<AudienceTargetingProps> = ({
                           setSearchInterest('');
                         }
                       }}
-                      className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                      className="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors"
                     >
                       <Plus className="w-4 h-4" />
                     </button>
@@ -663,8 +663,8 @@ const AudienceTargeting: React.FC<AudienceTargetingProps> = ({
           {/* Custom Audiences Tab */}
           {activeTab === 'custom' && (
             <div className="space-y-6">
-              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-                <h4 className="font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+              <div className="glass-effect rounded-lg p-6">
+                <h4 className="font-medium text-white mb-4 flex items-center gap-2">
                   <Target className="w-5 h-5 text-blue-500" />
                   Custom Audiences
                 </h4>
@@ -719,8 +719,8 @@ const AudienceTargeting: React.FC<AudienceTargetingProps> = ({
           {activeTab === 'advanced' && (
             <div className="space-y-6">
               {/* Device Types */}
-              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-                <h4 className="font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+              <div className="glass-effect rounded-lg p-6">
+                <h4 className="font-medium text-white mb-4 flex items-center gap-2">
                   <Smartphone className="w-5 h-5 text-blue-500" />
                   Device Types
                 </h4>
@@ -740,8 +740,8 @@ const AudienceTargeting: React.FC<AudienceTargetingProps> = ({
                       }}
                       className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors capitalize ${
                         audienceData.advanced.deviceTypes.includes(device)
-                          ? 'bg-blue-500 text-white'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+                          ? 'bg-purple-500 text-white'
+                          : 'bg-gray-800/50 text-gray-300 hover:bg-gray-700/50'
                       }`}
                     >
                       {device}
@@ -751,7 +751,7 @@ const AudienceTargeting: React.FC<AudienceTargetingProps> = ({
               </div>
 
               {/* Placements */}
-              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+              <div className="glass-effect rounded-lg p-6">
                 <h4 className="font-medium text-gray-900 dark:text-white mb-4">Ad Placements</h4>
                 <div className="grid grid-cols-2 gap-3">
                   {['feed', 'stories', 'reels', 'search', 'sidebar', 'in-stream'].map((placement) => (

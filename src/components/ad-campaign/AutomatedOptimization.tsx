@@ -409,19 +409,19 @@ const AutomatedOptimization: React.FC<AutomatedOptimizationProps> = ({
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'active': return 'text-green-600 bg-green-100 dark:bg-green-900/20 dark:text-green-400';
-      case 'paused': return 'text-yellow-600 bg-yellow-100 dark:bg-yellow-900/20 dark:text-yellow-400';
-      case 'draft': return 'text-gray-600 bg-gray-100 dark:bg-gray-900/20 dark:text-gray-400';
-      default: return 'text-gray-600 bg-gray-100';
+      case 'active': return 'text-purple-400 bg-purple-900/30 border border-purple-500/30';
+      case 'paused': return 'text-gray-400 bg-gray-900/30 border border-gray-500/30';
+      case 'draft': return 'text-gray-400 bg-gray-800/50 border border-gray-600/30';
+      default: return 'text-gray-400 bg-gray-800/50 border border-gray-600/30';
     }
   };
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
-      case 'high': return 'text-red-600 bg-red-100 dark:bg-red-900/20 dark:text-red-400';
-      case 'medium': return 'text-yellow-600 bg-yellow-100 dark:bg-yellow-900/20 dark:text-yellow-400';
-      case 'low': return 'text-blue-600 bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400';
-      default: return 'text-gray-600 bg-gray-100';
+      case 'high': return 'text-red-400 bg-red-900/30 border border-red-500/30';
+      case 'medium': return 'text-yellow-400 bg-yellow-900/30 border border-yellow-500/30';
+      case 'low': return 'text-blue-400 bg-blue-900/30 border border-blue-500/30';
+      default: return 'text-gray-400 bg-gray-800/50 border border-gray-600/30';
     }
   };
 
@@ -449,10 +449,10 @@ const AutomatedOptimization: React.FC<AutomatedOptimizationProps> = ({
 
   const getInsightTypeColor = (type: string) => {
     switch (type) {
-      case 'opportunity': return 'text-green-600 bg-green-100 dark:bg-green-900/20 dark:text-green-400';
-      case 'warning': return 'text-red-600 bg-red-100 dark:bg-red-900/20 dark:text-red-400';
+      case 'opportunity': return 'text-green-400 bg-green-900/30 border border-green-500/30';
+      case 'warning': return 'text-red-400 bg-red-900/30 border border-red-500/30';
       case 'recommendation': return 'text-blue-600 bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400';
-      default: return 'text-gray-600 bg-gray-100';
+      default: return 'text-gray-400 bg-gray-800/50 border border-gray-600/30';
     }
   };
 
@@ -486,11 +486,11 @@ const AutomatedOptimization: React.FC<AutomatedOptimizationProps> = ({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
+          <h2 className="text-2xl font-bold text-white flex items-center gap-3">
             <Bot className="w-8 h-8 text-purple-500" />
             Automated Optimization
           </h2>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">
+          <p className="text-gray-400 mt-1">
             AI-powered campaign optimization and automated performance management
           </p>
         </div>
@@ -519,7 +519,7 @@ const AutomatedOptimization: React.FC<AutomatedOptimizationProps> = ({
           </button>
           <button
             onClick={() => setShowCreateRule(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors"
           >
             <Plus className="w-4 h-4" />
             Create Rule
@@ -532,12 +532,12 @@ const AutomatedOptimization: React.FC<AutomatedOptimizationProps> = ({
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6"
+          className="glass-effect rounded-lg p-6"
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Active Rules</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">
+              <p className="text-sm text-gray-400">Active Rules</p>
+              <p className="text-2xl font-bold text-white">
                 {rules.filter(r => r.status === 'active').length}
               </p>
             </div>
@@ -551,17 +551,17 @@ const AutomatedOptimization: React.FC<AutomatedOptimizationProps> = ({
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6"
+          className="glass-effect rounded-lg p-6"
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Total Savings</p>
-              <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+              <p className="text-sm text-gray-400">Total Savings</p>
+              <p className="text-2xl font-bold text-green-400">
                 {formatCurrency(rules.reduce((acc, r) => acc + r.performance.totalSavings, 0))}
               </p>
             </div>
-            <div className="p-3 bg-green-100 dark:bg-green-900/20 rounded-lg">
-              <TrendingDown className="w-6 h-6 text-green-600 dark:text-green-400" />
+            <div className="p-3 bg-green-900/30 rounded-lg border border-green-500/30">
+              <TrendingDown className="w-6 h-6 text-green-400" />
             </div>
           </div>
         </motion.div>
@@ -570,17 +570,17 @@ const AutomatedOptimization: React.FC<AutomatedOptimizationProps> = ({
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6"
+          className="glass-effect rounded-lg p-6"
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Total Gains</p>
-              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+              <p className="text-sm text-gray-400">Total Gains</p>
+              <p className="text-2xl font-bold text-blue-400">
                 {formatCurrency(rules.reduce((acc, r) => acc + r.performance.totalGains, 0))}
               </p>
             </div>
-            <div className="p-3 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
-              <TrendingUp className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            <div className="p-3 bg-blue-900/30 rounded-lg border border-blue-500/30">
+              <TrendingUp className="w-6 h-6 text-blue-400" />
             </div>
           </div>
         </motion.div>
@@ -589,24 +589,24 @@ const AutomatedOptimization: React.FC<AutomatedOptimizationProps> = ({
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
-          className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6"
+          className="glass-effect rounded-lg p-6"
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Avg Success Rate</p>
-              <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+              <p className="text-sm text-gray-400">Avg Success Rate</p>
+              <p className="text-2xl font-bold text-purple-400">
                 {Math.round(rules.reduce((acc, r) => acc + r.performance.successRate, 0) / rules.length)}%
               </p>
             </div>
-            <div className="p-3 bg-purple-100 dark:bg-purple-900/20 rounded-lg">
-              <Award className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+            <div className="p-3 bg-purple-900/30 rounded-lg border border-purple-500/30">
+              <Award className="w-6 h-6 text-purple-400" />
             </div>
           </div>
         </motion.div>
       </div>
 
       {/* Tab Navigation */}
-      <div className="border-b border-gray-200 dark:border-gray-700">
+      <div className="border-b border-purple-500/20">
         <nav className="flex space-x-8">
           {tabs.map((tab) => (
             <button
@@ -614,8 +614,8 @@ const AutomatedOptimization: React.FC<AutomatedOptimizationProps> = ({
               onClick={() => setActiveTab(tab.id)}
               className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors ${
                 activeTab === tab.id
-                  ? 'border-purple-500 text-purple-600 dark:text-purple-400'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+                  ? 'border-purple-500 text-purple-400'
+                  : 'border-transparent text-gray-400 hover:text-gray-300'
               }`}
             >
               <tab.icon className="w-4 h-4" />
@@ -646,13 +646,13 @@ const AutomatedOptimization: React.FC<AutomatedOptimizationProps> = ({
                     placeholder="Search rules..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                    className="w-full pl-10 pr-4 py-2 bg-gray-800/50 border border-gray-600/30 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-white placeholder-gray-400"
                   />
                 </div>
                 <select
                   value={filterStatus}
                   onChange={(e) => setFilterStatus(e.target.value)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                  className="px-4 py-2 bg-gray-800/50 border border-gray-600/30 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-white"
                 >
                   <option value="all">All Status</option>
                   <option value="active">Active</option>
@@ -662,7 +662,7 @@ const AutomatedOptimization: React.FC<AutomatedOptimizationProps> = ({
                 <select
                   value={filterType}
                   onChange={(e) => setFilterType(e.target.value)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                  className="px-4 py-2 bg-gray-800/50 border border-gray-600/30 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-white"
                 >
                   <option value="all">All Types</option>
                   <option value="budget">Budget</option>
@@ -680,19 +680,19 @@ const AutomatedOptimization: React.FC<AutomatedOptimizationProps> = ({
                     key={rule.id}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 hover:shadow-lg transition-shadow cursor-pointer"
+                    className="glass-effect rounded-lg p-6 hover:bg-gray-800/30 transition-all cursor-pointer"
                     onClick={() => setSelectedRule(rule)}
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex items-start gap-4 flex-1">
-                        <div className="p-2 bg-purple-100 dark:bg-purple-900/20 rounded-lg">
+                        <div className="p-2 bg-purple-900/30 rounded-lg border border-purple-500/30">
                           {React.createElement(getTypeIcon(rule.type), {
-                            className: "w-5 h-5 text-purple-600 dark:text-purple-400"
+                            className: "w-5 h-5 text-purple-400"
                           })}
                         </div>
                         <div className="flex-1">
                           <div className="flex items-center gap-3 mb-2">
-                            <h3 className="font-semibold text-gray-900 dark:text-white">
+                            <h3 className="font-semibold text-white">
                               {rule.name}
                             </h3>
                             <span className={`px-2 py-1 rounded-full text-xs font-medium capitalize ${getStatusColor(rule.status)}`}>
@@ -702,27 +702,27 @@ const AutomatedOptimization: React.FC<AutomatedOptimizationProps> = ({
                               {rule.priority}
                             </span>
                           </div>
-                          <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                          <p className="text-sm text-gray-400 mb-3">
                             {rule.description}
                           </p>
 
                           <div className="flex items-center gap-6 text-sm">
                             <div className="flex items-center gap-1">
                               <Activity className="w-4 h-4 text-gray-400" />
-                              <span className="text-gray-600 dark:text-gray-400">
+                              <span className="text-gray-400">
                                 {rule.performance.successRate}% success rate
                               </span>
                             </div>
                             <div className="flex items-center gap-1">
                               <Zap className="w-4 h-4 text-gray-400" />
-                              <span className="text-gray-600 dark:text-gray-400">
+                              <span className="text-gray-400">
                                 Triggered {rule.timesTriggered} times
                               </span>
                             </div>
                             {rule.lastTriggered && (
                               <div className="flex items-center gap-1">
                                 <Clock className="w-4 h-4 text-gray-400" />
-                                <span className="text-gray-600 dark:text-gray-400">
+                                <span className="text-gray-400">
                                   Last: {new Date(rule.lastTriggered).toLocaleDateString()}
                                 </span>
                               </div>
@@ -734,8 +734,8 @@ const AutomatedOptimization: React.FC<AutomatedOptimizationProps> = ({
                       <div className="flex items-center gap-2">
                         {rule.status === 'active' && (
                           <div className="flex items-center gap-2">
-                            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                            <span className="text-sm text-green-600 dark:text-green-400">
+                            <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse"></div>
+                            <span className="text-sm text-green-400">
                               Active
                             </span>
                           </div>
@@ -757,7 +757,7 @@ const AutomatedOptimization: React.FC<AutomatedOptimizationProps> = ({
                   key={insight.id}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6"
+                  className="glass-effect rounded-lg p-6"
                 >
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-start gap-4">
@@ -768,34 +768,34 @@ const AutomatedOptimization: React.FC<AutomatedOptimizationProps> = ({
                       </div>
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-2">
-                          <h3 className="font-semibold text-gray-900 dark:text-white">
+                          <h3 className="font-semibold text-white">
                             {insight.title}
                           </h3>
                           <span className={`px-2 py-1 rounded-full text-xs font-medium capitalize ${
                             insight.impact === 'high'
-                              ? 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400'
+                              ? 'bg-red-900/30 text-red-400 border border-red-500/30'
                               : insight.impact === 'medium'
-                              ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400'
-                              : 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400'
+                              ? 'bg-yellow-900/30 text-yellow-400 border border-yellow-500/30'
+                              : 'bg-blue-900/30 text-blue-400 border border-blue-500/30'
                           }`}>
                             {insight.impact} impact
                           </span>
                         </div>
-                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                        <p className="text-sm text-gray-400 mb-3">
                           {insight.description}
                         </p>
 
                         <div className="flex items-center gap-6 text-sm mb-4">
                           <div>
-                            <span className="text-gray-600 dark:text-gray-400">Current: </span>
-                            <span className="font-medium text-gray-900 dark:text-white">
+                            <span className="text-gray-400">Current: </span>
+                            <span className="font-medium text-white">
                               {insight.currentValue}
                             </span>
                           </div>
                           <ArrowRight className="w-4 h-4 text-gray-400" />
                           <div>
-                            <span className="text-gray-600 dark:text-gray-400">Potential: </span>
-                            <span className="font-medium text-green-600 dark:text-green-400">
+                            <span className="text-gray-400">Potential: </span>
+                            <span className="font-medium text-green-400">
                               {insight.potentialValue}
                             </span>
                           </div>
@@ -807,12 +807,12 @@ const AutomatedOptimization: React.FC<AutomatedOptimizationProps> = ({
                         </div>
 
                         <div>
-                          <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-2">
+                          <h4 className="text-sm font-medium text-white mb-2">
                             Recommended Actions:
                           </h4>
                           <ul className="space-y-1">
                             {insight.actions.map((action, index) => (
-                              <li key={index} className="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-2">
+                              <li key={index} className="text-sm text-gray-400 flex items-center gap-2">
                                 <span className="w-1 h-1 bg-purple-500 rounded-full"></span>
                                 {action}
                               </li>
@@ -824,7 +824,7 @@ const AutomatedOptimization: React.FC<AutomatedOptimizationProps> = ({
                   </div>
 
                   <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
-                    <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
+                    <div className="flex items-center gap-4 text-sm text-gray-400">
                       <span>{insight.category}</span>
                       <span>•</span>
                       <span>{new Date(insight.created).toLocaleDateString()}</span>
@@ -833,7 +833,7 @@ const AutomatedOptimization: React.FC<AutomatedOptimizationProps> = ({
                       <button className="px-3 py-1 text-sm bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400 rounded-lg hover:bg-purple-200 dark:hover:bg-purple-900/30 transition-colors">
                         Create Rule
                       </button>
-                      <button className="px-3 py-1 text-sm bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+                      <button className="px-3 py-1 text-sm bg-gray-800/50 text-gray-300 rounded-lg hover:bg-gray-700/50 transition-colors border border-gray-600/30">
                         Apply Now
                       </button>
                     </div>
@@ -847,28 +847,28 @@ const AutomatedOptimization: React.FC<AutomatedOptimizationProps> = ({
           {activeTab === 'performance' && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Rule Performance Metrics */}
-              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-                <h3 className="font-semibold text-gray-900 dark:text-white text-lg mb-6">
+              <div className="glass-effect rounded-lg p-6">
+                <h3 className="font-semibold text-white text-lg mb-6">
                   Rule Performance Overview
                 </h3>
                 <div className="space-y-4">
                   {rules.filter(r => r.status === 'active').map((rule) => (
-                    <div key={rule.id} className="p-3 border border-gray-200 dark:border-gray-700 rounded-lg">
+                    <div key={rule.id} className="p-3 bg-gray-800/50 border border-gray-600/30 rounded-lg">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="font-medium text-gray-900 dark:text-white text-sm">
+                        <span className="font-medium text-white text-sm">
                           {rule.name}
                         </span>
-                        <span className="text-sm text-gray-600 dark:text-gray-400">
+                        <span className="text-sm text-gray-400">
                           {rule.performance.successRate}% success
                         </span>
                       </div>
-                      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-2">
+                      <div className="w-full bg-gray-700/50 rounded-full h-2 mb-2">
                         <div
                           className="bg-purple-500 h-2 rounded-full transition-all duration-300"
                           style={{ width: `${rule.performance.successRate}%` }}
                         ></div>
                       </div>
-                      <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-400">
+                      <div className="flex items-center justify-between text-xs text-gray-400">
                         <span>Triggers: {rule.performance.totalTriggers}</span>
                         <span>Impact: {rule.performance.avgImpact > 0 ? '+' : ''}{rule.performance.avgImpact.toFixed(1)}%</span>
                       </div>
@@ -878,34 +878,34 @@ const AutomatedOptimization: React.FC<AutomatedOptimizationProps> = ({
               </div>
 
               {/* Optimization Impact */}
-              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-                <h3 className="font-semibold text-gray-900 dark:text-white text-lg mb-6">
+              <div className="glass-effect rounded-lg p-6">
+                <h3 className="font-semibold text-white text-lg mb-6">
                   Optimization Impact
                 </h3>
                 <div className="space-y-6">
                   <div className="text-center">
-                    <div className="text-3xl font-bold text-green-600 dark:text-green-400 mb-1">
+                    <div className="text-3xl font-bold text-green-400 mb-1">
                       {formatCurrency(rules.reduce((acc, r) => acc + r.performance.totalGains + r.performance.totalSavings, 0))}
                     </div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400">
+                    <div className="text-sm text-gray-400">
                       Total Value Generated
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="text-center p-4 bg-green-50 dark:bg-green-900/10 rounded-lg">
-                      <div className="text-xl font-bold text-green-600 dark:text-green-400">
+                    <div className="text-center p-4 bg-green-900/30 border border-green-500/30 rounded-lg">
+                      <div className="text-xl font-bold text-green-400">
                         {formatCurrency(rules.reduce((acc, r) => acc + r.performance.totalGains, 0))}
                       </div>
-                      <div className="text-xs text-green-700 dark:text-green-300">
+                      <div className="text-xs text-green-400">
                         Revenue Gains
                       </div>
                     </div>
-                    <div className="text-center p-4 bg-blue-50 dark:bg-blue-900/10 rounded-lg">
-                      <div className="text-xl font-bold text-blue-600 dark:text-blue-400">
+                    <div className="text-center p-4 bg-blue-900/30 border border-blue-500/30 rounded-lg">
+                      <div className="text-xl font-bold text-blue-400">
                         {formatCurrency(rules.reduce((acc, r) => acc + r.performance.totalSavings, 0))}
                       </div>
-                      <div className="text-xs text-blue-700 dark:text-blue-300">
+                      <div className="text-xs text-blue-400">
                         Cost Savings
                       </div>
                     </div>
@@ -913,12 +913,12 @@ const AutomatedOptimization: React.FC<AutomatedOptimizationProps> = ({
 
                   <div>
                     <div className="flex items-center justify-between text-sm mb-2">
-                      <span className="text-gray-600 dark:text-gray-400">Overall Efficiency</span>
-                      <span className="font-medium text-gray-900 dark:text-white">
+                      <span className="text-gray-400">Overall Efficiency</span>
+                      <span className="font-medium text-white">
                         {Math.round(rules.reduce((acc, r) => acc + r.performance.successRate, 0) / rules.length)}%
                       </span>
                     </div>
-                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div className="w-full bg-gray-700/50 rounded-full h-2">
                       <div
                         className="bg-purple-500 h-2 rounded-full transition-all duration-300"
                         style={{ width: `${Math.round(rules.reduce((acc, r) => acc + r.performance.successRate, 0) / rules.length)}%` }}
@@ -933,8 +933,8 @@ const AutomatedOptimization: React.FC<AutomatedOptimizationProps> = ({
           {/* Settings Tab */}
           {activeTab === 'settings' && (
             <div className="space-y-6">
-              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-                <h3 className="font-semibold text-gray-900 dark:text-white text-lg mb-6">
+              <div className="glass-effect rounded-lg p-6">
+                <h3 className="font-semibold text-white text-lg mb-6">
                   Optimization Settings
                 </h3>
                 <div className="space-y-6">
@@ -946,10 +946,10 @@ const AutomatedOptimization: React.FC<AutomatedOptimizationProps> = ({
                         className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
                       />
                       <div>
-                        <div className="font-medium text-gray-900 dark:text-white">
+                        <div className="font-medium text-white">
                           Enable Automatic Optimization
                         </div>
-                        <div className="text-sm text-gray-600 dark:text-gray-400">
+                        <div className="text-sm text-gray-400">
                           Allow the system to automatically apply optimization rules
                         </div>
                       </div>
@@ -964,10 +964,10 @@ const AutomatedOptimization: React.FC<AutomatedOptimizationProps> = ({
                         className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
                       />
                       <div>
-                        <div className="font-medium text-gray-900 dark:text-white">
+                        <div className="font-medium text-white">
                           Send Optimization Notifications
                         </div>
-                        <div className="text-sm text-gray-600 dark:text-gray-400">
+                        <div className="text-sm text-gray-400">
                           Receive alerts when rules are triggered or insights are generated
                         </div>
                       </div>
@@ -982,10 +982,10 @@ const AutomatedOptimization: React.FC<AutomatedOptimizationProps> = ({
                         className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
                       />
                       <div>
-                        <div className="font-medium text-gray-900 dark:text-white">
+                        <div className="font-medium text-white">
                           Conservative Mode
                         </div>
-                        <div className="text-sm text-gray-600 dark:text-gray-400">
+                        <div className="text-sm text-gray-400">
                           Require manual approval for high-impact optimizations
                         </div>
                       </div>
@@ -993,10 +993,10 @@ const AutomatedOptimization: React.FC<AutomatedOptimizationProps> = ({
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
                       Maximum Budget Change Per Rule (%)
                     </label>
-                    <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                    <select className="w-full px-3 py-2 bg-gray-800/50 border border-gray-600/30 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-white">
                       <option value="10">10%</option>
                       <option value="20">20%</option>
                       <option value="30">30%</option>
@@ -1005,10 +1005,10 @@ const AutomatedOptimization: React.FC<AutomatedOptimizationProps> = ({
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
                       Optimization Frequency
                     </label>
-                    <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                    <select className="w-full px-3 py-2 bg-gray-800/50 border border-gray-600/30 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-white">
                       <option value="hourly">Every Hour</option>
                       <option value="daily">Daily</option>
                       <option value="weekly">Weekly</option>

@@ -267,13 +267,13 @@ const EnhancedAdCampaignManager: React.FC = () => {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'active':
-        return 'bg-green-900/30 text-green-400 border-green-400/30';
+        return 'bg-purple-900/30 text-purple-400 border-purple-400/30';
       case 'paused':
-        return 'bg-yellow-900/30 text-yellow-400 border-yellow-400/30';
+        return 'bg-gray-900/30 text-gray-400 border-gray-400/30';
       case 'draft':
         return 'bg-gray-900/30 text-gray-400 border-gray-400/30';
       case 'completed':
-        return 'bg-blue-900/30 text-blue-400 border-blue-400/30';
+        return 'bg-purple-900/30 text-purple-400 border-purple-400/30';
       default:
         return 'bg-gray-900/30 text-gray-400 border-gray-400/30';
     }
@@ -401,36 +401,36 @@ const EnhancedAdCampaignManager: React.FC = () => {
         animate={{ opacity: 1, y: 0 }}
         className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4"
       >
-        <div className="glass-effect rounded-xl p-6 border border-green-500/20">
+        <div className="glass-effect rounded-xl p-6">
           <div className="flex items-center justify-between mb-4">
-            <div className="w-10 h-10 bg-green-500/20 rounded-lg flex items-center justify-center">
-              <DollarSign className="w-5 h-5 text-green-400" />
+            <div className="w-10 h-10 bg-purple-500/20 rounded-lg flex items-center justify-center">
+              <DollarSign className="w-5 h-5 text-purple-400" />
             </div>
-            <span className="text-xs text-green-400 bg-green-900/30 px-2 py-1 rounded-full">+12.5%</span>
+            <span className="text-xs text-purple-400 bg-purple-900/30 px-2 py-1 rounded-full">+12.5%</span>
           </div>
           <h3 className="text-sm font-medium text-gray-400 mb-1">Total Spend</h3>
           <p className="text-2xl font-bold text-white">${globalMetrics.totalSpend.toLocaleString()}</p>
           <p className="text-xs text-gray-500 mt-1">Last 7 days</p>
         </div>
 
-        <div className="glass-effect rounded-xl p-6 border border-blue-500/20">
+        <div className="glass-effect rounded-xl p-6">
           <div className="flex items-center justify-between mb-4">
-            <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center">
-              <Eye className="w-5 h-5 text-blue-400" />
+            <div className="w-10 h-10 bg-purple-500/20 rounded-lg flex items-center justify-center">
+              <Eye className="w-5 h-5 text-purple-400" />
             </div>
-            <span className="text-xs text-blue-400 bg-blue-900/30 px-2 py-1 rounded-full">+8.2%</span>
+            <span className="text-xs text-purple-400 bg-purple-900/30 px-2 py-1 rounded-full">+8.2%</span>
           </div>
           <h3 className="text-sm font-medium text-gray-400 mb-1">Impressions</h3>
           <p className="text-2xl font-bold text-white">{(globalMetrics.totalImpressions / 1000000).toFixed(1)}M</p>
           <p className="text-xs text-gray-500 mt-1">Total reach</p>
         </div>
 
-        <div className="glass-effect rounded-xl p-6 border border-orange-500/20">
+        <div className="glass-effect rounded-xl p-6">
           <div className="flex items-center justify-between mb-4">
-            <div className="w-10 h-10 bg-orange-500/20 rounded-lg flex items-center justify-center">
-              <Target className="w-5 h-5 text-orange-400" />
+            <div className="w-10 h-10 bg-purple-500/20 rounded-lg flex items-center justify-center">
+              <Target className="w-5 h-5 text-purple-400" />
             </div>
-            <span className="text-xs text-orange-400 bg-orange-900/30 px-2 py-1 rounded-full">+5.7%</span>
+            <span className="text-xs text-purple-400 bg-purple-900/30 px-2 py-1 rounded-full">+5.7%</span>
           </div>
           <h3 className="text-sm font-medium text-gray-400 mb-1">Avg CTR</h3>
           <p className="text-2xl font-bold text-white">{globalMetrics.averageCtr.toFixed(2)}%</p>
@@ -449,12 +449,12 @@ const EnhancedAdCampaignManager: React.FC = () => {
           <p className="text-xs text-gray-500 mt-1">Return on spend</p>
         </div>
 
-        <div className="glass-effect rounded-xl p-6 border border-indigo-500/20">
+        <div className="glass-effect rounded-xl p-6">
           <div className="flex items-center justify-between mb-4">
-            <div className="w-10 h-10 bg-indigo-500/20 rounded-lg flex items-center justify-center">
-              <Activity className="w-5 h-5 text-indigo-400" />
+            <div className="w-10 h-10 bg-purple-500/20 rounded-lg flex items-center justify-center">
+              <Activity className="w-5 h-5 text-purple-400" />
             </div>
-            <span className="text-xs text-indigo-400 bg-indigo-900/30 px-2 py-1 rounded-full">{globalMetrics.activeCampaigns}/{globalMetrics.totalCampaigns}</span>
+            <span className="text-xs text-purple-400 bg-purple-900/30 px-2 py-1 rounded-full">{globalMetrics.activeCampaigns}/{globalMetrics.totalCampaigns}</span>
           </div>
           <h3 className="text-sm font-medium text-gray-400 mb-1">Active Campaigns</h3>
           <p className="text-2xl font-bold text-white">{globalMetrics.activeCampaigns}</p>

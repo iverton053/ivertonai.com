@@ -8,6 +8,7 @@ import BrandAssetUpload from './BrandAssetUpload';
 import BrandAssetLibrary from './BrandAssetLibrary';
 import BrandGuidelinesManager from './BrandGuidelinesManager';
 import AssetVersionControl from './AssetVersionControl';
+import SupabaseConfig from './SupabaseConfig';
 import { useBrandAssetsStore } from '../../stores/brandAssetsStore';
 
 type TabType = 'library' | 'upload' | 'guidelines' | 'analytics' | 'settings';
@@ -69,7 +70,7 @@ const BrandAssetsPage: React.FC = () => {
 
     switch (activeTab) {
       case 'library':
-        return <BrandAssetLibrary />;
+        return <BrandAssetLibrary onViewVersions={setSelectedAssetForVersions} />;
       case 'upload':
         return <BrandAssetUpload />;
       case 'guidelines':
@@ -409,6 +410,11 @@ const BrandAssetSettings: React.FC = () => {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Supabase Configuration */}
+      <div className="mt-8">
+        <SupabaseConfig />
       </div>
     </div>
   );

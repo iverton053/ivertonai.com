@@ -30,22 +30,25 @@ import {
 } from '../../types/brandAssets';
 
 interface BrandAssetUploadProps {
-  isOpen: boolean;
-  onClose: () => void;
-  clientId: string;
+  isOpen?: boolean;
+  onClose?: () => void;
+  clientId?: string;
   preSelectedType?: BrandAssetType;
 }
 
 const BrandAssetUpload: React.FC<BrandAssetUploadProps> = ({
-  isOpen,
+  isOpen = true,
   onClose,
-  clientId,
+  clientId = 'default-client',
   preSelectedType
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploadStep, setUploadStep] = useState<'select' | 'configure' | 'uploading' | 'complete'>('select');
+  const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
+  const [uploadErrors, setUploadErrors] = useState<Record<string, string>>({});
+  const [completedUploads, setCompletedUploads] = useState<string[]>([]);
   
   // Asset configuration
   const [assetType, setAssetType] = useState<BrandAssetType>(preSelectedType || 'logo');
@@ -61,7 +64,9 @@ const BrandAssetUpload: React.FC<BrandAssetUploadProps> = ({
     settings,
     checkCompliance,
     validateAssetNaming,
-    setError
+    setError,
+    uploadFileToSupabase,
+    getSupabaseStatus
   } = useBrandAssetsStore();
 
   const getFileIcon = (file: File) => {
@@ -162,58 +167,129 @@ const BrandAssetUpload: React.FC<BrandAssetUploadProps> = ({
     if (selectedFiles.length === 0) return;
 
     setUploadStep('uploading');
+    setUploadProgress({});
+    setUploadErrors({});
+    setCompletedUploads([]);
+    setError('');
+
+    // Check if Supabase is configured
+    const supabaseStatus = getSupabaseStatus();
+    const useSupabase = supabaseStatus.initialized && !supabaseStatus.error;
 
     try {
       const tags = assetTags.split(',').map(tag => tag.trim()).filter(Boolean);
-      
-      for (const file of selectedFiles) {
-        const fileExtension = file.name.split('.').pop()?.toLowerCase() as BrandAssetFormat;
-        
-        // Create asset data
-        const assetData = {
-          clientId,
-          name: file.name,
-          description: assetDescription,
-          type: assetType,
-          variant: assetVariant,
-          format: fileExtension,
-          fileSize: file.size,
-          url: URL.createObjectURL(file), // In real app, this would be uploaded to storage
-          tags: [...tags, ...settings.defaultTags],
-          isPrimary,
-          versionNumber: 1,
-          isApproved: !requiresApproval || settings.autoApproval,
-          guidelinesCompliant: true,
-          uploadedBy: 'current_user', // Get from auth context
-          isPublic: false,
-          allowedUsers: [],
-          allowedContexts: usageContexts,
-        };
 
-        // Validate compliance
-        const tempAsset = { ...assetData, id: 'temp', uploadedAt: new Date(), updatedAt: new Date(), usageHistory: [], totalDownloads: 0 };
-        const complianceCheck = checkCompliance(tempAsset);
-        
-        if (!complianceCheck.isCompliant && settings.requireGuidelines) {
-          setError(`File ${file.name} failed compliance check: ${complianceCheck.issues.join(', ')}`);
-          continue;
+      // Process files concurrently but with controlled concurrency
+      const uploadPromises = selectedFiles.map(async (file, index) => {
+        const fileId = `${file.name}_${index}`;
+        setUploadProgress(prev => ({ ...prev, [fileId]: 0 }));
+
+        try {
+          const fileExtension = file.name.split('.').pop()?.toLowerCase() as BrandAssetFormat;
+
+          // Create base asset data
+          const baseAssetData = {
+            clientId,
+            name: file.name,
+            description: assetDescription,
+            type: assetType,
+            variant: assetVariant,
+            format: fileExtension,
+            fileSize: file.size,
+            tags: [...tags, ...settings.defaultTags],
+            isPrimary,
+            versionNumber: 1,
+            isApproved: !requiresApproval || settings.autoApproval,
+            guidelinesCompliant: true,
+            uploadedBy: 'current_user', // TODO: Get from auth context
+            isPublic: false,
+            allowedUsers: [],
+            allowedContexts: usageContexts,
+          };
+
+          // Validate compliance
+          const tempAsset = {
+            ...baseAssetData,
+            id: 'temp',
+            url: '',
+            uploadedAt: new Date(),
+            updatedAt: new Date(),
+            usageHistory: [],
+            totalDownloads: 0
+          };
+          const complianceCheck = checkCompliance(tempAsset);
+
+          if (!complianceCheck.isCompliant && settings.requireGuidelines) {
+            throw new Error(`Compliance check failed: ${complianceCheck.issues.join(', ')}`);
+          }
+
+          if (useSupabase) {
+            // Use Supabase for real file upload
+            setUploadProgress(prev => ({ ...prev, [fileId]: 10 })); // Starting upload
+
+            const uploadedAsset = await uploadFileToSupabase(file, baseAssetData);
+
+            if (!uploadedAsset) {
+              throw new Error('Supabase upload failed');
+            }
+
+            setUploadProgress(prev => ({ ...prev, [fileId]: 100 }));
+            setCompletedUploads(prev => [...prev, fileId]);
+
+            return uploadedAsset;
+          } else {
+            // Fallback to mock upload with progress simulation
+            const assetData = {
+              ...baseAssetData,
+              url: URL.createObjectURL(file),
+              thumbnailUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined,
+            };
+
+            // Simulate upload progress
+            for (let progress = 10; progress <= 100; progress += 20) {
+              setUploadProgress(prev => ({ ...prev, [fileId]: progress }));
+              await new Promise(resolve => setTimeout(resolve, 200)); // Simulate network delay
+            }
+
+            addAsset(assetData);
+            setCompletedUploads(prev => [...prev, fileId]);
+
+            return assetData;
+          }
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Upload failed';
+          setUploadErrors(prev => ({ ...prev, [fileId]: errorMessage }));
+          setUploadProgress(prev => ({ ...prev, [fileId]: 0 }));
+          throw error;
         }
+      });
 
-        // Add asset to store
-        addAsset(assetData);
+      // Wait for all uploads to complete (or fail)
+      const results = await Promise.allSettled(uploadPromises);
+
+      // Check if any uploads succeeded
+      const successfulUploads = results.filter(result => result.status === 'fulfilled').length;
+      const failedUploads = results.filter(result => result.status === 'rejected').length;
+
+      if (successfulUploads > 0) {
+        setUploadStep('complete');
+
+        // Auto close after delay if all uploads succeeded
+        if (failedUploads === 0) {
+          setTimeout(() => {
+            resetForm();
+            onClose?.();
+          }, 2000);
+        }
+      } else {
+        // All uploads failed, go back to configure step
+        setUploadStep('configure');
+        setError('All uploads failed. Please check your files and try again.');
       }
 
-      setUploadStep('complete');
-      
-      // Auto-close after 2 seconds
-      setTimeout(() => {
-        onClose();
-        resetForm();
-      }, 2000);
-
     } catch (error) {
-      console.error('Upload error:', error);
-      setError('Upload failed. Please try again.');
+      console.error('Upload process failed:', error);
+      setError('Upload process failed. Please try again.');
       setUploadStep('configure');
     }
   };
@@ -221,6 +297,9 @@ const BrandAssetUpload: React.FC<BrandAssetUploadProps> = ({
   const resetForm = () => {
     setSelectedFiles([]);
     setUploadStep('select');
+    setUploadProgress({});
+    setUploadErrors({});
+    setCompletedUploads([]);
     setAssetType(preSelectedType || 'logo');
     setAssetVariant('primary');
     setAssetTags('');
@@ -228,6 +307,7 @@ const BrandAssetUpload: React.FC<BrandAssetUploadProps> = ({
     setUsageContexts(['social-media']);
     setIsPrimary(false);
     setRequiresApproval(true);
+    setError('');
   };
 
   const handleClose = () => {
@@ -505,20 +585,187 @@ const BrandAssetUpload: React.FC<BrandAssetUploadProps> = ({
 
             {/* Step 3: Uploading */}
             {uploadStep === 'uploading' && (
-              <div className="flex flex-col items-center justify-center py-12">
-                <div className="w-16 h-16 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mb-4" />
-                <h3 className="text-xl font-medium text-white mb-2">Uploading Assets...</h3>
-                <p className="text-gray-400">Processing {selectedFiles.length} file(s)</p>
+              <div className="space-y-6">
+                <div className="text-center">
+                  <h3 className="text-xl font-medium text-white mb-2">Uploading Assets</h3>
+                  <p className="text-gray-400">Processing {selectedFiles.length} file(s)</p>
+                </div>
+
+                <div className="space-y-3">
+                  {selectedFiles.map((file, index) => {
+                    const fileId = `${file.name}_${index}`;
+                    const progress = uploadProgress[fileId] || 0;
+                    const error = uploadErrors[fileId];
+                    const isCompleted = completedUploads.includes(fileId);
+
+                    return (
+                      <div key={fileId} className="bg-white/5 rounded-lg p-4">
+                        <div className="flex items-center gap-3 mb-2">
+                          <div className="p-2 bg-gradient-to-br from-purple-900/40 to-indigo-900/40 rounded-lg">
+                            {getFileIcon(file)}
+                          </div>
+                          <div className="flex-1">
+                            <div className="font-medium text-white truncate">{file.name}</div>
+                            <div className="text-sm text-gray-400">{formatFileSize(file.size)}</div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {error ? (
+                              <AlertCircle className="w-5 h-5 text-red-400" />
+                            ) : isCompleted ? (
+                              <CheckCircle className="w-5 h-5 text-green-400" />
+                            ) : progress > 0 ? (
+                              <div className="w-5 h-5 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <Clock className="w-5 h-5 text-gray-400" />
+                            )}
+                            <span className="text-sm font-medium text-white min-w-[3rem] text-right">
+                              {error ? 'Error' : `${progress}%`}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Progress Bar */}
+                        <div className="w-full bg-gray-700 rounded-full h-2 mb-2">
+                          <div
+                            className={`h-2 rounded-full transition-all duration-300 ${
+                              error
+                                ? 'bg-red-500'
+                                : isCompleted
+                                ? 'bg-green-500'
+                                : progress > 0
+                                ? 'bg-purple-500'
+                                : 'bg-gray-600'
+                            }`}
+                            style={{ width: error ? '100%' : `${progress}%` }}
+                          />
+                        </div>
+
+                        {/* Error Message */}
+                        {error && (
+                          <div className="text-sm text-red-400 bg-red-900/20 border border-red-500/30 rounded p-2">
+                            {error}
+                          </div>
+                        )}
+
+                        {/* Success Message */}
+                        {isCompleted && !error && (
+                          <div className="text-sm text-green-400">
+                            ✓ Upload completed successfully
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Overall Progress */}
+                <div className="text-center">
+                  <div className="text-sm text-gray-400 mb-2">
+                    {completedUploads.length} of {selectedFiles.length} files completed
+                  </div>
+                  <div className="w-full bg-gray-700 rounded-full h-3">
+                    <div
+                      className="h-3 bg-gradient-to-r from-purple-500 to-indigo-500 rounded-full transition-all duration-300"
+                      style={{
+                        width: `${(completedUploads.length / selectedFiles.length) * 100}%`
+                      }}
+                    />
+                  </div>
+                </div>
               </div>
             )}
 
             {/* Step 4: Complete */}
             {uploadStep === 'complete' && (
-              <div className="flex flex-col items-center justify-center py-12">
-                <CheckCircle className="text-green-500 mb-4" size={64} />
-                <h3 className="text-xl font-medium text-white mb-2">Upload Complete!</h3>
-                <p className="text-gray-400 mb-4">{selectedFiles.length} asset(s) uploaded successfully</p>
-                <p className="text-sm text-gray-400">This window will close automatically...</p>
+              <div className="space-y-6">
+                <div className="text-center">
+                  <CheckCircle className="text-green-500 mx-auto mb-4" size={64} />
+                  <h3 className="text-xl font-medium text-white mb-2">Upload Complete!</h3>
+                </div>
+
+                {/* Upload Summary */}
+                <div className="bg-white/5 border border-white/10 rounded-xl p-6">
+                  <h4 className="text-lg font-medium text-white mb-4">Upload Summary</h4>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                    <div className="bg-green-900/20 border border-green-500/30 rounded-lg p-4">
+                      <div className="flex items-center gap-2 mb-1">
+                        <CheckCircle className="w-5 h-5 text-green-400" />
+                        <span className="text-green-300 font-medium">Successful</span>
+                      </div>
+                      <div className="text-2xl font-bold text-white">{completedUploads.length}</div>
+                      <div className="text-sm text-gray-400">files uploaded</div>
+                    </div>
+
+                    {Object.keys(uploadErrors).length > 0 && (
+                      <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-4">
+                        <div className="flex items-center gap-2 mb-1">
+                          <AlertCircle className="w-5 h-5 text-red-400" />
+                          <span className="text-red-300 font-medium">Failed</span>
+                        </div>
+                        <div className="text-2xl font-bold text-white">{Object.keys(uploadErrors).length}</div>
+                        <div className="text-sm text-gray-400">files failed</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Failed Files Details */}
+                  {Object.keys(uploadErrors).length > 0 && (
+                    <div className="border-t border-white/10 pt-4">
+                      <h5 className="text-sm font-medium text-gray-300 mb-2">Failed Uploads:</h5>
+                      <div className="space-y-2 max-h-32 overflow-y-auto">
+                        {Object.entries(uploadErrors).map(([fileId, error]) => {
+                          const fileName = fileId.split('_').slice(0, -1).join('_');
+                          return (
+                            <div key={fileId} className="text-sm bg-red-900/10 border border-red-500/20 rounded p-2">
+                              <div className="font-medium text-red-300">{fileName}</div>
+                              <div className="text-red-400">{error}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Auto-close message */}
+                {Object.keys(uploadErrors).length === 0 && (
+                  <div className="text-center">
+                    <p className="text-sm text-gray-400">This window will close automatically in 2 seconds...</p>
+                  </div>
+                )}
+
+                {/* Retry option for failed uploads */}
+                {Object.keys(uploadErrors).length > 0 && (
+                  <div className="flex justify-center gap-3">
+                    <button
+                      onClick={() => {
+                        // Reset only failed files for retry
+                        const failedFiles = selectedFiles.filter((file, index) => {
+                          const fileId = `${file.name}_${index}`;
+                          return uploadErrors[fileId];
+                        });
+                        setSelectedFiles(failedFiles);
+                        setUploadStep('configure');
+                        setUploadProgress({});
+                        setUploadErrors({});
+                        setCompletedUploads([]);
+                      }}
+                      className="px-6 py-3 bg-red-600 hover:bg-red-700 rounded-lg transition-colors text-white font-medium"
+                    >
+                      Retry Failed Uploads
+                    </button>
+                    <button
+                      onClick={() => {
+                        resetForm();
+                        onClose?.();
+                      }}
+                      className="px-6 py-3 bg-gray-600 hover:bg-gray-700 rounded-lg transition-colors text-white font-medium"
+                    >
+                      Close
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>

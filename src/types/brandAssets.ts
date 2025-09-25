@@ -240,6 +240,14 @@ export interface BrandAssetState {
   error?: string;
   settings: BrandAssetSettings;
   analytics: BrandAssetAnalytics;
+
+  // Supabase integration state
+  supabase: {
+    initialized: boolean;
+    url?: string;
+    bucketName?: string;
+    error?: string;
+  };
 }
 
 // Pre-defined brand asset templates

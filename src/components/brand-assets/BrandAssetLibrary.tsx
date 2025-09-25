@@ -1,14 +1,21 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Search, Filter, Grid, List, Download, Eye, Edit2, Trash2, 
+import {
+  Search, Filter, Grid, List, Download, Eye, Edit2, Trash2,
   Star, CheckCircle, AlertTriangle, Calendar, User, Tag,
-  MoreVertical, Share2, Copy, Archive, RefreshCw
+  MoreVertical, Share2, Copy, Archive, RefreshCw, GitBranch,
+  FileArchive, Move, Settings, ChevronDown
 } from 'lucide-react';
 import { useBrandAssetsStore } from '../../stores/brandAssetsStore';
 import { BrandAsset, BrandAssetType, BrandAssetFormat, BrandAssetVariant } from '../../types/brandAssets';
+import ExportShareModal from './ExportShareModal';
+import BulkActionsModal from './BulkActionsModal';
 
-const BrandAssetLibrary: React.FC = () => {
+interface BrandAssetLibraryProps {
+  onViewVersions?: (assetId: string) => void;
+}
+
+const BrandAssetLibrary: React.FC<BrandAssetLibraryProps> = ({ onViewVersions }) => {
   const {
     assets,
     filters,
@@ -31,6 +38,23 @@ const BrandAssetLibrary: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
+  const [showExportShareModal, setShowExportShareModal] = useState(false);
+  const [exportShareMode, setExportShareMode] = useState<'export' | 'share'>('export');
+  const [showBulkActionsModal, setShowBulkActionsModal] = useState(false);
+  const [bulkAction, setBulkAction] = useState<'approve' | 'reject' | 'move' | 'tag' | 'delete' | 'edit'>('approve');
+  const [showBulkDropdown, setShowBulkDropdown] = useState(false);
+
+  // Close bulk dropdown when clicking outside
+  React.useEffect(() => {
+    const handleClickOutside = () => {
+      setShowBulkDropdown(false);
+    };
+
+    if (showBulkDropdown) {
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [showBulkDropdown]);
 
   // Filter and sort assets
   const filteredAssets = useMemo(() => {
@@ -183,6 +207,16 @@ const BrandAssetLibrary: React.FC = () => {
           >
             <Edit2 className="w-4 h-4" />
           </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onViewVersions?.(asset.id);
+            }}
+            className="p-2 bg-white/20 rounded-full hover:bg-white/30 transition-colors"
+            title="View Versions"
+          >
+            <GitBranch className="w-4 h-4" />
+          </button>
         </div>
       </div>
 
@@ -334,6 +368,16 @@ const BrandAssetLibrary: React.FC = () => {
         <button
           onClick={(e) => {
             e.stopPropagation();
+            onViewVersions?.(asset.id);
+          }}
+          className="p-2 hover:bg-white/10 rounded transition-colors"
+          title="View Versions"
+        >
+          <GitBranch className="w-4 h-4" />
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
           }}
           className="p-2 hover:bg-white/10 rounded transition-colors"
         >
@@ -357,25 +401,133 @@ const BrandAssetLibrary: React.FC = () => {
         {/* Bulk actions */}
         {selectedAssets.length > 0 && (
           <div className="flex items-center gap-2">
+            {/* Quick Actions */}
             <button
               onClick={() => {
                 selectedAssets.forEach(id => downloadAsset(id));
               }}
-              className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors text-white text-sm"
             >
               <Download className="w-4 h-4" />
               Download ({selectedAssets.length})
             </button>
+
             <button
               onClick={() => {
-                selectedAssets.forEach(id => deleteAsset(id));
-                setSelectedAssets([]);
+                setExportShareMode('export');
+                setShowExportShareModal(true);
               }}
-              className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors text-white text-sm"
             >
-              <Trash2 className="w-4 h-4" />
-              Delete ({selectedAssets.length})
+              <FileArchive className="w-4 h-4" />
+              Export
             </button>
+
+            <button
+              onClick={() => {
+                setExportShareMode('share');
+                setShowExportShareModal(true);
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition-colors text-white text-sm"
+            >
+              <Share2 className="w-4 h-4" />
+              Share
+            </button>
+
+            {/* More Actions Dropdown */}
+            <div className="relative">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowBulkDropdown(!showBulkDropdown);
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded-lg transition-colors text-white text-sm"
+              >
+                <Settings className="w-4 h-4" />
+                More
+                <ChevronDown className={`w-4 h-4 transition-transform ${showBulkDropdown ? 'rotate-180' : ''}`} />
+              </button>
+
+              {showBulkDropdown && (
+                <div className="absolute right-0 top-full mt-2 w-48 bg-gray-800 border border-white/10 rounded-lg shadow-lg z-10">
+                  <div className="p-2">
+                    <button
+                      onClick={() => {
+                        setBulkAction('approve');
+                        setShowBulkActionsModal(true);
+                        setShowBulkDropdown(false);
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-white/5 rounded transition-colors"
+                    >
+                      <CheckCircle className="w-4 h-4 text-green-400" />
+                      Approve Assets
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setBulkAction('reject');
+                        setShowBulkActionsModal(true);
+                        setShowBulkDropdown(false);
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-white/5 rounded transition-colors"
+                    >
+                      <AlertTriangle className="w-4 h-4 text-red-400" />
+                      Reject Assets
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setBulkAction('move');
+                        setShowBulkActionsModal(true);
+                        setShowBulkDropdown(false);
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-white/5 rounded transition-colors"
+                    >
+                      <Move className="w-4 h-4 text-blue-400" />
+                      Move to Collection
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setBulkAction('tag');
+                        setShowBulkActionsModal(true);
+                        setShowBulkDropdown(false);
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-white/5 rounded transition-colors"
+                    >
+                      <Tag className="w-4 h-4 text-purple-400" />
+                      Apply Tags
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setBulkAction('edit');
+                        setShowBulkActionsModal(true);
+                        setShowBulkDropdown(false);
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-white/5 rounded transition-colors"
+                    >
+                      <Edit2 className="w-4 h-4 text-indigo-400" />
+                      Edit Properties
+                    </button>
+
+                    <hr className="border-white/10 my-1" />
+
+                    <button
+                      onClick={() => {
+                        setBulkAction('delete');
+                        setShowBulkActionsModal(true);
+                        setShowBulkDropdown(false);
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-300 hover:text-red-200 hover:bg-red-900/20 rounded transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Delete Assets
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -634,6 +786,23 @@ const BrandAssetLibrary: React.FC = () => {
           </button>
         </div>
       )}
+
+      {/* Export/Share Modal */}
+      <ExportShareModal
+        isOpen={showExportShareModal}
+        onClose={() => setShowExportShareModal(false)}
+        selectedAssets={selectedAssets}
+        mode={exportShareMode}
+      />
+
+      {/* Bulk Actions Modal */}
+      <BulkActionsModal
+        isOpen={showBulkActionsModal}
+        onClose={() => setShowBulkActionsModal(false)}
+        selectedAssets={selectedAssets}
+        action={bulkAction}
+        onComplete={() => setSelectedAssets([])}
+      />
     </div>
   );
 };

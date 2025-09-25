@@ -222,12 +222,12 @@ const ABTestingManager: React.FC<ABTestingManagerProps> = ({
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'running': return 'text-green-600 bg-green-100 dark:bg-green-900/20 dark:text-green-400';
-      case 'completed': return 'text-blue-600 bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400';
-      case 'paused': return 'text-yellow-600 bg-yellow-100 dark:bg-yellow-900/20 dark:text-yellow-400';
-      case 'draft': return 'text-gray-600 bg-gray-100 dark:bg-gray-900/20 dark:text-gray-400';
-      case 'stopped': return 'text-red-600 bg-red-100 dark:bg-red-900/20 dark:text-red-400';
-      default: return 'text-gray-600 bg-gray-100';
+      case 'running': return 'text-purple-400 bg-purple-900/30 border border-purple-500/30';
+      case 'completed': return 'text-green-400 bg-green-900/30 border border-green-500/30';
+      case 'paused': return 'text-gray-400 bg-gray-900/30 border border-gray-500/30';
+      case 'draft': return 'text-gray-400 bg-gray-800/50 border border-gray-600/30';
+      case 'stopped': return 'text-red-400 bg-red-900/30 border border-red-500/30';
+      default: return 'text-gray-400 bg-gray-800/50 border border-gray-600/30';
     }
   };
 
@@ -291,17 +291,17 @@ const ABTestingManager: React.FC<ABTestingManagerProps> = ({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
+          <h2 className="text-2xl font-bold text-white flex items-center gap-3">
             <TestTube className="w-8 h-8 text-blue-500" />
             A/B Testing Manager
           </h2>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">
+          <p className="text-gray-400 mt-1">
             Design, run, and analyze split tests to optimize campaign performance
           </p>
         </div>
         <button
           onClick={() => setShowCreateTest(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors"
         >
           <Plus className="w-4 h-4" />
           Create Test
@@ -313,17 +313,17 @@ const ABTestingManager: React.FC<ABTestingManagerProps> = ({
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6"
+          className="glass-effect rounded-lg p-6"
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Active Tests</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">
+              <p className="text-sm text-gray-400">Active Tests</p>
+              <p className="text-2xl font-bold text-white">
                 {tests.filter(t => t.status === 'running').length}
               </p>
             </div>
-            <div className="p-3 bg-green-100 dark:bg-green-900/20 rounded-lg">
-              <Play className="w-6 h-6 text-green-600 dark:text-green-400" />
+            <div className="p-3 bg-purple-900/30 rounded-lg border border-purple-500/30">
+              <Play className="w-6 h-6 text-green-400" />
             </div>
           </div>
         </motion.div>
@@ -332,17 +332,17 @@ const ABTestingManager: React.FC<ABTestingManagerProps> = ({
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6"
+          className="glass-effect rounded-lg p-6"
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Completed Tests</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">
+              <p className="text-sm text-gray-400">Completed Tests</p>
+              <p className="text-2xl font-bold text-white">
                 {tests.filter(t => t.status === 'completed').length}
               </p>
             </div>
-            <div className="p-3 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
-              <CheckCircle className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            <div className="p-3 bg-blue-900/30 border border-blue-500/30 rounded-lg">
+              <CheckCircle className="w-6 h-6 text-blue-400" />
             </div>
           </div>
         </motion.div>
@@ -351,17 +351,17 @@ const ABTestingManager: React.FC<ABTestingManagerProps> = ({
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6"
+          className="glass-effect rounded-lg p-6"
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Avg. Improvement</p>
-              <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+              <p className="text-sm text-gray-400">Avg. Improvement</p>
+              <p className="text-2xl font-bold text-green-400">
                 +{((tests.filter(t => t.results?.winnerLift).reduce((acc, t) => acc + (t.results?.winnerLift || 0), 0)) / tests.filter(t => t.results?.winnerLift).length || 0).toFixed(1)}%
               </p>
             </div>
-            <div className="p-3 bg-green-100 dark:bg-green-900/20 rounded-lg">
-              <TrendingUp className="w-6 h-6 text-green-600 dark:text-green-400" />
+            <div className="p-3 bg-purple-900/30 rounded-lg border border-purple-500/30">
+              <TrendingUp className="w-6 h-6 text-green-400" />
             </div>
           </div>
         </motion.div>
@@ -370,24 +370,24 @@ const ABTestingManager: React.FC<ABTestingManagerProps> = ({
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
-          className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6"
+          className="glass-effect rounded-lg p-6"
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Total Budget</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">
+              <p className="text-sm text-gray-400">Total Budget</p>
+              <p className="text-2xl font-bold text-white">
                 {formatCurrency(tests.reduce((acc, t) => acc + t.budget, 0))}
               </p>
             </div>
-            <div className="p-3 bg-purple-100 dark:bg-purple-900/20 rounded-lg">
-              <DollarSign className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+            <div className="p-3 bg-purple-900/30 border border-purple-500/30 rounded-lg">
+              <DollarSign className="w-6 h-6 text-purple-400" />
             </div>
           </div>
         </motion.div>
       </div>
 
       {/* Tab Navigation */}
-      <div className="border-b border-gray-200 dark:border-gray-700">
+      <div className="border-b border-purple-500/20">
         <nav className="flex space-x-8">
           {tabs.map((tab) => (
             <button
@@ -395,8 +395,8 @@ const ABTestingManager: React.FC<ABTestingManagerProps> = ({
               onClick={() => setActiveTab(tab.id)}
               className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors ${
                 activeTab === tab.id
-                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+                  ? 'border-purple-500 text-purple-400'
+                  : 'border-transparent text-gray-400 hover:text-gray-300'
               }`}
             >
               <tab.icon className="w-4 h-4" />
@@ -427,13 +427,13 @@ const ABTestingManager: React.FC<ABTestingManagerProps> = ({
                     placeholder="Search tests..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                    className="w-full pl-10 pr-4 py-2 bg-gray-800/50 border border-gray-600/30 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-white placeholder-gray-400"
                   />
                 </div>
                 <select
                   value={filterStatus}
                   onChange={(e) => setFilterStatus(e.target.value)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                  className="px-4 py-2 bg-gray-800/50 border border-gray-600/30 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-white"
                 >
                   <option value="all">All Status</option>
                   <option value="running">Running</option>
@@ -450,26 +450,26 @@ const ABTestingManager: React.FC<ABTestingManagerProps> = ({
                     key={test.id}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 hover:shadow-lg transition-shadow cursor-pointer"
+                    className="glass-effect rounded-lg p-6 hover:bg-gray-800/30 transition-all cursor-pointer"
                     onClick={() => setSelectedTest(test)}
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex items-start gap-4">
-                        <div className="p-2 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
+                        <div className="p-2 bg-purple-900/30 rounded-lg border border-purple-500/30">
                           {React.createElement(getTestTypeIcon(test.type), {
-                            className: "w-5 h-5 text-blue-600 dark:text-blue-400"
+                            className: "w-5 h-5 text-purple-400"
                           })}
                         </div>
                         <div className="flex-1">
                           <div className="flex items-center gap-3 mb-2">
-                            <h3 className="font-semibold text-gray-900 dark:text-white">
+                            <h3 className="font-semibold text-white">
                               {test.name}
                             </h3>
                             <span className={`px-2 py-1 rounded-full text-xs font-medium capitalize ${getStatusColor(test.status)}`}>
                               {test.status}
                             </span>
                           </div>
-                          <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                          <p className="text-sm text-gray-400 mb-3">
                             {test.type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())} •
                             {test.variations.length} variations •
                             {test.duration} days •
@@ -480,20 +480,20 @@ const ABTestingManager: React.FC<ABTestingManagerProps> = ({
                             <div className="flex items-center gap-6 text-sm">
                               <div className="flex items-center gap-1">
                                 <Eye className="w-4 h-4 text-gray-400" />
-                                <span className="text-gray-600 dark:text-gray-400">
+                                <span className="text-gray-400">
                                   {formatNumber(Object.values(test.results.impressions).reduce((a, b) => a + b, 0))} impressions
                                 </span>
                               </div>
                               <div className="flex items-center gap-1">
                                 <MousePointer className="w-4 h-4 text-gray-400" />
-                                <span className="text-gray-600 dark:text-gray-400">
+                                <span className="text-gray-400">
                                   {formatNumber(Object.values(test.results.clicks).reduce((a, b) => a + b, 0))} clicks
                                 </span>
                               </div>
                               {test.results.winner && (
                                 <div className="flex items-center gap-1">
                                   <TrendingUp className="w-4 h-4 text-green-500" />
-                                  <span className="text-green-600 dark:text-green-400 font-medium">
+                                  <span className="text-green-400 font-medium">
                                     +{test.results.winnerLift.toFixed(1)}% lift
                                   </span>
                                 </div>
@@ -505,8 +505,8 @@ const ABTestingManager: React.FC<ABTestingManagerProps> = ({
 
                       {test.status === 'running' && (
                         <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                          <span className="text-sm text-green-600 dark:text-green-400">
+                          <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse"></div>
+                          <span className="text-sm text-green-400">
                             {test.significance}% significance
                           </span>
                         </div>
@@ -526,37 +526,37 @@ const ABTestingManager: React.FC<ABTestingManagerProps> = ({
                   key={test.id}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6"
+                  className="glass-effect rounded-lg p-6"
                 >
                   <div className="flex items-center justify-between mb-6">
                     <div>
-                      <h3 className="font-semibold text-gray-900 dark:text-white text-lg">
+                      <h3 className="font-semibold text-white text-lg">
                         {test.name}
                       </h3>
                       <div className="flex items-center gap-4 mt-2">
-                        <span className="text-sm text-gray-600 dark:text-gray-400">
+                        <span className="text-sm text-gray-400">
                           Day {test.results?.duration || 0} of {test.duration}
                         </span>
-                        <span className="text-sm text-gray-600 dark:text-gray-400">
+                        <span className="text-sm text-gray-400">
                           {test.significance}% significance
                         </span>
                         <div className={`px-2 py-1 rounded-full text-xs font-medium ${
                           test.results?.statisticalSignificance
-                            ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
-                            : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400'
+                            ? 'bg-green-900/30 text-green-400 border border-green-500/30'
+                            : 'bg-yellow-900/30 text-yellow-400 border border-yellow-500/30'
                         }`}>
                           {test.results?.statisticalSignificance ? 'Significant' : 'Not Significant'}
                         </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300">
+                      <button className="p-2 text-gray-400 hover:text-gray-300">
                         <Pause className="w-4 h-4" />
                       </button>
-                      <button className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300">
+                      <button className="p-2 text-gray-400 hover:text-gray-300">
                         <Square className="w-4 h-4" />
                       </button>
-                      <button className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300">
+                      <button className="p-2 text-gray-400 hover:text-gray-300">
                         <Settings className="w-4 h-4" />
                       </button>
                     </div>
@@ -564,13 +564,13 @@ const ABTestingManager: React.FC<ABTestingManagerProps> = ({
 
                   {/* Progress Bar */}
                   <div className="mb-6">
-                    <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400 mb-2">
+                    <div className="flex justify-between text-sm text-gray-400 mb-2">
                       <span>Test Progress</span>
                       <span>{((test.results?.duration || 0) / test.duration * 100).toFixed(0)}%</span>
                     </div>
-                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div className="w-full bg-gray-700/50 rounded-full h-2">
                       <div
-                        className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                        className="bg-purple-500 h-2 rounded-full transition-all duration-300"
                         style={{ width: `${(test.results?.duration || 0) / test.duration * 100}%` }}
                       ></div>
                     </div>
@@ -583,20 +583,20 @@ const ABTestingManager: React.FC<ABTestingManagerProps> = ({
                         key={variation.id}
                         className={`p-4 rounded-lg border ${
                           variation.isControl
-                            ? 'border-blue-200 bg-blue-50 dark:bg-blue-900/10 dark:border-blue-800'
-                            : 'border-gray-200 bg-gray-50 dark:bg-gray-700/50 dark:border-gray-600'
+                            ? 'border-purple-500/30 bg-purple-900/20'
+                            : 'border-gray-600/30 bg-gray-800/50'
                         }`}
                       >
                         <div className="flex items-center justify-between mb-3">
-                          <h4 className="font-medium text-gray-900 dark:text-white">
+                          <h4 className="font-medium text-white">
                             {variation.name}
                             {variation.isControl && (
-                              <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
+                              <span className="ml-2 px-2 py-1 bg-purple-900/30 text-purple-400 text-xs rounded-full border border-purple-500/30">
                                 Control
                               </span>
                             )}
                           </h4>
-                          <span className="text-sm text-gray-600 dark:text-gray-400">
+                          <span className="text-sm text-gray-400">
                             {variation.traffic}% traffic
                           </span>
                         </div>
@@ -604,29 +604,29 @@ const ABTestingManager: React.FC<ABTestingManagerProps> = ({
                         {test.results && (
                           <div className="space-y-2">
                             <div className="flex justify-between text-sm">
-                              <span className="text-gray-600 dark:text-gray-400">Impressions</span>
-                              <span className="font-medium text-gray-900 dark:text-white">
+                              <span className="text-gray-400">Impressions</span>
+                              <span className="font-medium text-white">
                                 {formatNumber(test.results.impressions[variation.id] || 0)}
                               </span>
                             </div>
                             <div className="flex justify-between text-sm">
-                              <span className="text-gray-600 dark:text-gray-400">Clicks</span>
-                              <span className="font-medium text-gray-900 dark:text-white">
+                              <span className="text-gray-400">Clicks</span>
+                              <span className="font-medium text-white">
                                 {formatNumber(test.results.clicks[variation.id] || 0)}
                               </span>
                             </div>
                             <div className="flex justify-between text-sm">
-                              <span className="text-gray-600 dark:text-gray-400">CTR</span>
-                              <span className="font-medium text-gray-900 dark:text-white">
+                              <span className="text-gray-400">CTR</span>
+                              <span className="font-medium text-white">
                                 {formatPercentage(test.results.ctr[variation.id] || 0)}
                               </span>
                             </div>
                             <div className="flex justify-between text-sm">
-                              <span className="text-gray-600 dark:text-gray-400">Conversions</span>
+                              <span className="text-gray-400">Conversions</span>
                               <span className={`font-medium ${
                                 test.results.winner === variation.id
-                                  ? 'text-green-600 dark:text-green-400'
-                                  : 'text-gray-900 dark:text-white'
+                                  ? 'text-green-400'
+                                  : 'text-white'
                               }`}>
                                 {test.results.conversions[variation.id] || 0}
                                 {test.results.winner === variation.id && (
@@ -642,14 +642,14 @@ const ABTestingManager: React.FC<ABTestingManagerProps> = ({
 
                   {/* Recommendations */}
                   {test.recommendations && test.recommendations.length > 0 && (
-                    <div className="mt-6 p-4 bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                    <div className="mt-6 p-4 bg-yellow-900/30 border border-yellow-500/30 rounded-lg">
                       <div className="flex items-start gap-3">
-                        <Lightbulb className="w-5 h-5 text-yellow-600 dark:text-yellow-400 mt-0.5" />
+                        <Lightbulb className="w-5 h-5 text-yellow-400 mt-0.5" />
                         <div>
-                          <h4 className="font-medium text-yellow-800 dark:text-yellow-400 mb-2">
+                          <h4 className="font-medium text-yellow-400 mb-2">
                             Recommendations
                           </h4>
-                          <ul className="space-y-1 text-sm text-yellow-700 dark:text-yellow-300">
+                          <ul className="space-y-1 text-sm text-yellow-400">
                             {test.recommendations.map((rec, index) => (
                               <li key={index} className="flex items-start gap-2">
                                 <span className="text-yellow-500 mt-1">•</span>
@@ -669,21 +669,21 @@ const ABTestingManager: React.FC<ABTestingManagerProps> = ({
           {/* Results Tab */}
           {activeTab === 'results' && selectedTest?.results && (
             <div className="space-y-6">
-              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-                <h3 className="font-semibold text-gray-900 dark:text-white text-lg mb-6">
+              <div className="glass-effect rounded-lg p-6">
+                <h3 className="font-semibold text-white text-lg mb-6">
                   {selectedTest.name} - Test Results
                 </h3>
 
                 {/* Winner Announcement */}
                 {selectedTest.results.winner && (
-                  <div className="mb-6 p-4 bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800 rounded-lg">
+                  <div className="mb-6 p-4 bg-green-900/30 border border-green-500/30 rounded-lg">
                     <div className="flex items-center gap-3">
-                      <Award className="w-6 h-6 text-green-600 dark:text-green-400" />
+                      <Award className="w-6 h-6 text-green-400" />
                       <div>
-                        <h4 className="font-medium text-green-800 dark:text-green-400">
+                        <h4 className="font-medium text-green-400">
                           Test Winner Identified!
                         </h4>
-                        <p className="text-sm text-green-700 dark:text-green-300 mt-1">
+                        <p className="text-sm text-green-400 mt-1">
                           {selectedTest.variations.find(v => v.id === selectedTest.results?.winner)?.name}
                           {' '}shows {selectedTest.results.winnerLift.toFixed(1)}% improvement with{' '}
                           {selectedTest.results.statisticalSignificance ? 'statistical significance' : 'insufficient significance'}
@@ -696,25 +696,25 @@ const ABTestingManager: React.FC<ABTestingManagerProps> = ({
                 {/* Metrics Comparison */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <div>
-                    <h4 className="font-medium text-gray-900 dark:text-white mb-4">Performance Metrics</h4>
+                    <h4 className="font-medium text-white mb-4">Performance Metrics</h4>
                     <div className="space-y-4">
                       {['impressions', 'clicks', 'conversions', 'cost'].map((metric) => (
-                        <div key={metric} className="p-3 border border-gray-200 dark:border-gray-700 rounded-lg">
+                        <div key={metric} className="p-3 bg-gray-800/50 border border-gray-600/30 rounded-lg">
                           <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-medium text-gray-900 dark:text-white capitalize">
+                            <span className="text-sm font-medium text-white capitalize">
                               {metric}
                             </span>
                           </div>
                           <div className="space-y-2">
                             {selectedTest.variations.map((variation) => (
                               <div key={variation.id} className="flex items-center justify-between">
-                                <span className="text-sm text-gray-600 dark:text-gray-400">
+                                <span className="text-sm text-gray-400">
                                   {variation.name}
                                 </span>
                                 <span className={`text-sm font-medium ${
                                   selectedTest.results?.winner === variation.id
-                                    ? 'text-green-600 dark:text-green-400'
-                                    : 'text-gray-900 dark:text-white'
+                                    ? 'text-green-400'
+                                    : 'text-white'
                                 }`}>
                                   {metric === 'cost'
                                     ? formatCurrency((selectedTest.results as any)[metric][variation.id] || 0)
@@ -730,25 +730,25 @@ const ABTestingManager: React.FC<ABTestingManagerProps> = ({
                   </div>
 
                   <div>
-                    <h4 className="font-medium text-gray-900 dark:text-white mb-4">Efficiency Metrics</h4>
+                    <h4 className="font-medium text-white mb-4">Efficiency Metrics</h4>
                     <div className="space-y-4">
                       {['ctr', 'cpc', 'cpa', 'roas'].map((metric) => (
-                        <div key={metric} className="p-3 border border-gray-200 dark:border-gray-700 rounded-lg">
+                        <div key={metric} className="p-3 bg-gray-800/50 border border-gray-600/30 rounded-lg">
                           <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-medium text-gray-900 dark:text-white uppercase">
+                            <span className="text-sm font-medium text-white uppercase">
                               {metric}
                             </span>
                           </div>
                           <div className="space-y-2">
                             {selectedTest.variations.map((variation) => (
                               <div key={variation.id} className="flex items-center justify-between">
-                                <span className="text-sm text-gray-600 dark:text-gray-400">
+                                <span className="text-sm text-gray-400">
                                   {variation.name}
                                 </span>
                                 <span className={`text-sm font-medium ${
                                   selectedTest.results?.winner === variation.id
-                                    ? 'text-green-600 dark:text-green-400'
-                                    : 'text-gray-900 dark:text-white'
+                                    ? 'text-green-400'
+                                    : 'text-white'
                                 }`}>
                                   {metric === 'ctr'
                                     ? formatPercentage((selectedTest.results as any)[metric][variation.id] || 0)
@@ -774,27 +774,27 @@ const ABTestingManager: React.FC<ABTestingManagerProps> = ({
             <div className="space-y-6">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Test Performance Summary */}
-                <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-                  <h3 className="font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                <div className="glass-effect rounded-lg p-6">
+                  <h3 className="font-semibold text-white mb-4 flex items-center gap-2">
                     <PieChart className="w-5 h-5 text-blue-500" />
                     Test Performance Summary
                   </h3>
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-900/10 rounded-lg">
-                      <span className="text-sm text-green-800 dark:text-green-400">Successful Tests</span>
-                      <span className="font-medium text-green-900 dark:text-green-300">
+                    <div className="flex items-center justify-between p-3 bg-green-900/30 border border-green-500/30 rounded-lg">
+                      <span className="text-sm text-green-400">Successful Tests</span>
+                      <span className="font-medium text-green-400">
                         {tests.filter(t => t.results?.statisticalSignificance).length} / {tests.length}
                       </span>
                     </div>
-                    <div className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-900/10 rounded-lg">
-                      <span className="text-sm text-blue-800 dark:text-blue-400">Average Test Duration</span>
-                      <span className="font-medium text-blue-900 dark:text-blue-300">
+                    <div className="flex items-center justify-between p-3 bg-blue-900/30 border border-blue-500/30 rounded-lg">
+                      <span className="text-sm text-blue-400">Average Test Duration</span>
+                      <span className="font-medium text-blue-400">
                         {(tests.reduce((acc, t) => acc + t.duration, 0) / tests.length).toFixed(0)} days
                       </span>
                     </div>
-                    <div className="flex items-center justify-between p-3 bg-purple-50 dark:bg-purple-900/10 rounded-lg">
-                      <span className="text-sm text-purple-800 dark:text-purple-400">Total Budget Tested</span>
-                      <span className="font-medium text-purple-900 dark:text-purple-300">
+                    <div className="flex items-center justify-between p-3 bg-purple-900/30 border border-purple-500/30 rounded-lg">
+                      <span className="text-sm text-purple-400">Total Budget Tested</span>
+                      <span className="font-medium text-purple-400">
                         {formatCurrency(tests.reduce((acc, t) => acc + t.budget, 0))}
                       </span>
                     </div>
@@ -802,41 +802,41 @@ const ABTestingManager: React.FC<ABTestingManagerProps> = ({
                 </div>
 
                 {/* Key Learnings */}
-                <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-                  <h3 className="font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                <div className="glass-effect rounded-lg p-6">
+                  <h3 className="font-semibold text-white mb-4 flex items-center gap-2">
                     <Lightbulb className="w-5 h-5 text-yellow-500" />
                     Key Learnings
                   </h3>
                   <div className="space-y-3">
-                    <div className="flex items-start gap-3 p-3 bg-yellow-50 dark:bg-yellow-900/10 rounded-lg">
+                    <div className="flex items-start gap-3 p-3 bg-yellow-900/30 border border-yellow-500/30 rounded-lg">
                       <Star className="w-4 h-4 text-yellow-500 mt-0.5" />
                       <div>
-                        <p className="text-sm font-medium text-yellow-800 dark:text-yellow-400">
+                        <p className="text-sm font-medium text-yellow-400">
                           Festive themes increase conversions
                         </p>
-                        <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">
+                        <p className="text-xs text-yellow-400 mt-1">
                           Holiday-themed creatives showed 29% lift
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-start gap-3 p-3 bg-green-50 dark:bg-green-900/10 rounded-lg">
+                    <div className="flex items-start gap-3 p-3 bg-green-900/30 border border-green-500/30 rounded-lg">
                       <Star className="w-4 h-4 text-green-500 mt-0.5" />
                       <div>
-                        <p className="text-sm font-medium text-green-800 dark:text-green-400">
+                        <p className="text-sm font-medium text-green-400">
                           Lookalike audiences outperform broad targeting
                         </p>
-                        <p className="text-xs text-green-700 dark:text-green-300 mt-1">
+                        <p className="text-xs text-green-400 mt-1">
                           134% improvement in ROAS
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-start gap-3 p-3 bg-blue-50 dark:bg-blue-900/10 rounded-lg">
+                    <div className="flex items-start gap-3 p-3 bg-blue-900/30 border border-blue-500/30 rounded-lg">
                       <Star className="w-4 h-4 text-blue-500 mt-0.5" />
                       <div>
-                        <p className="text-sm font-medium text-blue-800 dark:text-blue-400">
+                        <p className="text-sm font-medium text-blue-400">
                           Mobile placement drives higher CTR
                         </p>
-                        <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                        <p className="text-xs text-blue-400 mt-1">
                           Average 18% higher click-through rate
                         </p>
                       </div>
@@ -846,47 +846,47 @@ const ABTestingManager: React.FC<ABTestingManagerProps> = ({
               </div>
 
               {/* Recommendations */}
-              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-                <h3 className="font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+              <div className="glass-effect rounded-lg p-6">
+                <h3 className="font-semibold text-white mb-4 flex items-center gap-2">
                   <Zap className="w-5 h-5 text-orange-500" />
                   Optimization Recommendations
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="p-4 border border-orange-200 dark:border-orange-800 rounded-lg">
-                    <h4 className="font-medium text-orange-800 dark:text-orange-400 mb-2">
+                  <div className="p-4 bg-orange-900/30 border border-orange-500/30 rounded-lg">
+                    <h4 className="font-medium text-orange-400 mb-2">
                       Creative Testing
                     </h4>
-                    <ul className="text-sm text-orange-700 dark:text-orange-300 space-y-1">
+                    <ul className="text-sm text-orange-400 space-y-1">
                       <li>• Test seasonal variations quarterly</li>
                       <li>• A/B test color schemes and imagery</li>
                       <li>• Try video vs static creative formats</li>
                     </ul>
                   </div>
-                  <div className="p-4 border border-green-200 dark:border-green-800 rounded-lg">
-                    <h4 className="font-medium text-green-800 dark:text-green-400 mb-2">
+                  <div className="p-4 bg-green-900/30 border border-green-500/30 rounded-lg">
+                    <h4 className="font-medium text-green-400 mb-2">
                       Audience Optimization
                     </h4>
-                    <ul className="text-sm text-green-700 dark:text-green-300 space-y-1">
+                    <ul className="text-sm text-green-400 space-y-1">
                       <li>• Expand lookalike audience testing</li>
                       <li>• Test interest vs behavior targeting</li>
                       <li>• Experiment with audience exclusions</li>
                     </ul>
                   </div>
-                  <div className="p-4 border border-blue-200 dark:border-blue-800 rounded-lg">
-                    <h4 className="font-medium text-blue-800 dark:text-blue-400 mb-2">
+                  <div className="p-4 bg-blue-900/30 border border-blue-500/30 rounded-lg">
+                    <h4 className="font-medium text-blue-400 mb-2">
                       Bid Strategy
                     </h4>
-                    <ul className="text-sm text-blue-700 dark:text-blue-300 space-y-1">
+                    <ul className="text-sm text-blue-400 space-y-1">
                       <li>• Test target CPA vs maximize conversions</li>
                       <li>• Compare manual vs automated bidding</li>
                       <li>• Test different optimization windows</li>
                     </ul>
                   </div>
-                  <div className="p-4 border border-purple-200 dark:border-purple-800 rounded-lg">
-                    <h4 className="font-medium text-purple-800 dark:text-purple-400 mb-2">
+                  <div className="p-4 bg-purple-900/30 border border-purple-500/30 rounded-lg">
+                    <h4 className="font-medium text-purple-400 mb-2">
                       Landing Page
                     </h4>
-                    <ul className="text-sm text-purple-700 dark:text-purple-300 space-y-1">
+                    <ul className="text-sm text-purple-400 space-y-1">
                       <li>• Test different page layouts</li>
                       <li>• A/B test call-to-action buttons</li>
                       <li>• Optimize for mobile experience</li>

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { 
+import {
   BrandAsset,
   BrandGuidelines,
   BrandAssetCollection,
@@ -14,6 +14,8 @@ import {
   DEFAULT_COMPLIANCE_RULES,
   ComplianceRule
 } from '../types/brandAssets';
+import { supabaseStorage } from '../utils/supabase-storage';
+import { AssetMetadata } from '../types/supabase';
 
 interface BrandAssetActions {
   // Asset management
@@ -28,6 +30,7 @@ interface BrandAssetActions {
   // Version control
   createAssetVersion: (originalId: string, newAsset: Omit<BrandAsset, 'id' | 'uploadedAt' | 'updatedAt' | 'usageHistory' | 'totalDownloads' | 'parentAssetId' | 'versionNumber'>) => void;
   setAsPrimary: (id: string) => void;
+  revertToVersion: (versionId: string) => void;
   
   // Guidelines management
   setGuidelines: (guidelines: BrandGuidelines[]) => void;
@@ -98,6 +101,16 @@ interface BrandAssetActions {
   // Export and sharing
   exportAssets: (assetIds: string[], format: 'zip' | 'pdf') => Promise<void>;
   generateShareLink: (assetIds: string[], expiresIn?: number) => string;
+
+  // Missing functions referenced in components
+  downloadAsset: (assetId: string) => Promise<void>;
+  toggleAssetApproval: (assetId: string) => void;
+  setSorting: (sortBy: 'name' | 'date' | 'usage' | 'type' | 'size', sortOrder: 'asc' | 'desc') => void;
+
+  // Supabase integration functions
+  initializeSupabase: (url: string, anonKey: string, bucketName?: string) => Promise<void>;
+  uploadFileToSupabase: (file: File, assetData: Omit<BrandAsset, 'id' | 'uploadedAt' | 'updatedAt' | 'usageHistory' | 'totalDownloads' | 'url' | 'thumbnailUrl'>) => Promise<BrandAsset | null>;
+  getSupabaseStatus: () => { initialized: boolean; error?: string };
 }
 
 const defaultSettings: BrandAssetSettings = {
@@ -161,6 +174,14 @@ export const useBrandAssetsStore = create<BrandAssetState & BrandAssetActions>()
       error: undefined,
       settings: defaultSettings,
       analytics: defaultAnalytics,
+
+      // Supabase state
+      supabase: {
+        initialized: false,
+        url: undefined,
+        bucketName: undefined,
+        error: undefined,
+      },
 
       // Asset management
       setAssets: (assets) => set({ assets }),
@@ -284,6 +305,30 @@ export const useBrandAssetsStore = create<BrandAssetState & BrandAssetActions>()
             return a;
           }),
         }));
+      },
+
+      revertToVersion: (versionId) => {
+        const { assets } = get();
+        const versionAsset = assets.find((a) => a.id === versionId);
+        if (!versionAsset) return;
+
+        // Find the original asset (if this is a version)
+        const originalId = versionAsset.parentAssetId || versionId;
+        const originalAsset = assets.find((a) => a.id === originalId);
+        if (!originalAsset) return;
+
+        // Create a new version based on the selected version
+        const newVersionData = {
+          ...versionAsset,
+          name: originalAsset.name, // Keep original name
+          clientId: originalAsset.clientId, // Keep original client
+          // TODO: In real implementation, copy the actual file content from Supabase
+        };
+
+        // Remove id and version-specific fields to create a new version
+        const { id, uploadedAt, updatedAt, usageHistory, totalDownloads, parentAssetId, versionNumber, ...cleanData } = newVersionData;
+
+        get().createAssetVersion(originalId, cleanData);
       },
 
       // Guidelines management
@@ -724,20 +769,290 @@ export const useBrandAssetsStore = create<BrandAssetState & BrandAssetActions>()
 
       // Export and sharing
       exportAssets: async (assetIds, format) => {
-        // TODO: Implement export functionality
-        console.log('Exporting assets:', assetIds, 'as', format);
-        set({ error: 'Export functionality not yet implemented' });
+        try {
+          const { assets } = get();
+          const selectedAssets = assets.filter(asset => assetIds.includes(asset.id));
+
+          if (selectedAssets.length === 0) {
+            throw new Error('No assets selected for export');
+          }
+
+          set({ isLoading: true, error: undefined });
+
+          if (format === 'zip') {
+            // Create ZIP file with JSZip
+            if (typeof window !== 'undefined' && window.JSZip) {
+              const zip = new window.JSZip();
+              const folder = zip.folder('brand-assets');
+
+              // Add assets to ZIP
+              for (const asset of selectedAssets) {
+                try {
+                  // For demo purposes, create a text file with asset metadata
+                  // In real implementation, fetch actual file from Supabase or CDN
+                  const metadata = `Asset Name: ${asset.name}
+Description: ${asset.description || 'No description'}
+Type: ${asset.type}
+Format: ${asset.format}
+Size: ${asset.fileSize} bytes
+Uploaded: ${asset.uploadedAt}
+Tags: ${asset.tags.join(', ')}
+URL: ${asset.url}
+
+This is a demo export. In production, the actual file would be included.`;
+
+                  folder?.file(`${asset.name}_metadata.txt`, metadata);
+
+                  // TODO: Add actual file blob
+                  // const response = await fetch(asset.url);
+                  // const blob = await response.blob();
+                  // folder?.file(asset.name, blob);
+                } catch (error) {
+                  console.warn(`Failed to add ${asset.name} to zip:`, error);
+                }
+              }
+
+              // Generate and download ZIP
+              const zipBlob = await zip.generateAsync({ type: 'blob' });
+              const url = URL.createObjectURL(zipBlob);
+              const link = document.createElement('a');
+              link.href = url;
+              link.download = `brand-assets-${Date.now()}.zip`;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              URL.revokeObjectURL(url);
+            } else {
+              throw new Error('JSZip library not available');
+            }
+
+          } else if (format === 'pdf') {
+            // Generate PDF report with asset information
+            const reportContent = `
+BRAND ASSET EXPORT REPORT
+Generated: ${new Date().toLocaleString()}
+Total Assets: ${selectedAssets.length}
+
+${selectedAssets.map((asset, index) => `
+${index + 1}. ${asset.name}
+   Type: ${asset.type}
+   Format: ${asset.format}
+   Size: ${(asset.fileSize / 1024).toFixed(2)} KB
+   Uploaded: ${asset.uploadedAt.toLocaleDateString()}
+   Tags: ${asset.tags.join(', ')}
+   URL: ${asset.url}
+   ${asset.description ? `Description: ${asset.description}` : ''}
+`).join('\n')}
+
+End of Report`;
+
+            // Create a text file for demo (in production, use PDF library like jsPDF)
+            const blob = new Blob([reportContent], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `brand-assets-report-${Date.now()}.txt`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+          }
+
+          set({ isLoading: false });
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Export failed';
+          set({ isLoading: false, error: errorMessage });
+          console.error('Export error:', error);
+        }
       },
 
       generateShareLink: (assetIds, expiresIn = 7 * 24 * 60 * 60 * 1000) => {
-        // Generate a temporary share link
-        const shareId = `share_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-        const expiryDate = new Date(Date.now() + expiresIn);
-        
-        // TODO: Store share link in backend
-        console.log('Generated share link:', shareId, 'expires:', expiryDate);
-        
-        return `${window.location.origin}/share/${shareId}`;
+        try {
+          // Generate a secure share ID
+          const shareId = `share_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+          const expiryDate = new Date(Date.now() + expiresIn);
+
+          // In production, this would be stored in a database
+          const shareData = {
+            id: shareId,
+            assetIds,
+            expiresAt: expiryDate,
+            createdAt: new Date(),
+            accessCount: 0,
+            maxAccess: undefined as number | undefined,
+            password: undefined as string | undefined
+          };
+
+          // Store in localStorage for demo (in production, use backend)
+          const existingShares = JSON.parse(localStorage.getItem('brandAssetShares') || '{}');
+          existingShares[shareId] = shareData;
+          localStorage.setItem('brandAssetShares', JSON.stringify(existingShares));
+
+          console.log('Generated share link:', shareId, 'expires:', expiryDate);
+
+          return `${window.location.origin}/share/${shareId}`;
+        } catch (error) {
+          console.error('Failed to generate share link:', error);
+          return '';
+        }
+      },
+
+      // Missing function implementations
+      downloadAsset: async (assetId) => {
+        const { assets, incrementDownloadCount } = get();
+        const asset = assets.find(a => a.id === assetId);
+
+        if (!asset) {
+          set({ error: 'Asset not found' });
+          return;
+        }
+
+        try {
+          // For now, trigger browser download of the asset URL
+          // TODO: Replace with actual Supabase download implementation
+          const link = document.createElement('a');
+          link.href = asset.url;
+          link.download = asset.name;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+
+          // Track the download
+          incrementDownloadCount(assetId);
+        } catch (error) {
+          console.error('Download failed:', error);
+          set({ error: 'Download failed. Please try again.' });
+        }
+      },
+
+      toggleAssetApproval: (assetId) => {
+        const { assets } = get();
+        const asset = assets.find(a => a.id === assetId);
+
+        if (asset) {
+          get().updateAsset(assetId, {
+            isApproved: !asset.isApproved
+          });
+        }
+      },
+
+      setSorting: (sortBy, sortOrder) => {
+        set({ sortBy, sortOrder });
+      },
+
+      // Supabase integration functions
+      initializeSupabase: async (url, anonKey, bucketName = 'brand-assets') => {
+        try {
+          supabaseStorage.initialize({
+            url,
+            anonKey,
+            bucketName
+          });
+
+          // Test the connection by creating bucket if needed
+          const bucketResult = await supabaseStorage.createBucket(true);
+
+          set((state) => ({
+            supabase: {
+              initialized: true,
+              url,
+              bucketName,
+              error: bucketResult.error?.message
+            }
+          }));
+
+          if (bucketResult.error && !bucketResult.error.message.includes('already exists')) {
+            console.warn('Supabase bucket creation warning:', bucketResult.error.message);
+          }
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Failed to initialize Supabase';
+          set((state) => ({
+            supabase: {
+              initialized: false,
+              url,
+              bucketName,
+              error: errorMessage
+            }
+          }));
+          console.error('Supabase initialization error:', error);
+        }
+      },
+
+      uploadFileToSupabase: async (file, assetData) => {
+        const { supabase: supabaseState } = get();
+
+        if (!supabaseState.initialized) {
+          console.error('Supabase not initialized');
+          return null;
+        }
+
+        try {
+          set({ isLoading: true, error: undefined });
+
+          // Create asset metadata
+          const metadata: AssetMetadata = {
+            originalName: file.name,
+            mimeType: file.type,
+            size: file.size,
+            uploadedBy: assetData.uploadedBy,
+            clientId: assetData.clientId,
+            assetType: assetData.type,
+            version: assetData.versionNumber,
+            parentAssetId: assetData.parentAssetId,
+            tags: assetData.tags,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+
+          // Upload to Supabase
+          const uploadResult = await supabaseStorage.uploadBrandAsset(file, metadata);
+
+          if (uploadResult.error) {
+            set({ isLoading: false, error: uploadResult.error.message });
+            return null;
+          }
+
+          if (!uploadResult.data) {
+            set({ isLoading: false, error: 'Upload failed - no data returned' });
+            return null;
+          }
+
+          // Create the brand asset with Supabase URLs
+          const newAsset: BrandAsset = {
+            ...assetData,
+            id: generateId(),
+            url: uploadResult.data.url,
+            thumbnailUrl: uploadResult.data.thumbnailUrl || uploadResult.data.url,
+            uploadedAt: new Date(),
+            updatedAt: new Date(),
+            usageHistory: [],
+            totalDownloads: 0,
+            // Store Supabase path for future operations
+            metadata: {
+              ...assetData.metadata,
+              supabasePath: uploadResult.data.path
+            }
+          };
+
+          // Add to store
+          get().addAsset(newAsset);
+
+          set({ isLoading: false, error: undefined });
+          return newAsset;
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Upload failed';
+          set({ isLoading: false, error: errorMessage });
+          console.error('Supabase upload error:', error);
+          return null;
+        }
+      },
+
+      getSupabaseStatus: () => {
+        const { supabase } = get();
+        return {
+          initialized: supabase.initialized,
+          error: supabase.error
+        };
       },
 
       // Initialize sample data

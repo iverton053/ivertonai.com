@@ -86,8 +86,18 @@ const AssetVersionControl: React.FC<AssetVersionControlProps> = ({
   }
 
   const handleCreateVersion = () => {
-    if (versionNotes.trim()) {
-      createAssetVersion(assetId, versionNotes.trim());
+    if (versionNotes.trim() && primaryAsset) {
+      // Create a new version based on the current asset
+      const newVersionData = {
+        ...primaryAsset,
+        notes: versionNotes.trim(),
+        // TODO: In real implementation, this would create a copy with updated file content
+      };
+
+      // Remove fields that should not be copied
+      const { id, uploadedAt, updatedAt, usageHistory, totalDownloads, parentAssetId, versionNumber, ...cleanData } = newVersionData;
+
+      createAssetVersion(assetId, cleanData);
       setVersionNotes('');
       setShowCreateVersion(false);
     }

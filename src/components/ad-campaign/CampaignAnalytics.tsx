@@ -384,9 +384,9 @@ const CampaignAnalytics: React.FC<CampaignAnalyticsProps> = ({
   };
 
   const getChangeDirection = (change: number) => {
-    if (change > 0) return { icon: ArrowUp, color: 'text-green-500', bg: 'bg-green-100 dark:bg-green-900/20' };
-    if (change < 0) return { icon: ArrowDown, color: 'text-red-500', bg: 'bg-red-100 dark:bg-red-900/20' };
-    return { icon: ArrowUp, color: 'text-gray-500', bg: 'bg-gray-100 dark:bg-gray-900/20' };
+    if (change > 0) return { icon: ArrowUp, color: 'text-green-400', bg: 'bg-green-900/30' };
+    if (change < 0) return { icon: ArrowDown, color: 'text-red-400', bg: 'bg-red-900/30' };
+    return { icon: ArrowUp, color: 'text-gray-400', bg: 'bg-gray-800/50' };
   };
 
   const exportData = () => {
@@ -454,7 +454,7 @@ const CampaignAnalytics: React.FC<CampaignAnalyticsProps> = ({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
+          <h2 className="text-2xl font-bold text-white flex items-center gap-3">
             <BarChart3 className="w-8 h-8 text-blue-500" />
             Campaign Analytics
           </h2>
@@ -485,7 +485,7 @@ const CampaignAnalytics: React.FC<CampaignAnalyticsProps> = ({
 
           <button
             onClick={exportData}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors"
           >
             <Download className="w-4 h-4" />
             Export
@@ -500,7 +500,7 @@ const CampaignAnalytics: React.FC<CampaignAnalyticsProps> = ({
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4 border border-gray-200 dark:border-gray-700"
+            className="glass-effect rounded-lg p-4"
           >
             <div className="flex flex-wrap gap-4">
               <div>
@@ -560,10 +560,10 @@ const CampaignAnalytics: React.FC<CampaignAnalyticsProps> = ({
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.1 }}
-              className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4"
+              className="glass-effect rounded-lg p-4"
             >
               <div className="flex items-center justify-between mb-2">
-                <div className="p-2 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
+                <div className="p-2 bg-purple-900/30 rounded-lg border border-purple-500/30">
                   <metric.icon className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                 </div>
                 <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${changeData.bg}`}>
@@ -573,7 +573,7 @@ const CampaignAnalytics: React.FC<CampaignAnalyticsProps> = ({
                   </span>
                 </div>
               </div>
-              <div className="text-2xl font-bold text-gray-900 dark:text-white">
+              <div className="text-2xl font-bold text-white">
                 {getMetricValue(metric.key, data.overview)}
               </div>
               <div className="text-sm text-gray-600 dark:text-gray-400">
@@ -617,9 +617,9 @@ const CampaignAnalytics: React.FC<CampaignAnalyticsProps> = ({
           {activeTab === 'overview' && (
             <div className="space-y-6">
               {/* Performance Timeline */}
-              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+              <div className="glass-effect rounded-lg p-6">
                 <div className="flex items-center justify-between mb-6">
-                  <h3 className="font-semibold text-gray-900 dark:text-white text-lg">
+                  <h3 className="font-semibold text-white text-lg">
                     Performance Timeline
                   </h3>
                   <div className="flex items-center gap-2">
@@ -675,7 +675,7 @@ const CampaignAnalytics: React.FC<CampaignAnalyticsProps> = ({
               </div>
 
               {/* Campaign Performance Comparison */}
-              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+              <div className="glass-effect rounded-lg p-6">
                 <h3 className="font-semibold text-gray-900 dark:text-white text-lg mb-6">
                   Campaign Performance Comparison
                 </h3>
@@ -716,9 +716,9 @@ const CampaignAnalytics: React.FC<CampaignAnalyticsProps> = ({
           {/* Performance Tab */}
           {activeTab === 'performance' && (
             <div className="space-y-6">
-              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+              <div className="glass-effect rounded-lg overflow-hidden">
                 <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-                  <h3 className="font-semibold text-gray-900 dark:text-white text-lg">
+                  <h3 className="font-semibold text-white text-lg">
                     Campaign Performance Details
                   </h3>
                 </div>
@@ -806,7 +806,7 @@ const CampaignAnalytics: React.FC<CampaignAnalyticsProps> = ({
           {activeTab === 'audience' && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Age Demographics */}
-              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+              <div className="glass-effect rounded-lg p-6">
                 <h3 className="font-semibold text-gray-900 dark:text-white text-lg mb-6">
                   Age Demographics
                 </h3>
@@ -831,7 +831,7 @@ const CampaignAnalytics: React.FC<CampaignAnalyticsProps> = ({
               </div>
 
               {/* Gender Distribution */}
-              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+              <div className="glass-effect rounded-lg p-6">
                 <h3 className="font-semibold text-gray-900 dark:text-white text-lg mb-6">
                   Gender Distribution
                 </h3>
@@ -891,7 +891,7 @@ const CampaignAnalytics: React.FC<CampaignAnalyticsProps> = ({
           {activeTab === 'devices' && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Device Performance */}
-              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+              <div className="glass-effect rounded-lg p-6">
                 <h3 className="font-semibold text-gray-900 dark:text-white text-lg mb-6">
                   Device Performance
                 </h3>
@@ -943,7 +943,7 @@ const CampaignAnalytics: React.FC<CampaignAnalyticsProps> = ({
               </div>
 
               {/* Geographic Performance */}
-              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+              <div className="glass-effect rounded-lg p-6">
                 <h3 className="font-semibold text-gray-900 dark:text-white text-lg mb-6">
                   Top Performing Locations
                 </h3>
@@ -975,7 +975,7 @@ const CampaignAnalytics: React.FC<CampaignAnalyticsProps> = ({
           {activeTab === 'conversion' && (
             <div className="space-y-6">
               {/* Conversion Funnel */}
-              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+              <div className="glass-effect rounded-lg p-6">
                 <h3 className="font-semibold text-gray-900 dark:text-white text-lg mb-6">
                   Conversion Funnel
                 </h3>
@@ -996,7 +996,7 @@ const CampaignAnalytics: React.FC<CampaignAnalyticsProps> = ({
                         </div>
                         <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                           <div
-                            className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                            className="bg-purple-500 h-2 rounded-full transition-all duration-300"
                             style={{ width: `${stage.conversion_rate}%` }}
                           ></div>
                         </div>
@@ -1008,7 +1008,7 @@ const CampaignAnalytics: React.FC<CampaignAnalyticsProps> = ({
 
               {/* Conversion Attribution */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+                <div className="glass-effect rounded-lg p-6">
                   <h3 className="font-semibold text-gray-900 dark:text-white text-lg mb-6">
                     Attribution by Channel
                   </h3>
@@ -1035,7 +1035,7 @@ const CampaignAnalytics: React.FC<CampaignAnalyticsProps> = ({
                   </div>
                 </div>
 
-                <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+                <div className="glass-effect rounded-lg p-6">
                   <h3 className="font-semibold text-gray-900 dark:text-white text-lg mb-6">
                     Top Conversion Paths
                   </h3>
