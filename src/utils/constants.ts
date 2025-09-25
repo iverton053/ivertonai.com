@@ -107,6 +107,19 @@ export const sidebarSections: SidebarSection[] = [
     isCollapsible: true,
     defaultExpanded: false
   },
+  // Content Management Section
+  {
+    id: 'content-management',
+    label: 'Content Management',
+    icon: 'FileImage',
+    items: [
+      { id: 'file-manager', label: 'File Manager', icon: 'FolderOpen' },
+      { id: 'brand-assets', label: 'Brand Assets', icon: 'Palette' },
+      { id: 'notes', label: 'Sticky Notes', icon: 'StickyNote' }
+    ],
+    isCollapsible: true,
+    defaultExpanded: false
+  },
   // Operations Section
   {
     id: 'operations',
@@ -114,10 +127,7 @@ export const sidebarSections: SidebarSection[] = [
     icon: 'Cog',
     items: [
       { id: 'communication', label: 'Communication Hub', icon: 'MessageCircle' },
-      { id: 'file-manager', label: 'File Manager', icon: 'FolderOpen' },
-      { id: 'brand-assets', label: 'Brand Assets', icon: 'Palette' },
       { id: 'content-approval', label: 'Content Approval', icon: 'CheckCircle2', badge: '3' },
-      { id: 'notes', label: 'Sticky Notes', icon: 'StickyNote' },
       { id: 'automations', label: 'Automations', icon: 'Zap' },
       { id: 'integrations', label: 'Integrations', icon: 'Puzzle' }
     ],

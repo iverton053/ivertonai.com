@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, Suspense, lazy } from 'react';
 import { motion } from 'framer-motion';
 import Sidebar from './Sidebar';
 import TopHeader from './TopHeader';
@@ -6,35 +6,37 @@ import Icon from './Icon';
 import QuickStatsCard from './widgets/QuickStatsCard';
 import CommandPalette from './modals/CommandPalette';
 import AddWidgetModal from './modals/AddWidgetModal';
-import EnhancedHistory from './EnhancedHistory';
-import Analytics from './Analytics';
-import EnhancedReports from './EnhancedReports';
-import Settings from './Settings';
-import TeamManagement from './agency/TeamManagement';
-import PortalManagement from './client-portal/PortalManagement';
-import FinancialDashboard from './financial/FinancialDashboard';
-import PredictiveAnalytics from './PredictiveAnalytics';
-import EnhancedAdCampaignManager from './ad-campaign/EnhancedAdCampaignManager';
-import EnhancedCRMManager from './crm/EnhancedCRMManager';
-import IntegrationsMarketplace from './integrations/IntegrationsMarketplace';
 import WidgetGrid from './widgets/WidgetGrid';
 import WidgetContent from './widgets/WidgetContent';
 import ClientAwareWidget from './widgets/ClientAwareWidget';
-import EmailMarketingDashboard from './email-marketing/EmailMarketingDashboard';
-import SocialMediaDashboard from './social-media/SocialMediaDashboard';
-import AutomationDashboard from './automation/AutomationDashboard';
-import OverviewDashboard from './overview/OverviewDashboard';
-import CommunicationHub from './communication/CommunicationHub';
-import FileManager from './file-manager/FileManager';
-import NotesBoard from './notes/NotesBoard';
-import BrandAssetsPage from './brand-assets/BrandAssetsPage';
-import ApprovalBoard from './content-approval/ApprovalBoard';
-import AIConsoleSection from './dashboard/AIConsoleSection';
 import HorizontalWidgetNavigator from './widgets/HorizontalWidgetNavigator';
-import HorizontalNavigatorDemo from './demos/HorizontalNavigatorDemo';
-import AIScriptGenerator from './content-generation/AIScriptGenerator';
-import BlogPostGenerator from './content-generation/BlogPostGenerator';
-import LandingPageCopyGenerator from './content-generation/LandingPageCopyGenerator';
+
+// Lazy-loaded components for better performance
+const EnhancedHistory = lazy(() => import('./EnhancedHistory'));
+const Analytics = lazy(() => import('./Analytics'));
+const EnhancedReports = lazy(() => import('./EnhancedReports'));
+const Settings = lazy(() => import('./Settings'));
+const TeamManagement = lazy(() => import('./agency/TeamManagement'));
+const PortalManagement = lazy(() => import('./client-portal/PortalManagement'));
+const FinancialDashboard = lazy(() => import('./financial/FinancialDashboard'));
+const PredictiveAnalytics = lazy(() => import('./PredictiveAnalytics'));
+const EnhancedAdCampaignManager = lazy(() => import('./ad-campaign/EnhancedAdCampaignManager'));
+const EnhancedCRMManager = lazy(() => import('./crm/EnhancedCRMManager'));
+const IntegrationsMarketplace = lazy(() => import('./integrations/IntegrationsMarketplace'));
+const EmailMarketingDashboard = lazy(() => import('./email-marketing/EmailMarketingDashboard'));
+const SocialMediaDashboard = lazy(() => import('./social-media/SocialMediaDashboard'));
+const AutomationDashboard = lazy(() => import('./automation/AutomationDashboard'));
+const OverviewDashboard = lazy(() => import('./overview/OverviewDashboard'));
+const CommunicationHub = lazy(() => import('./communication/CommunicationHub'));
+const FileManager = lazy(() => import('./file-manager/FileManager'));
+const NotesBoard = lazy(() => import('./notes/NotesBoard'));
+const BrandAssetsPage = lazy(() => import('./brand-assets/BrandAssetsPage'));
+const ApprovalBoard = lazy(() => import('./content-approval/ApprovalBoard'));
+const AIConsoleSection = lazy(() => import('./dashboard/AIConsoleSection'));
+const HorizontalNavigatorDemo = lazy(() => import('./demos/HorizontalNavigatorDemo'));
+const AIScriptGenerator = lazy(() => import('./content-generation/AIScriptGenerator'));
+const BlogPostGenerator = lazy(() => import('./content-generation/BlogPostGenerator'));
+const LandingPageCopyGenerator = lazy(() => import('./content-generation/LandingPageCopyGenerator'));
 import { useUserStore, useAppStore } from '../stores';
 import { useContentApprovalStore } from '../stores/contentApprovalStore';
 import { useGridWidgetStore } from '../stores/gridWidgetStore';
@@ -44,6 +46,23 @@ import { availableWidgetTypes } from '../utils/constants';
 interface EnhancedDashboardProps {
   clientData?: any;
 }
+
+// Loading fallback component
+const SectionLoader = () => (
+  <div className="flex items-center justify-center min-h-[400px]">
+    <div className="glass-effect rounded-xl p-8 text-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+      <p className="text-gray-400">Loading...</p>
+    </div>
+  </div>
+);
+
+// Helper component to wrap lazy components with Suspense
+const LazyWrapper = ({ children }: { children: React.ReactNode }) => (
+  <Suspense fallback={<SectionLoader />}>
+    {children}
+  </Suspense>
+);
 
 const EnhancedDashboard = ({ clientData: propClientData }: EnhancedDashboardProps) => {
   const { user, updateMetrics } = useUserStore();
@@ -284,7 +303,9 @@ const EnhancedDashboard = ({ clientData: propClientData }: EnhancedDashboardProp
           <div className="max-w-7xl mx-auto">
             {/* Render different components based on active section */}
             {activeSection === 'overview' && (
-              <OverviewDashboard />
+              <LazyWrapper>
+                <OverviewDashboard />
+              </LazyWrapper>
             )}
 
             {/* AI Console Section (previous overview content) */}
@@ -477,127 +498,173 @@ const EnhancedDashboard = ({ clientData: propClientData }: EnhancedDashboardProp
 
             {/* History Section */}
             {activeSection === 'history' && (
-              <EnhancedHistory />
+              <LazyWrapper>
+                <EnhancedHistory />
+              </LazyWrapper>
             )}
 
             {/* Analytics Section */}
             {activeSection === 'analytics' && (
-              <Analytics />
+              <LazyWrapper>
+                <Analytics />
+              </LazyWrapper>
             )}
 
             {/* Reports Section */}
             {activeSection === 'reports' && (
-              <EnhancedReports />
+              <LazyWrapper>
+                <EnhancedReports />
+              </LazyWrapper>
             )}
 
             {/* Team Management Section */}
             {activeSection === 'team' && (
-              <TeamManagement />
+              <LazyWrapper>
+                <TeamManagement />
+              </LazyWrapper>
             )}
 
             {/* Financial Management Section */}
             {activeSection === 'financial' && (
-              <FinancialDashboard />
+              <LazyWrapper>
+                <FinancialDashboard />
+              </LazyWrapper>
             )}
 
             {/* Client Portals Section */}
             {activeSection === 'portals' && (
-              <PortalManagement />
+              <LazyWrapper>
+                <PortalManagement />
+              </LazyWrapper>
             )}
 
             {/* Predictive Analytics Section */}
             {activeSection === 'predictive' && (
-              <PredictiveAnalytics />
+              <LazyWrapper>
+                <PredictiveAnalytics />
+              </LazyWrapper>
             )}
 
             {/* Ad Campaign Manager Section */}
             {activeSection === 'campaigns' && (
-              <EnhancedAdCampaignManager />
+              <LazyWrapper>
+                <EnhancedAdCampaignManager />
+              </LazyWrapper>
             )}
 
             {/* CRM Management Section */}
             {activeSection === 'crm' && (
-              <EnhancedCRMManager />
+              <LazyWrapper>
+                <EnhancedCRMManager />
+              </LazyWrapper>
             )}
 
             {/* Integrations Section */}
             {activeSection === 'integrations' && (
-              <IntegrationsMarketplace />
+              <LazyWrapper>
+                <IntegrationsMarketplace />
+              </LazyWrapper>
             )}
 
             {/* Email Marketing Section */}
             {activeSection === 'email-marketing' && (
-              <EmailMarketingDashboard />
+              <LazyWrapper>
+                <EmailMarketingDashboard />
+              </LazyWrapper>
             )}
 
             {/* Social Media Section */}
             {activeSection === 'social-media' && (
-              <SocialMediaDashboard />
+              <LazyWrapper>
+                <SocialMediaDashboard />
+              </LazyWrapper>
             )}
 
             {/* Communication Hub Section */}
             {activeSection === 'communication' && (
-              <CommunicationHub />
+              <LazyWrapper>
+                <CommunicationHub />
+              </LazyWrapper>
             )}
 
             {/* File Manager Section */}
             {activeSection === 'file-manager' && (
-              <FileManager />
+              <LazyWrapper>
+                <FileManager />
+              </LazyWrapper>
             )}
 
             {/* Brand Assets Section */}
             {activeSection === 'brand-assets' && (
-              <BrandAssetsPage />
+              <LazyWrapper>
+                <BrandAssetsPage />
+              </LazyWrapper>
             )}
 
             {/* Content Approval Section */}
             {activeSection === 'content-approval' && (
-              <div className="p-6">
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="mb-6"
-                >
-                  <h1 className="text-3xl font-bold text-white mb-2">Content Approval Workflow</h1>
-                  <p className="text-gray-400">Streamline your content approval process from creation to publication</p>
-                </motion.div>
-                <ApprovalBoard />
-              </div>
+              <LazyWrapper>
+                <div className="p-6">
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mb-6"
+                  >
+                    <h1 className="text-3xl font-bold text-white mb-2">Content Approval Workflow</h1>
+                    <p className="text-gray-400">Streamline your content approval process from creation to publication</p>
+                  </motion.div>
+                  <ApprovalBoard />
+                </div>
+              </LazyWrapper>
             )}
 
             {/* Sticky Notes Section */}
             {activeSection === 'notes' && (
-              <NotesBoard />
+              <LazyWrapper>
+                <NotesBoard />
+              </LazyWrapper>
             )}
 
             {/* Settings Section */}
             {activeSection === 'settings' && (
-              <Settings />
+              <LazyWrapper>
+                <Settings />
+              </LazyWrapper>
             )}
 
             {/* Horizontal Navigator Demo Section */}
             {activeSection === 'widget-navigator-demo' && (
-              <HorizontalNavigatorDemo />
+              <LazyWrapper>
+                <HorizontalNavigatorDemo />
+              </LazyWrapper>
             )}
 
             {/* Automations Section */}
             {activeSection === 'automations' && (
-              <AutomationDashboard />
+              <LazyWrapper>
+                <AutomationDashboard />
+              </LazyWrapper>
             )}
 
             {/* AI Script Generator */}
             {activeSection === 'ai-script-generator' && (
-              <AIScriptGenerator />
+              <LazyWrapper>
+                <AIScriptGenerator />
+              </LazyWrapper>
             )}
 
             {/* Blog Post Generator */}
             {activeSection === 'blog-post-generator' && (
-              <BlogPostGenerator />
+              <LazyWrapper>
+                <BlogPostGenerator />
+              </LazyWrapper>
             )}
 
             {/* Landing Page Copy Generator */}
             {activeSection === 'landing-page-copy-generator' && (
-              <LandingPageCopyGenerator />
+              <LazyWrapper>
+                <LandingPageCopyGenerator />
+              </LazyWrapper>
             )}
           </div>
         </main>
