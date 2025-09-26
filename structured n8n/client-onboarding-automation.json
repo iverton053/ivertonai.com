@@ -1,0 +1,810 @@
+{
+  "name": "Client Onboarding Automation - Streamlined",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "client-onboarding",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "6bdbc8a6-9ea1-4986-83a5-92d7113a39af",
+      "name": "Client Onboarding Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -320,
+        512
+      ],
+      "webhookId": "client-onboarding-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Input validation and data preprocessing\nconst input = $input.first().json;\n\n// Validate required fields\nconst requiredFields = ['name', 'email', 'company'];\nconst missingFields = requiredFields.filter(field => !input[field]);\n\nif (missingFields.length > 0) {\n  throw new Error(`Missing required fields: ${missingFields.join(', ')}`);\n}\n\n// Sanitize and validate email\nconst emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\nif (!emailRegex.test(input.email)) {\n  throw new Error('Invalid email format');\n}\n\n// Generate unique client ID\nconst clientId = `client_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;\n\n// Clean and normalize data\nconst processedData = {\n  id: clientId,\n  name: input.name.trim(),\n  email: input.email.toLowerCase().trim(),\n  company: input.company.trim(),\n  phone: input.phone?.trim() || '',\n  website: input.website?.trim() || '',\n  service_type: input.service_type || 'seo',\n  monthly_retainer: parseFloat(input.monthly_retainer) || 2500,\n  billing_cycle: input.billing_cycle || 'monthly',\n  priority: input.priority || 'medium',\n  acquisition_source: input.acquisition_source || 'website',\n  contract_duration: parseInt(input.contract_duration) || 6,\n  payment_terms: {\n    net_days: parseInt(input.payment_terms?.net_days) || 30,\n    late_fee_percentage: parseFloat(input.payment_terms?.late_fee_percentage) || 1.5,\n    auto_payment: Boolean(input.payment_terms?.auto_payment)\n  },\n  brand_colors: {\n    primary: input.brand_colors?.primary || '#6366f1',\n    secondary: input.brand_colors?.secondary || '#8b5cf6'\n  },\n  logo_url: input.logo_url || '',\n  timezone: input.timezone || 'America/New_York',\n  created_at: new Date().toISOString(),\n  status: 'onboarding_initiated'\n};\n\nreturn [{ json: processedData }];"
+      },
+      "id": "90b28732-1581-4958-961d-cd2d76dae0d0",
+      "name": "Validate & Process Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -112,
+        512
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "validation-success",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "isNotEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "2be38b05-3dd3-4f45-840e-b2fa63e5bd14",
+      "name": "Validation Success Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        96,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3002/api/integrations/email/send-template",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"template\": \"validation_error\",\n  \"to\": \"admin@agency.com\",\n  \"subject\": \"Client Onboarding Validation Error\",\n  \"data\": {\n    \"error_message\": \"{{ $json.error?.message || 'Unknown validation error' }}\",\n    \"raw_input\": {{ $('Client Onboarding Webhook').item.json }},\n    \"timestamp\": \"{{ new Date().toISOString() }}\"\n  }\n}",
+        "options": {}
+      },
+      "id": "1af9c626-ba15-42d1-adba-09b87b17c166",
+      "name": "Send Error Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        96,
+        704
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Team assignment logic based on service type and workload\nconst clientData = $input.first().json;\n\nconst teamMembers = {\n  account_managers: ['john.smith', 'sarah.johnson', 'mike.wilson'],\n  project_managers: ['alice.brown', 'david.lee', 'emma.davis'],\n  strategy_leads: ['robert.garcia', 'lisa.martinez', 'james.taylor']\n};\n\n// Simple round-robin assignment (in production, use workload balancing)\nconst getRandomMember = (array) => array[Math.floor(Math.random() * array.length)];\n\nconst assignments = {\n  account_manager: getRandomMember(teamMembers.account_managers),\n  project_manager: getRandomMember(teamMembers.project_managers),\n  strategy_lead: getRandomMember(teamMembers.strategy_leads)\n};\n\n// Create comprehensive onboarding plan\nconst onboardingPlan = {\n  ...clientData,\n  team_assignments: assignments,\n  onboarding_steps: [\n    {\n      id: 'welcome_package',\n      name: 'Send Welcome Package',\n      description: 'Send personalized welcome email with company information',\n      order: 1,\n      estimated_duration_hours: 0.5,\n      responsible_team: 'account_management',\n      status: 'pending',\n      auto_executable: true,\n      required_data: ['client_name', 'email', 'company']\n    },\n    {\n      id: 'crm_integration',\n      name: 'Add to CRM System',\n      description: 'Create client record in CRM with all details',\n      order: 2,\n      estimated_duration_hours: 0.25,\n      responsible_team: 'technical',\n      status: 'pending',\n      auto_executable: true,\n      required_data: ['client_data']\n    },\n    {\n      id: 'create_portal',\n      name: 'Setup Client Portal',\n      description: 'Create branded client portal with custom subdomain',\n      order: 3,\n      estimated_duration_hours: 1,\n      responsible_team: 'technical',\n      status: 'pending',\n      auto_executable: true,\n      required_data: ['company_name', 'branding']\n    },\n    {\n      id: 'project_structure',\n      name: 'Create Project Structure',\n      description: 'Initialize project with tasks, milestones, and team assignments',\n      order: 4,\n      estimated_duration_hours: 2,\n      responsible_team: 'project_management',\n      status: 'pending',\n      auto_executable: true,\n      required_data: ['service_type', 'team_assignments']\n    },\n    {\n      id: 'billing_setup',\n      name: 'Configure Billing',\n      description: 'Setup recurring billing, payment methods, and invoicing',\n      order: 5,\n      estimated_duration_hours: 1,\n      responsible_team: 'finance',\n      status: 'pending',\n      auto_executable: true,\n      required_data: ['billing_preferences', 'payment_terms']\n    },\n    {\n      id: 'communication_setup',\n      name: 'Setup Communication Channels',\n      description: 'Create Slack channel, schedule calls, setup notifications',\n      order: 6,\n      estimated_duration_hours: 0.5,\n      responsible_team: 'account_management',\n      status: 'pending',\n      auto_executable: true,\n      required_data: ['team_assignments', 'client_preferences']\n    },\n    {\n      id: 'document_generation',\n      name: 'Generate Onboarding Documents',\n      description: 'Create contracts, SOWs, and onboarding materials',\n      order: 7,\n      estimated_duration_hours: 1.5,\n      responsible_team: 'legal',\n      status: 'pending',\n      auto_executable: true,\n      required_data: ['service_type', 'contract_terms']\n    }\n  ],\n  timeline: {\n    estimated_completion_days: 7,\n    start_date: new Date().toISOString(),\n    target_completion: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()\n  },\n  automation_config: {\n    send_progress_updates: true,\n    auto_escalate_delays: true,\n    client_notification_frequency: 'milestone',\n    internal_reporting: true,\n    retry_failed_steps: 3\n  },\n  workflow_metadata: {\n    created_by: 'automation',\n    version: '3.0.0',\n    last_updated: new Date().toISOString()\n  }\n};\n\nreturn [{ json: onboardingPlan }];"
+      },
+      "id": "5b904c8e-f1ea-412a-ba3a-697f49f8bfb1",
+      "name": "Create Onboarding Plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        288,
+        416
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "client-data",
+              "value": "={{ $json }}"
+            },
+            {
+              "id": "welcome-data",
+              "value": "={{ { client_name: $json.name, company_name: $json.company, email: $json.email, account_manager: $json.team_assignments.account_manager } }}"
+            },
+            {
+              "id": "portal-data",
+              "value": "={{ { client_id: $json.id, company: $json.company, branding: $json.brand_colors, subdomain: $json.company.toLowerCase().replace(/[^a-z0-9]/g, '-') } }}"
+            },
+            {
+              "id": "billing-data",
+              "value": "={{ { client_id: $json.id, monthly_retainer: $json.monthly_retainer, billing_cycle: $json.billing_cycle, payment_terms: $json.payment_terms } }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "90c5c518-7933-45a5-8567-3614bd67ebb5",
+      "name": "Split Data Streams",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        496,
+        416
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "service",
+              "value": "crm"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "Label CRM Service",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        580,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3002/api/crm/clients",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Split Data Streams').item.json['client-data']) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "ef9fecde-0045-4236-a8c5-91bfa1600189",
+      "name": "Add to CRM System",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        688,
+        304
+      ],
+      "continueOnFail": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize CRM service output for consistent error tracking\nconst service = 'crm';\n\nif ($json.error || $json.statusCode >= 400) {\n  return [{ \n    json: { \n      service: service,\n      error: { \n        message: $json.error?.message || $json.body?.message || 'CRM request failed',\n        statusCode: $json.statusCode,\n        body: $json.body \n      } \n    } \n  }];\n} else {\n  return [{ \n    json: { \n      service: service,\n      result: $json \n    } \n  }];\n}"
+      },
+      "id": "norm1-a1b2-c3d4-e5f6-789012345678",
+      "name": "Normalize CRM Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3002/api/integrations/email/send-template",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"template\": \"client_welcome_enhanced\",\n  \"to\": \"{{ $('Split Data Streams').item.json['welcome-data'].email }}\",\n  \"cc\": [\"{{ $('Split Data Streams').item.json['welcome-data'].account_manager }}@agency.com\"],\n  \"subject\": \"Welcome to Our Agency - {{ $('Split Data Streams').item.json['welcome-data'].company_name }}! 🚀\",\n  \"data\": {\n    \"client_name\": \"{{ $('Split Data Streams').item.json['welcome-data'].client_name }}\",\n    \"company_name\": \"{{ $('Split Data Streams').item.json['welcome-data'].company_name }}\",\n    \"account_manager\": \"{{ $('Split Data Streams').item.json['welcome-data'].account_manager }}\",\n    \"welcome_message\": \"We're thrilled to welcome you to our family! Our team is already working on setting up everything you need for a successful partnership.\",\n    \"next_steps\": [\n      \"Your dedicated client portal will be ready within 2 hours\",\n      \"You'll receive portal access credentials via email\",\n      \"Our team will contact you within 24 hours to schedule your discovery call\",\n      \"Please review the attached onboarding questionnaire\"\n    ],\n    \"team_contact\": {\n      \"account_manager\": \"{{ $('Split Data Streams').item.json['welcome-data'].account_manager }}\",\n      \"email\": \"{{ $('Split Data Streams').item.json['welcome-data'].account_manager }}@agency.com\",\n      \"phone\": \"+1-555-0123\"\n    },\n    \"portal_preview\": \"Your portal will be available at: portal.agency.com/{{ $('Split Data Streams').item.json['portal-data'].subdomain }}\",\n    \"attachments\": [\n      \"onboarding_questionnaire.pdf\",\n      \"getting_started_guide.pdf\",\n      \"service_overview.pdf\"\n    ]\n  },\n  \"priority\": \"high\",\n  \"track_engagement\": true\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "902a3306-7ee1-42b2-9aa6-ccf169888afa",
+      "name": "Send Welcome Package",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        688,
+        416
+      ],
+      "continueOnFail": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "service",
+              "value": "welcome"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b2c3d4e5-f6g7-8901-bcde-f23456789012",
+      "name": "Label Welcome Service",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        580,
+        416
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "service",
+              "value": "portal"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c3d4e5f6-g7h8-9012-cdef-345678901234",
+      "name": "Label Portal Service",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        580,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3002/api/client-portals/create",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"client_id\": \"{{ $('Split Data Streams').item.json['portal-data'].client_id }}\",\n  \"portal_name\": \"{{ $('Split Data Streams').item.json['portal-data'].company }} Dashboard\",\n  \"subdomain\": \"{{ $('Split Data Streams').item.json['portal-data'].subdomain }}\",\n  \"branding\": {\n    \"company_name\": \"{{ $('Split Data Streams').item.json['portal-data'].company }}\",\n    \"primary_color\": \"{{ $('Split Data Streams').item.json['portal-data'].branding.primary }}\",\n    \"secondary_color\": \"{{ $('Split Data Streams').item.json['portal-data'].branding.secondary }}\",\n    \"logo_url\": \"{{ $('Split Data Streams').item.json['client-data'].logo_url }}\"\n  },\n  \"features\": {\n    \"dashboard\": true,\n    \"reports\": true,\n    \"analytics\": true,\n    \"communication\": true,\n    \"billing\": true,\n    \"document_library\": true\n  },\n  \"access_settings\": {\n    \"auth_method\": \"magic_link\",\n    \"session_timeout\": 480,\n    \"multi_user_access\": true\n  },\n  \"notification_settings\": {\n    \"email_updates\": true,\n    \"frequency\": \"weekly\",\n    \"report_delivery\": \"monthly\"\n  }\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "38e3e060-248c-4894-a575-487c96d3a369",
+      "name": "Create Client Portal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        688,
+        512
+      ],
+      "continueOnFail": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3002/api/billing/setup",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"client_id\": \"{{ $('Split Data Streams').item.json['billing-data'].client_id }}\",\n  \"billing_config\": {\n    \"monthly_retainer\": {{ $('Split Data Streams').item.json['billing-data'].monthly_retainer }},\n    \"billing_cycle\": \"{{ $('Split Data Streams').item.json['billing-data'].billing_cycle }}\",\n    \"currency\": \"USD\",\n    \"auto_invoice\": true,\n    \"payment_terms\": {{ JSON.stringify($('Split Data Streams').item.json['billing-data'].payment_terms) }}\n  },\n  \"payment_methods\": {\n    \"auto_payment\": {{ $('Split Data Streams').item.json['billing-data'].payment_terms.auto_payment }},\n    \"accepted_methods\": [\"credit_card\", \"bank_transfer\", \"ach\"]\n  },\n  \"invoice_settings\": {\n    \"auto_send\": true,\n    \"send_reminders\": true,\n    \"late_fees\": true\n  }\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "a1a20812-bcfd-4b58-971f-7a58f49043b2",
+      "name": "Configure Billing System",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        688,
+        608
+      ],
+      "continueOnFail": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "service",
+              "value": "billing"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d4e5f6g7-h8i9-0123-def0-456789012345",
+      "name": "Label Billing Service",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        580,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "includeUnpaired": true,
+        "options": {}
+      },
+      "id": "6afb5a79-9c6a-47ec-a611-a3be26e3a994",
+      "name": "Merge CRM & Welcome",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        896,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "includeUnpaired": true,
+        "options": {}
+      },
+      "id": "7bfc6d8b-8d7f-4c8e-9f2b-4e8a7c6d5b9a",
+      "name": "Merge Portal & Billing",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        896,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Combine all service results from both merge inputs\n// Input 1: CRM & Welcome results\n// Input 2: Portal & Billing results\n\nconst in1 = $items(0);\nconst in2 = $items(1);\nconst all = [...in1, ...in2];\n\nreturn all.length ? all : [{ json: { warning: 'No service results received', timestamp: new Date().toISOString() } }];"
+      },
+      "id": "8cfd7e9c-9e8f-5d9f-af3c-5f9b8e7d6c0b",
+      "name": "Combine All Service Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1088,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process all service creation results and compile success/failure status\nconst items = $input.all();\n\nlet successCount = 0;\nlet failureCount = 0;\nlet services = [];\nlet errors = [];\n\nitems.forEach((item, index) => {\n  if (item.json.error) {\n    failureCount++;\n    errors.push({\n      service: item.json.service || `service_${index}`,\n      error: item.json.error,\n      timestamp: new Date().toISOString()\n    });\n  } else {\n    successCount++;\n    services.push({\n      service: item.json.service || `service_${index}`,\n      status: 'completed',\n      result: item.json,\n      timestamp: new Date().toISOString()\n    });\n  }\n});\n\nconst onboardingStatus = {\n  client_id: items[0]?.json?.client_id || items[0]?.json?.id,\n  overall_status: failureCount === 0 ? 'success' : 'partial_success',\n  completion_percentage: Math.round((successCount / (successCount + failureCount)) * 100),\n  services_completed: successCount,\n  services_failed: failureCount,\n  total_services: successCount + failureCount,\n  successful_services: services,\n  failed_services: errors,\n  next_steps: failureCount > 0 ? [\n    'Review failed services and retry if needed',\n    'Contact technical team for manual intervention',\n    'Notify client of any service delays'\n  ] : [\n    'Send portal access credentials to client',\n    'Schedule discovery call',\n    'Begin project initiation phase'\n  ],\n  completion_timestamp: new Date().toISOString()\n};\n\nreturn [{ json: onboardingStatus }];"
+      },
+      "id": "b430d49a-e4a8-4739-b0f4-7e9512e749b4",
+      "name": "Process Service Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1088,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "success-check",
+              "leftValue": "={{ $json.overall_status }}",
+              "rightValue": "success",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "dfc2e513-54cc-42b4-b4e8-850ed3bf10a5",
+      "name": "Check Onboarding Success",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1296,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3002/api/integrations/email/send-template",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"template\": \"portal_access_ready\",\n  \"to\": \"{{ $('Create Onboarding Plan').item.json.email }}\",\n  \"subject\": \"🎉 Your Client Portal is Ready!\",\n  \"data\": {\n    \"client_name\": \"{{ $('Create Onboarding Plan').item.json.name }}\",\n    \"company_name\": \"{{ $('Create Onboarding Plan').item.json.company }}\",\n    \"portal_url\": \"https://portal.agency.com/{{ $('Create Onboarding Plan').item.json.company.toLowerCase().replace(/[^a-z0-9]/g, '-') }}\",\n    \"login_instructions\": \"Simply click the link above and enter your email address. We'll send you a secure login link instantly.\",\n    \"features_available\": [\n      \"Real-time project progress tracking\",\n      \"Performance analytics and reports\",\n      \"Direct team communication\",\n      \"Invoice and billing management\",\n      \"Document library access\"\n    ],\n    \"next_steps\": [\n      \"Explore your new client portal\",\n      \"Complete the onboarding questionnaire\",\n      \"Schedule your strategy discovery call\",\n      \"Review your project timeline\"\n    ],\n    \"support_contact\": \"{{ $('Create Onboarding Plan').item.json.team_assignments.account_manager }}@agency.com\"\n  }\n}",
+        "options": {}
+      },
+      "id": "72a06ef2-bbc1-4279-ac30-daa8d63f0e39",
+      "name": "Send Portal Ready Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1488,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3002/api/tasks/schedule-follow-up",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"client_id\": \"{{ $('Process Service Results').item.json.client_id }}\",\n  \"follow_up_tasks\": [\n    {\n      \"task\": \"discovery_call_scheduling\",\n      \"delay_hours\": 24,\n      \"assigned_to\": \"{{ $('Create Onboarding Plan').item.json.team_assignments.account_manager }}\",\n      \"description\": \"Contact client to schedule discovery and strategy session\"\n    },\n    {\n      \"task\": \"questionnaire_follow_up\",\n      \"delay_hours\": 72,\n      \"assigned_to\": \"{{ $('Create Onboarding Plan').item.json.team_assignments.account_manager }}\",\n      \"description\": \"Follow up if onboarding questionnaire not completed\"\n    },\n    {\n      \"task\": \"portal_engagement_check\",\n      \"delay_hours\": 168,\n      \"assigned_to\": \"{{ $('Create Onboarding Plan').item.json.team_assignments.project_manager }}\",\n      \"description\": \"Check portal engagement and provide usage guidance if needed\"\n    }\n  ],\n  \"escalation_rules\": {\n    \"no_response_hours\": 120,\n    \"escalate_to\": \"management@agency.com\"\n  }\n}",
+        "options": {}
+      },
+      "id": "8c87ce31-a9b5-443e-9e87-50edb84f5e6e",
+      "name": "Schedule Automated Follow-ups",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1488,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3002/api/notifications/internal",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"type\": \"onboarding_failure\",\n  \"title\": \"⚠️ Client Onboarding Issues Detected\",\n  \"message\": \"Some services failed during client onboarding for {{ $('Create Onboarding Plan').item.json.company }}. Manual intervention required.\",\n  \"data\": {\n    \"client_id\": \"{{ $('Process Service Results').item.json.client_id }}\",\n    \"completion_percentage\": {{ $('Process Service Results').item.json.completion_percentage }},\n    \"failed_services\": {{ JSON.stringify($('Process Service Results').item.json.failed_services) }},\n    \"successful_services\": {{ JSON.stringify($('Process Service Results').item.json.successful_services) }}\n  },\n  \"recipients\": [\n    \"{{ $('Create Onboarding Plan').item.json.team_assignments.account_manager }}@agency.com\",\n    \"{{ $('Create Onboarding Plan').item.json.team_assignments.project_manager }}@agency.com\",\n    \"tech-support@agency.com\",\n    \"management@agency.com\"\n  ],\n  \"priority\": \"high\",\n  \"channels\": [\"email\", \"slack\"]\n}",
+        "options": {}
+      },
+      "id": "606cd153-5767-41d6-8b6e-6591b14f08d7",
+      "name": "Send Failure Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1488,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3002/api/analytics/onboarding",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"event\": \"client_onboarding_completed\",\n  \"client_data\": {\n    \"client_id\": \"{{ $('Process Service Results').item.json.client_id }}\",\n    \"company_name\": \"{{ $('Create Onboarding Plan').item.json.company }}\",\n    \"service_type\": \"{{ $('Create Onboarding Plan').item.json.service_type }}\",\n    \"monthly_value\": {{ $('Create Onboarding Plan').item.json.monthly_retainer }},\n    \"acquisition_source\": \"{{ $('Create Onboarding Plan').item.json.acquisition_source }}\"\n  },\n  \"onboarding_metrics\": {\n    \"completion_status\": \"{{ $('Process Service Results').item.json.overall_status }}\",\n    \"completion_percentage\": {{ $('Process Service Results').item.json.completion_percentage }},\n    \"services_completed\": {{ $('Process Service Results').item.json.services_completed }},\n    \"services_failed\": {{ $('Process Service Results').item.json.services_failed }},\n    \"total_duration_minutes\": {{ Math.round((new Date() - new Date($('Create Onboarding Plan').item.json.created_at)) / (1000 * 60)) }}\n  },\n  \"automation_performance\": {\n    \"workflow_version\": \"3.0.0\",\n    \"success_rate\": {{ $('Process Service Results').item.json.completion_percentage }},\n    \"timestamp\": \"{{ new Date().toISOString() }}\"\n  }\n}",
+        "options": {}
+      },
+      "id": "0afd8cd4-bc9a-4f3c-9c59-e600f52726ca",
+      "name": "Update Analytics & Metrics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1696,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "lastNode",
+        "options": {}
+      },
+      "id": "abfdf2a6-6c01-4c44-9f41-dcdc9a2dca8b",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1888,
+        464
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Client Onboarding Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate & Process Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate & Process Input": {
+      "main": [
+        [
+          {
+            "node": "Validation Success Check",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Error Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validation Success Check": {
+      "main": [
+        [
+          {
+            "node": "Create Onboarding Plan",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Error Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Error Notification": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Onboarding Plan": {
+      "main": [
+        [
+          {
+            "node": "Split Data Streams",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Data Streams": {
+      "main": [
+        [
+          {
+            "node": "Label CRM Service",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Label Welcome Service",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Label Portal Service",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Label Billing Service",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Label CRM Service": {
+      "main": [
+        [
+          {
+            "node": "Add to CRM System",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Label Welcome Service": {
+      "main": [
+        [
+          {
+            "node": "Send Welcome Package",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Label Portal Service": {
+      "main": [
+        [
+          {
+            "node": "Create Client Portal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Label Billing Service": {
+      "main": [
+        [
+          {
+            "node": "Configure Billing System",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add to CRM System": {
+      "main": [
+        [
+          {
+            "node": "Normalize CRM Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize CRM Output": {
+      "main": [
+        [
+          {
+            "node": "Merge CRM & Welcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Welcome Package": {
+      "main": [
+        [
+          {
+            "node": "Merge CRM & Welcome",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Create Client Portal": {
+      "main": [
+        [
+          {
+            "node": "Merge Portal & Billing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Configure Billing System": {
+      "main": [
+        [
+          {
+            "node": "Merge Portal & Billing",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge CRM & Welcome": {
+      "main": [
+        [
+          {
+            "node": "Combine All Service Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Portal & Billing": {
+      "main": [
+        [
+          {
+            "node": "Combine All Service Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Combine All Service Results": {
+      "main": [
+        [
+          {
+            "node": "Process Service Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Service Results": {
+      "main": [
+        [
+          {
+            "node": "Check Onboarding Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Onboarding Success": {
+      "main": [
+        [
+          {
+            "node": "Send Portal Ready Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Schedule Automated Follow-ups",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Failure Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Portal Ready Notification": {
+      "main": [
+        [
+          {
+            "node": "Update Analytics & Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Automated Follow-ups": {
+      "main": [
+        [
+          {
+            "node": "Update Analytics & Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Failure Notification": {
+      "main": [
+        [
+          {
+            "node": "Update Analytics & Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Analytics & Metrics": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "9359b84f-e257-494c-a960-802e68364278",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "e38600765265a62ffe38d747bd623a950a87b4e6984b1e24caaab19b6d8cc8ae"
+  },
+  "id": "bJjMk0iyfkcwo31J",
+  "tags": []
+}

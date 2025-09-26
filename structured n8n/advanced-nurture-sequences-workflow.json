@@ -1,0 +1,2068 @@
+
+{
+  "name": "Advanced Multi-Touch Nurture Sequences - Production",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lead-enters-nurture",
+        "options": {
+          "noResponseBody": false
+        },
+        "responseHeaders": {
+          "entries": [
+            {
+              "name": "Access-Control-Allow-Origin",
+              "value": "*"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "responseCode": 200
+      },
+      "id": "webhook-lead-trigger",
+      "name": "Lead Entry Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [100, 300],
+      "webhookId": "nurture-lead-entry"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "behavior-score-change",
+        "options": {
+          "noResponseBody": false
+        },
+        "responseHeaders": {
+          "entries": [
+            {
+              "name": "Access-Control-Allow-Origin",
+              "value": "*"
+            }
+          ]
+        }
+      },
+      "id": "webhook-behavior-trigger",
+      "name": "Behavior Score Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [100, 500],
+      "webhookId": "nurture-behavior-score"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "email-engagement",
+        "options": {
+          "noResponseBody": false
+        }
+      },
+      "id": "webhook-engagement-trigger",
+      "name": "Email Engagement Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [100, 700],
+      "webhookId": "nurture-email-engagement"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst requiredFields = ['contactId', 'email'];\nconst missingFields = requiredFields.filter(field => !input[field]);\n\nif (missingFields.length > 0) {\n  throw new Error(`Missing required fields: ${missingFields.join(', ')}`);\n}\n\nconst sanitizedData = {\n  contactId: String(input.contactId).trim(),\n  email: String(input.email).toLowerCase().trim(),\n  firstName: input.firstName ? String(input.firstName).trim() : '',\n  lastName: input.lastName ? String(input.lastName).trim() : '',\n  company: input.company ? String(input.company).trim() : '',\n  jobTitle: input.jobTitle ? String(input.jobTitle).trim() : '',\n  leadScore: parseInt(input.leadScore) || 0,\n  lifecycleStage: input.lifecycleStage || 'lead',\n  optedIn: Boolean(input.optedIn),\n  source: input.source || 'webhook',\n  timestamp: new Date().toISOString(),\n  workflowId: $workflow.id,\n  executionId: $execution.id,\n  metadata: input.metadata || {}\n};\n\nif (!sanitizedData.email.includes('@')) {\n  throw new Error('Invalid email format');\n}\n\nreturn [{ json: sanitizedData }];"
+      },
+      "id": "input-validator",
+      "name": "Input Data Validator",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [300, 400]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition",
+        "options": {}
+      },
+      "id": "merge-webhook-inputs",
+      "name": "Merge Webhook Inputs",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [200, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "score-check",
+              "leftValue": "={{$json.leadScore}}",
+              "rightValue": 60,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            },
+            {
+              "id": "stage-check",
+              "leftValue": "={{$json.lifecycleStage}}",
+              "rightValue": "lead",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "optin-check",
+              "leftValue": "={{$json.optedIn}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "qualify-for-nurture",
+      "name": "Qualify for Nurture",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [500, 400]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/contacts/{{$json.contactId}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "options": {
+          "timeout": 10000,
+          "retry": {
+            "enabled": true,
+            "maxAttempts": 3
+          }
+        }
+      },
+      "id": "fetch-contact-profile",
+      "name": "Fetch Contact Profile",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [700, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "const contactData = $input.first().json;\nconst originalData = $('Input Data Validator').first().json;\n\nif (!contactData.success || !contactData.data) {\n  throw new Error(`Failed to fetch contact: ${contactData.message || 'Unknown error'}`);\n}\n\nconst contact = contactData.data;\nconst mergedData = {\n  ...originalData,\n  contact: {\n    id: contact.id,\n    firstName: contact.first_name || originalData.firstName,\n    lastName: contact.last_name || originalData.lastName,\n    email: contact.email || originalData.email,\n    company: contact.company || originalData.company,\n    jobTitle: contact.job_title || originalData.jobTitle,\n    industry: contact.industry,\n    companySize: contact.company_size,\n    leadScore: contact.lead_score || originalData.leadScore,\n    lifecycleStage: contact.lifecycle_stage || originalData.lifecycleStage,\n    createdAt: contact.created_at,\n    lastActivity: contact.last_activity_date,\n    preferences: contact.preferences || {},\n    assignedSalesRep: contact.assigned_sales_rep || {},\n    tags: contact.tags || [],\n    customFields: contact.custom_fields || {}\n  }\n};\n\nreturn [{ json: mergedData }];"
+      },
+      "id": "merge-contact-data",
+      "name": "Merge Contact Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.ENRICHMENT_API_URL}}/api/enrich",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.ENRICHMENT_API_KEY}}"
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "email",
+              "value": "={{$json.contact.email}}"
+            },
+            {
+              "name": "company",
+              "value": "={{$json.contact.company}}"
+            },
+            {
+              "name": "sources",
+              "value": "={{JSON.stringify(['clearbit', 'hunter', 'linkedin'])}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000,
+          "retry": {
+            "enabled": true,
+            "maxAttempts": 2
+          }
+        }
+      },
+      "id": "enrich-contact-data",
+      "name": "Enrich Contact Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1100, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "const originalData = $('Merge Contact Data').first().json;\nconst enrichmentResponse = $input.first().json;\n\nlet enrichedData = { ...originalData };\n\nif (enrichmentResponse.success && enrichmentResponse.data) {\n  const enrichment = enrichmentResponse.data;\n  \n  enrichedData.enrichment = {\n    companySize: enrichment.company_size || originalData.contact.companySize,\n    industry: enrichment.industry || originalData.contact.industry,\n    revenue: enrichment.annual_revenue,\n    employees: enrichment.employee_count,\n    technologies: enrichment.technologies || [],\n    socialProfiles: enrichment.social_profiles || {},\n    painPoints: enrichment.identified_pain_points || [],\n    decisionMakers: enrichment.decision_makers || [],\n    competitorAnalysis: enrichment.competitors || [],\n    buyingSignals: enrichment.buying_signals || []\n  };\n  \n  enrichedData.contact.industry = enrichment.industry || enrichedData.contact.industry;\n  enrichedData.contact.companySize = enrichment.company_size || enrichedData.contact.companySize;\n}\n\nreturn [{ json: enrichedData }];"
+      },
+      "id": "process-enrichment",
+      "name": "Process Enrichment Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1300, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "enterprise-size",
+              "leftValue": "={{$json.contact.companySize}}",
+              "rightValue": "enterprise",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "high-score",
+              "leftValue": "={{$json.contact.leadScore}}",
+              "rightValue": 80,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ]
+        },
+        "combineOperation": "all"
+      },
+      "id": "route-by-profile",
+      "name": "Route by Profile",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1500, 400]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/sequences/start",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "contactId",
+              "value": "={{$json.contact.id}}"
+            },
+            {
+              "name": "sequenceType",
+              "value": "enterprise_nurture"
+            },
+            {
+              "name": "personalizations",
+              "value": "={{JSON.stringify({\n  company: $json.contact.company,\n  industry: $json.contact.industry,\n  companySize: $json.contact.companySize,\n  jobTitle: $json.contact.jobTitle,\n  painPoints: $json.enrichment?.painPoints || [],\n  decisionMakers: $json.enrichment?.decisionMakers || [],\n  technologies: $json.enrichment?.technologies || [],\n  revenue: $json.enrichment?.revenue\n})}}"
+            },
+            {
+              "name": "assignedRep",
+              "value": "={{$json.contact.assignedSalesRep.id}}"
+            },
+            {
+              "name": "priority",
+              "value": "high"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "start-enterprise-sequence",
+      "name": "Start Enterprise Sequence",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1700, 250]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/sequences/start",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "contactId",
+              "value": "={{$json.contact.id}}"
+            },
+            {
+              "name": "sequenceType",
+              "value": "standard_nurture"
+            },
+            {
+              "name": "personalizations",
+              "value": "={{JSON.stringify({\n  firstName: $json.contact.firstName,\n  company: $json.contact.company,\n  industry: $json.contact.industry,\n  interests: $json.contact.customFields?.interests || [],\n  jobTitle: $json.contact.jobTitle\n})}}"
+            },
+            {
+              "name": "priority",
+              "value": "normal"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "start-standard-sequence",
+      "name": "Start Standard Sequence",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1700, 550]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition",
+        "options": {}
+      },
+      "id": "merge-sequence-starts",
+      "name": "Merge Sequence Starts",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1900, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "const sequenceResponse = $input.first().json;\nconst originalData = $('Process Enrichment Data').first().json;\n\nif (!sequenceResponse.success) {\n  throw new Error(`Failed to start sequence: ${sequenceResponse.message}`);\n}\n\nconst emailData = {\n  ...originalData,\n  sequence: {\n    id: sequenceResponse.data.sequence_id,\n    type: sequenceResponse.data.sequence_type,\n    step: 1,\n    name: sequenceResponse.data.sequence_name\n  },\n  tracking: {\n    token: sequenceResponse.data.tracking_token,\n    unsubscribeToken: sequenceResponse.data.unsubscribe_token\n  }\n};\n\nreturn [{ json: emailData }];"
+      },
+      "id": "prepare-email-data",
+      "name": "Prepare Email Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2100, 400]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/communication/email/send",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "to",
+              "value": "={{$json.contact.email}}"
+            },
+            {
+              "name": "subject",
+              "value": "Welcome to our community, {{$json.contact.firstName}}! 🎉"
+            },
+            {
+              "name": "templateId",
+              "value": "nurture_welcome_email"
+            },
+            {
+              "name": "personalizations",
+              "value": "={{JSON.stringify({\n  firstName: $json.contact.firstName,\n  company: $json.contact.company,\n  industry: $json.contact.industry,\n  companySize: $json.contact.companySize,\n  trackingToken: $json.tracking.token,\n  unsubscribeToken: $json.tracking.unsubscribeToken,\n  accountManager: $json.contact.assignedSalesRep.firstName || 'Your Account Manager'\n})}}"
+            },
+            {
+              "name": "sequenceId",
+              "value": "={{$json.sequence.id}}"
+            },
+            {
+              "name": "sequenceStep",
+              "value": 1
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "send-welcome-email",
+      "name": "Send Welcome Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2300, 400]
+    },
+    {
+      "parameters": {
+        "amount": 2,
+        "unit": "days"
+      },
+      "id": "wait-2-days",
+      "name": "Wait 2 Days",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [2500, 400]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/contacts/{{$json.contact.id}}/activities",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "since",
+              "value": "={{new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString()}}"
+            },
+            {
+              "name": "types",
+              "value": "email_open,email_click,website_visit,content_download"
+            },
+            {
+              "name": "sequence_id",
+              "value": "={{$json.sequence.id}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "check-engagement",
+      "name": "Check Engagement",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2700, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "const engagementResponse = $input.first().json;\nconst originalData = $('Prepare Email Data').first().json;\n\nif (!engagementResponse.success) {\n  throw new Error(`Failed to fetch engagement data: ${engagementResponse.message}`);\n}\n\nconst activities = engagementResponse.data.activities || [];\nconst engagementScore = engagementResponse.data.engagement_score || 0;\n\nconst engagementData = {\n  ...originalData,\n  engagement: {\n    activities: activities,\n    score: engagementScore,\n    hasActivity: activities.length > 0,\n    isHighEngagement: engagementScore >= 30,\n    emailOpens: activities.filter(a => a.type === 'email_open').length,\n    emailClicks: activities.filter(a => a.type === 'email_click').length,\n    websiteVisits: activities.filter(a => a.type === 'website_visit').length,\n    downloads: activities.filter(a => a.type === 'content_download').length\n  }\n};\n\nreturn [{ json: engagementData }];"
+      },
+      "id": "process-engagement",
+      "name": "Process Engagement",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2900, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-activity",
+              "leftValue": "={{$json.engagement.hasActivity}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            },
+            {
+              "id": "high-score",
+              "leftValue": "={{$json.engagement.score}}",
+              "rightValue": 30,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ]
+        },
+        "combineOperation": "any"
+      },
+      "id": "high-engagement-check",
+      "name": "High Engagement Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [3100, 400]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/communication/email/send",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "to",
+              "value": "={{$json.contact.email}}"
+            },
+            {
+              "name": "subject",
+              "value": "{{$json.contact.firstName}}, here's how {{$json.contact.company}} can save 40% on {{$json.enrichment.painPoints[0] || 'operational costs'}}"
+            },
+            {
+              "name": "templateId",
+              "value": "nurture_case_study_email"
+            },
+            {
+              "name": "personalizations",
+              "value": "={{JSON.stringify({\n  firstName: $json.contact.firstName,\n  company: $json.contact.company,\n  industry: $json.contact.industry,\n  companySize: $json.contact.companySize,\n  primaryPainPoint: $json.enrichment?.painPoints?.[0] || 'operational efficiency',\n  trackingToken: $json.tracking.token,\n  unsubscribeToken: $json.tracking.unsubscribeToken\n})}}"
+            },
+            {
+              "name": "sequenceId",
+              "value": "={{$json.sequence.id}}"
+            },
+            {
+              "name": "sequenceStep",
+              "value": 2
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "send-case-study-email",
+      "name": "Send Case Study Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [3300, 250]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/communication/email/send",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "to",
+              "value": "={{$json.contact.email}}"
+            },
+            {
+              "name": "subject",
+              "value": "{{$json.contact.firstName}}, quick question about {{$json.contact.company}}'s biggest challenge"
+            },
+            {
+              "name": "templateId",
+              "value": "nurture_reengagement_email"
+            },
+            {
+              "name": "personalizations",
+              "value": "={{JSON.stringify({\n  firstName: $json.contact.firstName,\n  company: $json.contact.company,\n  mainChallenge: $json.enrichment?.painPoints?.[0] || 'business growth',\n  trackingToken: $json.tracking.token,\n  unsubscribeToken: $json.tracking.unsubscribeToken\n})}}"
+            },
+            {
+              "name": "sequenceId",
+              "value": "={{$json.sequence.id}}"
+            },
+            {
+              "name": "sequenceStep",
+              "value": 2
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "send-reengagement-email",
+      "name": "Send Re-engagement Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [3300, 550]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition",
+        "options": {}
+      },
+      "id": "merge-email-responses",
+      "name": "Merge Email Responses",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [3500, 400]
+    },
+    {
+      "parameters": {
+        "amount": 3,
+        "unit": "days"
+      },
+      "id": "wait-3-days",
+      "name": "Wait 3 Days",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [3700, 400]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/contacts/{{$json.contact.id}}/score/update",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "scoreChanges",
+              "value": "={{JSON.stringify({\n  email_engagement: $json.engagement?.emailOpens * 2 + $json.engagement?.emailClicks * 5,\n  content_interaction: $json.engagement?.downloads * 3,\n  website_activity: $json.engagement?.websiteVisits * 2,\n  sequence_progression: 5\n})}}"
+            },
+            {
+              "name": "activities",
+              "value": "={{JSON.stringify([\n  {\n    type: 'email_sent',\n    campaign: $json.sequence.name,\n    step: $json.sequence.step,\n    timestamp: new Date().toISOString(),\n    engagement_level: $json.engagement?.isHighEngagement ? 'high' : 'low'\n  }\n])}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "update-lead-score",
+      "name": "Update Lead Score",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [3900, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "const scoreResponse = $input.first().json;\nconst originalData = $('Process Engagement').first().json;\n\nif (!scoreResponse.success) {\n  throw new Error(`Failed to update score: ${scoreResponse.message}`);\n}\n\nconst updatedData = {\n  ...originalData,\n  scoreUpdate: {\n    previousScore: scoreResponse.data.previous_score,\n    newScore: scoreResponse.data.new_score,\n    totalScore: scoreResponse.data.total_score,\n    engagementLevel: scoreResponse.data.engagement_level\n  }\n};\n\nreturn [{ json: updatedData }];"
+      },
+      "id": "process-score-update",
+      "name": "Process Score Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4100, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "score-threshold",
+              "leftValue": "={{$json.scoreUpdate.totalScore}}",
+              "rightValue": 85,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            },
+            {
+              "id": "high-engagement",
+              "leftValue": "={{$json.scoreUpdate.engagementLevel}}",
+              "rightValue": "high",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "combineOperation": "any"
+      },
+      "id": "sales-ready-check",
+      "name": "Sales Ready Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [4300, 400]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/leads/{{$json.contact.id}}/handoff",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "contactId",
+              "value": "={{$json.contact.id}}"
+            },
+            {
+              "name": "handoffReason",
+              "value": "nurture_sequence_completion"
+            },
+            {
+              "name": "leadScore",
+              "value": "={{$json.scoreUpdate.totalScore}}"
+            },
+            {
+              "name": "engagementLevel",
+              "value": "={{$json.scoreUpdate.engagementLevel}}"
+            },
+            {
+              "name": "sequenceData",
+              "value": "={{JSON.stringify({\n  sequenceName: $json.sequence.name,\n  stepsCompleted: $json.sequence.step,\n  totalEngagements: $json.engagement.activities.length,\n  lastEngagement: $json.engagement.activities[0]?.timestamp,\n  primaryInterests: $json.enrichment?.technologies || [],\n  painPoints: $json.enrichment?.painPoints || []\n})}}"
+            },
+            {
+              "name": "assignedRep",
+              "value": "={{$json.contact.assignedSalesRep.id}}"
+            },
+            {
+              "name": "priority",
+              "value": "high"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "handoff-to-sales",
+      "name": "Handoff to Sales",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [4500, 250]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.SLACK_WEBHOOK_URL}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "channel",
+              "value": "#sales-alerts"
+            },
+            {
+              "name": "username",
+              "value": "Nurture Bot"
+            },
+            {
+              "name": "icon_emoji",
+              "value": ":fire:"
+            },
+            {
+              "name": "text",
+              "value": "🔥 *Hot Lead Ready for Sales!*\\n\\n*Contact:* {{$json.contact.firstName}} {{$json.contact.lastName}} - {{$json.contact.jobTitle}} at {{$json.contact.company}}\\n*Lead Score:* {{$json.scoreUpdate.totalScore}}/100\\n*Engagement:* {{$json.scoreUpdate.engagementLevel}}\\n\\n*Sequence:* {{$json.sequence.name}} - {{$json.sequence.step}} steps completed\\n*Assigned Rep:* {{$json.contact.assignedSalesRep.firstName}} {{$json.contact.assignedSalesRep.lastName}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "notify-sales-team",
+      "name": "Notify Sales Team",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [4700, 250]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/sequences/continue",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "contactId",
+              "value": "={{$json.contact.id}}"
+            },
+            {
+              "name": "sequenceId",
+              "value": "={{$json.sequence.id}}"
+            },
+            {
+              "name": "nextStep",
+              "value": "={{$json.sequence.step + 1}}"
+            },
+            {
+              "name": "delay",
+              "value": "={{JSON.stringify({ value: 5, unit: 'days' })}}"
+            },
+            {
+              "name": "personalizations",
+              "value": "={{JSON.stringify({\n  engagement_level: $json.scoreUpdate.engagementLevel,\n  interests: $json.enrichment?.technologies || [],\n  behavior_patterns: $json.engagement.activities.map(a => a.type)\n})}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "continue-sequence",
+      "name": "Continue Sequence",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [4500, 550]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "email-opened",
+              "leftValue": "={{$json.action}}",
+              "rightValue": "email_opened",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "email-opened-check",
+      "name": "Email Opened Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [300, 900]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "email-clicked",
+              "leftValue": "={{$json.action}}",
+              "rightValue": "email_clicked",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "email-clicked-check",
+      "name": "Email Clicked Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [300, 1100]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/contacts/{{$json.contactId}}/activities",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "activity",
+              "value": "={{JSON.stringify({\n  type: 'email_opened',\n  campaign: $json.campaign_id,\n  email_subject: $json.email_subject,\n  timestamp: $json.timestamp,\n  device: $json.device,\n  location: $json.location\n})}}"
+            },
+            {
+              "name": "scoreUpdate",
+              "value": "={{JSON.stringify({\n  email_engagement: 2,\n  overall_engagement: 1\n})}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "track-email-open",
+      "name": "Track Email Open",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [500, 850]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/contacts/{{$json.contactId}}/activities",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "activity",
+              "value": "={{JSON.stringify({\n  type: 'email_clicked',\n  campaign: $json.campaign_id,\n  email_subject: $json.email_subject,\n  link_url: $json.clicked_url,\n  timestamp: $json.timestamp,\n  device: $json.device,\n  location: $json.location\n})}}"
+            },
+            {
+              "name": "scoreUpdate",
+              "value": "={{JSON.stringify({\n  email_engagement: 5,\n  content_interest: 3,\n  overall_engagement: 2\n})}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "track-email-click",
+      "name": "Track Email Click",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [500, 1050]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "demo-link",
+              "leftValue": "={{$json.clicked_url}}",
+              "rightValue": "demo",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "demo-link-check",
+      "name": "Demo Link Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [700, 1050]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/leads/{{$json.contactId}}/priority",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "priority",
+              "value": "high"
+            },
+            {
+              "name": "reason",
+              "value": "demo_interest"
+            },
+            {
+              "name": "scoreBoost",
+              "value": 15
+            },
+            {
+              "name": "autoActions",
+              "value": "={{JSON.stringify(['notify_sales_rep', 'schedule_follow_up', 'send_demo_prep_email'])}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "mark-high-priority",
+      "name": "Mark High Priority",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [900, 950]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.SLACK_WEBHOOK_URL}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "channel",
+              "value": "#sales-alerts"
+            },
+            {
+              "name": "username",
+              "value": "Nurture Bot"
+            },
+            {
+              "name": "icon_emoji",
+              "value": ":fire:"
+            },
+            {
+              "name": "text",
+              "value": "🔥 *URGENT: Demo Interest Alert!*\\n\\n*Contact:* {{$json.firstName}} {{$json.lastName}}\\n*Company:* {{$json.company}}\\n*Action:* Clicked demo link\\n*Time:* {{$json.timestamp}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "alert-sales-slack",
+      "name": "Alert Sales on Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1100, 950]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/communication/email/send",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "to",
+              "value": "={{$json.email}}"
+            },
+            {
+              "name": "subject",
+              "value": "Demo prep: Everything you need for our {{$json.company}} call"
+            },
+            {
+              "name": "templateId",
+              "value": "demo_prep_email"
+            },
+            {
+              "name": "personalizations",
+              "value": "={{JSON.stringify({\n  firstName: $json.firstName,\n  company: $json.company,\n  contactId: $json.contactId\n})}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "send-demo-prep-email",
+      "name": "Send Demo Prep Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1300, 950]
+    },
+    {
+      "parameters": {
+        "jsCode": "const successInputs = $input.all();\nlet finalResult = {\n  success: true,\n  timestamp: new Date().toISOString(),\n  workflowId: $workflow.id,\n  executionId: $execution.id,\n  status: 'completed'\n};\n\nif (successInputs.length > 0) {\n  const mainData = successInputs[0].json;\n  \n  if (mainData.contact) {\n    finalResult.contact = {\n      id: mainData.contact.id,\n      firstName: mainData.contact.firstName,\n      lastName: mainData.contact.lastName,\n      email: mainData.contact.email,\n      company: mainData.contact.company,\n      leadScore: mainData.scoreUpdate?.totalScore || mainData.contact.leadScore\n    };\n  }\n  \n  if (mainData.sequence) {\n    finalResult.sequence = {\n      id: mainData.sequence.id,\n      type: mainData.sequence.type,\n      step: mainData.sequence.step,\n      name: mainData.sequence.name\n    };\n  }\n  \n  if (mainData.engagement) {\n    finalResult.engagement = {\n      score: mainData.engagement.score,\n      level: mainData.scoreUpdate?.engagementLevel || 'unknown',\n      activities: mainData.engagement.activities?.length || 0\n    };\n  }\n  \n  finalResult.outcome = mainData.scoreUpdate?.totalScore >= 85 ? 'sales_ready' : 'nurture_continue';\n  finalResult.nextAction = finalResult.outcome === 'sales_ready' ? 'handoff_to_sales' : 'continue_sequence';\n}\n\nreturn [{ json: finalResult }];"
+      },
+      "id": "prepare-completion-data",
+      "name": "Prepare Completion Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4900, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "const errorInputs = $input.all();\nconst workflowData = {\n  workflowId: $workflow.id,\n  executionId: $execution.id,\n  timestamp: new Date().toISOString()\n};\n\nlet errorDetails = {\n  ...workflowData,\n  errors: [],\n  severity: 'medium',\n  contactId: 'unknown'\n};\n\nerrorInputs.forEach((errorInput, index) => {\n  const error = errorInput.json;\n  if (error.error || error.message) {\n    errorDetails.errors.push({\n      nodeIndex: index,\n      error: error.error || error.message,\n      code: error.code || 'UNKNOWN_ERROR',\n      timestamp: new Date().toISOString()\n    });\n  }\n  \n  if (error.contactId) {\n    errorDetails.contactId = error.contactId;\n  }\n  \n  if (error.code === 'CRITICAL_FAILURE' || (error.statusCode && error.statusCode >= 500)) {\n    errorDetails.severity = 'critical';\n  }\n});\n\nconst requiresEscalation = errorDetails.severity === 'critical' || errorDetails.errors.length > 2;\n\nconst errorReport = {\n  ...errorDetails,\n  requiresEscalation,\n  escalationLevel: errorDetails.severity === 'critical' ? 3 : 2\n};\n\nconsole.error('Nurture Sequence Error Report:', errorReport);\nreturn [{ json: errorReport }];"
+      },
+      "id": "error-handler",
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2100, 800]
+    },
+    {
+      "parameters": {
+        "jsCode": "const errorData = $input.first().json;\nconst errorResponse = {\n  success: false,\n  timestamp: new Date().toISOString(),\n  workflowId: errorData.workflowId,\n  executionId: errorData.executionId,\n  status: 'failed',\n  error: {\n    severity: errorData.severity,\n    contactId: errorData.contactId,\n    errorCount: errorData.errors.length,\n    requiresEscalation: errorData.requiresEscalation,\n    escalationLevel: errorData.escalationLevel,\n    errors: errorData.errors\n  },\n  nextAction: 'retry_or_manual_intervention'\n};\n\nreturn [{ json: errorResponse }];"
+      },
+      "id": "prepare-error-response",
+      "name": "Prepare Error Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2500, 800]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/alerts/create",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "title",
+              "value": "Nurture Sequence Workflow Failure"
+            },
+            {
+              "name": "message",
+              "value": "Error in nurture sequence for contact: {{$json.contactId}}"
+            },
+            {
+              "name": "severity",
+              "value": "={{$json.severity}}"
+            },
+            {
+              "name": "escalationLevel",
+              "value": "={{$json.escalationLevel}}"
+            },
+            {
+              "name": "workflowId",
+              "value": "={{$json.workflowId}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "send-error-alerts",
+      "name": "Send Error Alerts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2700, 800]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition",
+        "options": {}
+      },
+      "id": "merge-final-responses",
+      "name": "Merge Final Responses",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [5100, 600]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.FRONTEND_CALLBACK_URL || $env.BACKEND_API_URL + '/api/workflows/callback'}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Workflow-Type",
+              "value": "nurture-sequence"
+            },
+            {
+              "name": "X-Workflow-Version",
+              "value": "v2.0.0"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "workflowId",
+              "value": "={{$json.workflowId}}"
+            },
+            {
+              "name": "executionId",
+              "value": "={{$json.executionId}}"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{$json.timestamp}}"
+            },
+            {
+              "name": "success",
+              "value": "={{$json.success}}"
+            },
+            {
+              "name": "status",
+              "value": "={{$json.status}}"
+            },
+            {
+              "name": "data",
+              "value": "={{JSON.stringify($json)}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000,
+          "retry": {
+            "enabled": true,
+            "maxAttempts": 2
+          }
+        }
+      },
+      "id": "frontend-callback-webhook",
+      "name": "Frontend Callback Webhook",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [5300, 600]
+    }
+  ],
+  "connections": {
+    "Lead Entry Webhook": {
+      "main": [[
+        {
+          "node": "Merge Webhook Inputs",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Behavior Score Webhook": {
+      "main": [[
+        {
+          "node": "Merge Webhook Inputs",
+          "type": "main",
+          "index": 1
+        }
+      ]]
+    },
+    "Email Engagement Webhook": {
+      "main": [[
+        {
+          "node": "Email Opened Check",
+          "type": "main",
+          "index": 0
+        },
+        {
+          "node": "Email Clicked Check",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Merge Webhook Inputs": {
+      "main": [[
+        {
+          "node": "Input Data Validator",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Input Data Validator": {
+      "main": [[
+        {
+          "node": "Qualify for Nurture",
+          "type": "main",
+          "index": 0
+        }
+      ]],
+      "error": [[
+        {
+          "node": "Error Handler",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Qualify for Nurture": {
+      "main": [
+        [
+          {
+            "node": "Fetch Contact Profile",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Completion Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Contact Profile": {
+      "main": [[
+        {
+          "node": "Merge Contact Data",
+          "type": "main",
+          "index": 0
+        }
+      ]],
+      "error": [[
+        {
+          "node": "Error Handler",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Merge Contact Data": {
+      "main": [[
+        {
+          "node": "Enrich Contact Data",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Enrich Contact Data": {
+      "main": [[
+        {
+          "node": "Process Enrichment Data",
+          "type": "main",
+          "index": 0
+        }
+      ]],
+      "error": [[
+        {
+          "node": "Process Enrichment Data",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Process Enrichment Data": {
+      "main": [[
+        {
+          "node": "Route by Profile",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Route by Profile": {
+      "main": [
+        [
+          {
+            "node": "Start Enterprise Sequence",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Start Standard Sequence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Enterprise Sequence": {
+      "main": [[
+        {
+          "node": "Merge Sequence Starts",
+          "type": "main",
+          "index": 0
+        }
+      ]],
+      "error": [[
+        {
+          "node": "Error Handler",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Start Standard Sequence": {
+      "main": [[
+        {
+          "node": "Merge Sequence Starts",
+          "type": "main",
+          "index": 1
+        }
+      ]],
+      "error": [[
+        {
+          "node": "Error Handler",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Merge Sequence Starts": {
+      "main": [[
+        {
+          "node": "Prepare Email Data",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Prepare Email Data": {
+      "main": [[
+        {
+          "node": "Send Welcome Email",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Send Welcome Email": {
+      "main": [[
+        {
+          "node": "Wait 2 Days",
+          "type": "main",
+          "index": 0
+        }
+      ]],
+      "error": [[
+        {
+          "node": "Error Handler",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Wait 2 Days": {
+      "main": [[
+        {
+          "node": "Check Engagement",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Check Engagement": {
+      "main": [[
+        {
+          "node": "Process Engagement",
+          "type": "main",
+          "index": 0
+        }
+      ]],
+      "error": [[
+        {
+          "node": "Error Handler",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Process Engagement": {
+      "main": [[
+        {
+          "node": "High Engagement Check",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "High Engagement Check": {
+      "main": [
+        [
+          {
+            "node": "Send Case Study Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Re-engagement Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Case Study Email": {
+      "main": [[
+        {
+          "node": "Merge Email Responses",
+          "type": "main",
+          "index": 0
+        }
+      ]],
+      "error": [[
+        {
+          "node": "Error Handler",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Send Re-engagement Email": {
+      "main": [[
+        {
+          "node": "Merge Email Responses",
+          "type": "main",
+          "index": 1
+        }
+      ]],
+      "error": [[
+        {
+          "node": "Error Handler",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Merge Email Responses": {
+      "main": [[
+        {
+          "node": "Wait 3 Days",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Wait 3 Days": {
+      "main": [[
+        {
+          "node": "Update Lead Score",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Update Lead Score": {
+      "main": [[
+        {
+          "node": "Process Score Update",
+          "type": "main",
+          "index": 0
+        }
+      ]],
+      "error": [[
+        {
+          "node": "Error Handler",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Process Score Update": {
+      "main": [[
+        {
+          "node": "Sales Ready Check",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Sales Ready Check": {
+      "main": [
+        [
+          {
+            "node": "Handoff to Sales",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Continue Sequence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handoff to Sales": {
+      "main": [[
+        {
+          "node": "Notify Sales Team",
+          "type": "main",
+          "index": 0
+        }
+      ]],
+      "error": [[
+        {
+          "node": "Error Handler",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Notify Sales Team": {
+      "main": [[
+        {
+          "node": "Prepare Completion Data",
+          "type": "main",
+          "index": 0
+        }
+      ]],
+      "error": [[
+        {
+          "node": "Error Handler",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Continue Sequence": {
+      "main": [[
+        {
+          "node": "Prepare Completion Data",
+          "type": "main",
+          "index": 0
+        }
+      ]],
+      "error": [[
+        {
+          "node": "Error Handler",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Email Opened Check": {
+      "main": [
+        [
+          {
+            "node": "Track Email Open",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Completion Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Clicked Check": {
+      "main": [
+        [
+          {
+            "node": "Track Email Click",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Completion Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Track Email Open": {
+      "main": [[
+        {
+          "node": "Prepare Completion Data",
+          "type": "main",
+          "index": 0
+        }
+      ]],
+      "error": [[
+        {
+          "node": "Error Handler",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Track Email Click": {
+      "main": [[
+        {
+          "node": "Demo Link Check",
+          "type": "main",
+          "index": 0
+        }
+      ]],
+      "error": [[
+        {
+          "node": "Error Handler",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Demo Link Check": {
+      "main": [
+        [
+          {
+            "node": "Mark High Priority",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Completion Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark High Priority": {
+      "main": [[
+        {
+          "node": "Alert Sales on Slack",
+          "type": "main",
+          "index": 0
+        }
+      ]],
+      "error": [[
+        {
+          "node": "Error Handler",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Alert Sales on Slack": {
+      "main": [[
+        {
+          "node": "Send Demo Prep Email",
+          "type": "main",
+          "index": 0
+        }
+      ]],
+      "error": [[
+        {
+          "node": "Error Handler",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Send Demo Prep Email": {
+      "main": [[
+        {
+          "node": "Prepare Completion Data",
+          "type": "main",
+          "index": 0
+        }
+      ]],
+      "error": [[
+        {
+          "node": "Error Handler",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Prepare Completion Data": {
+      "main": [[
+        {
+          "node": "Merge Final Responses",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Prepare Error Response": {
+      "main": [[
+        {
+          "node": "Send Error Alerts",
+          "type": "main",
+          "index": 0
+        },
+        {
+          "node": "Merge Final Responses",
+          "type": "main",
+          "index": 1
+        }
+      ]]
+    },
+    "Error Handler": {
+      "main": [[
+        {
+          "node": "Prepare Error Response",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Send Error Alerts": {
+      "main": [[
+        {
+          "node": "Merge Final Responses",
+          "type": "main",
+          "index": 1
+        }
+      ]]
+    },
+    "Merge Final Responses": {
+      "main": [[
+        {
+          "node": "Frontend Callback Webhook",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "callerPolicy": "workflowsFromSameOwner",
+    "timezone": "America/New_York",
+    "executionTimeout": 1800,
+    "maxExecutionTimeout": 3600
+  },
+  "staticData": {
+    "node:Lead Entry Webhook": {
+      "webhookId": "nurture-lead-entry-v2"
+    },
+    "node:Behavior Score Webhook": {
+      "webhookId": "nurture-behavior-score-v2"
+    },
+    "node:Email Engagement Webhook": {
+      "webhookId": "nurture-email-engagement-v2"
+    }
+  },
+  "tags": [
+    {
+      "createdAt": "2024-01-21T10:00:00.000Z",
+      "updatedAt": "2025-09-26T00:00:00.000Z",
+      "id": "nurture-automation-v2",
+      "name": "Nurture Automation v2"
+    },
+    {
+      "createdAt": "2025-09-26T00:00:00.000Z",
+      "updatedAt": "2025-09-26T00:00:00.000Z",
+      "id": "advanced-sequences-v2",
+      "name": "Advanced Sequences v2"
+    },
+    {
+      "createdAt": "2025-09-26T00:00:00.000Z",
+      "updatedAt": "2025-09-26T00:00:00.000Z",
+      "id": "production-ready",
+      "name": "Production Ready"
+    }
+  ],
+  "triggerCount": 3,
+  "updatedAt": "2025-09-26T00:00:00.000Z",
+  "versionId": "v2.0.0",
+  "meta": {
+    
+    "description": "Production-ready advanced multi-touch nurture sequences with comprehensive error handling, data validation, proper node connections, and full automation workflow for lead nurturing and sales handoff.",
+    "version": "2.0.0",
+    "author": "Claude Code Assistant",
+    "features": [
+      "Multi-trigger webhook support for different entry points",
+      "Comprehensive input validation and sanitization",
+      "Contact data enrichment with fallback handling",
+      "Intelligent sequence routing based on profile and engagement",
+      "Multi-step email nurture sequences with personalization",
+      "Real-time engagement tracking and scoring",
+      "Automated sales handoff based on lead qualification",
+      "Demo interest detection and priority escalation",
+      "Comprehensive error handling with alerting",
+      "Slack notifications for sales team alerts",
+      "Production-ready with proper timeouts and retries",
+      "Frontend callback webhook for workflow completion status"
+    ],
+    "environmentVariables": [
+      "BACKEND_API_URL",
+      "API_TOKEN",
+      "ENRICHMENT_API_URL",
+      "ENRICHMENT_API_KEY",
+      "SLACK_WEBHOOK_URL",
+      "FRONTEND_CALLBACK_URL"
+    ],
+    "webhookEndpoints": [
+      "/lead-enters-nurture",
+      "/behavior-score-change",
+      "/email-engagement"
+    ],
+    "compatibleWith": {
+      "frontend": "Dashboard v2.x",
+      "api": "Backend API v1.x",
+      "n8n": "1.x+"
+    }
+  }
+}

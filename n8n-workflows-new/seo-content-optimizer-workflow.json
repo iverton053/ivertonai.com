@@ -1,0 +1,639 @@
+{
+  "name": "seo_content_optimizer",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "seo-content-optimizer",
+        "options": {}
+      },
+      "id": "8389a6a9-5e40-469c-a693-6c4375394b18",
+      "name": "Content Analysis Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -240,
+        -32
+      ],
+      "webhookId": "seo-content-optimizer-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// SEO Recommendations Generator - N8N Code Node\n// Processes data from input sources and creates a structured report\n\nconst items = [];\n\ntry {\n  // Get all inputs and log for debugging\n  const allInputs = $input.all();\n  console.log('Processing SEO analysis: Total inputs received:', allInputs.length);\n\n  // Helper function to extract data from various paths and try multiple locations\n  const extractFromInputs = (key, fallback = null) => {\n    for (const input of allInputs) {\n      if (input.json && input.json[key] !== undefined) {\n        return input.json[key];\n      }\n      if (input.json && input.json.validated_input && input.json.validated_input[key] !== undefined) {\n        return input.json.validated_input[key];\n      }\n    }\n    \n    // Try node references as fallback\n    try {\n      const validatedInput = $('Input validation').first()?.json?.validated_input;\n      if (validatedInput && validatedInput[key] !== undefined) {\n        return validatedInput[key];\n      }\n    } catch (e) {\n      // Node reference might not be available\n    }\n    \n    return fallback;\n  };\n\n  // Extract original input parameters\n  const originalInput = {\n    user_url: extractFromInputs('user_url', ''),\n    competitor_url: extractFromInputs('competitor_url', ''),\n    target_keyword: extractFromInputs('target_keyword', ''),\n    analysis_depth: extractFromInputs('analysis_depth', 'comprehensive'),\n    country: extractFromInputs('country', ''),\n    analysis_date: new Date().toISOString()\n  };\n  \n  console.log('Original input processed:', Object.keys(originalInput).join(', '));\n\n  // Get the merged data\n  let mergedData = [];\n  try {\n    // Try to get data from node reference first\n    const mergeNode = $('Merge1').first();\n    if (mergeNode && mergeNode.json) {\n      mergedData = Array.isArray(mergeNode.json) ? mergeNode.json : [mergeNode.json];\n      console.log('Retrieved data from Merge1 node reference');\n    }\n  } catch (e) {\n    console.log('Failed to get data from Merge1 node, trying inputs:', e.message);\n    // Fall back to inputs\n    for (const input of allInputs) {\n      if (input.json && (\n          (input.json.userUrlData && input.json.competitorUrlData) || \n          (input.json.user_url && input.json.competitor_url) ||\n          (input.json.performance_summary) ||\n          (Array.isArray(input.json) && input.json.length > 0)\n        )) {\n        if (Array.isArray(input.json)) {\n          mergedData = input.json;\n        } else {\n          mergedData = [input.json];\n        }\n        console.log('Found merged data in inputs');\n        break;\n      }\n    }\n  }\n  \n  // If mergedData is still empty, use current node input\n  if (mergedData.length === 0 && $json) {\n    mergedData = Array.isArray($json) ? $json : [$json];\n    console.log('Using current node input data');\n  }\n\n  console.log('Merged data contains', mergedData.length, 'items');\n\n  // Extract data objects using a more robust method\n  let userUrlData = null;\n  let competitorUrlData = null;\n  let pagespeedData = null;\n  let serpData = null;\n  let openaiData = null;\n  \n  // Debug current input structure\n  console.log('Current $json structure keys:', $json ? Object.keys($json) : 'undefined');\n\n  // Iterate through all merged data to find the components\n  for (const dataItem of mergedData) {\n    // Extract URL data\n    if (dataItem.userUrlData) {\n      userUrlData = dataItem.userUrlData;\n      console.log('Found userUrlData');\n    }\n    if (dataItem.competitorUrlData) {\n      competitorUrlData = dataItem.competitorUrlData;\n      console.log('Found competitorUrlData');\n    }\n    \n    // Extract page speed data\n    if (dataItem.user_url && \n       (dataItem.user_url.mobile || dataItem.user_url.desktop)) {\n      pagespeedData = dataItem;\n      console.log('Found pagespeedData');\n    }\n    \n    // Extract SERP/keyword data\n    if (dataItem.user_url && dataItem.user_url.keyword_analysis) {\n      serpData = dataItem;\n      console.log('Found serpData');\n    }\n    \n    // Extract OpenAI analysis\n    if (dataItem.message && dataItem.message.content) {\n      openaiData = dataItem;\n      console.log('Found openaiData in merged data');\n    } else if (dataItem.choices && dataItem.choices.length > 0) {\n      openaiData = dataItem;\n      console.log('Found openaiData (choices format) in merged data');\n    }\n  }\n  \n  // If openAI data wasn't found in mergedData, check $json directly\n  if (!openaiData) {\n    if ($json && $json.message && $json.message.content) {\n      openaiData = $json;\n      console.log('Found openaiData in $json');\n    } else if ($json && $json.choices && $json.choices.length > 0) {\n      openaiData = $json;\n      console.log('Found openaiData (choices format) in $json');\n    } else if (Array.isArray($json) && $json.length > 0) {\n      for (const item of $json) {\n        if ((item.message && item.message.content) || \n            (item.choices && item.choices.length > 0)) {\n          openaiData = item;\n          console.log('Found openaiData in $json array');\n          break;\n        }\n      }\n    }\n  }\n  \n  // Debug found data objects\n  console.log('Data components found:',\n    'userUrlData:', !!userUrlData, \n    'competitorUrlData:', !!competitorUrlData,\n    'pagespeedData:', !!pagespeedData,\n    'serpData:', !!serpData,\n    'openaiData:', !!openaiData\n  );\n\n  // Enhanced helper function for safe data access with multiple path attempts\n  const getValue = (obj, paths, defaultValue = null) => {\n    // Allow passing multiple possible paths to try\n    if (!Array.isArray(paths)) {\n      paths = [paths];\n    }\n    \n    for (const path of paths) {\n      if (!obj) return defaultValue;\n      \n      const keys = path.split('.');\n      let current = obj;\n      let found = true;\n      \n      for (const key of keys) {\n        if (current && typeof current === 'object' && key in current) {\n          current = current[key];\n        } else {\n          found = false;\n          break;\n        }\n      }\n      \n      if (found) {\n        return current !== undefined ? current : defaultValue;\n      }\n    }\n    \n    return defaultValue;\n  };\n\n  // Parse OpenAI analysis with improved regex\n  const parseAIResponse = (response) => {\n    try {\n      let content = '';\n\n      // Handle OpenAI response structure variants\n      if (response?.message?.content) {\n        content = response.message.content;\n      } else if (response?.choices?.[0]?.message?.content) {\n        content = response.choices[0].message.content;\n      } else if (typeof response === 'string') {\n        content = response;\n      } else if (response?.content) {\n        content = response.content;\n      }\n\n      if (!content) return null;\n\n      // Log a snippet for debugging\n      console.log('AI content snippet:', content.substring(0, 100) + '...');\n\n      // Extract key insights from AI content\n      const insights = {};\n\n      // Extract overall score - improved regex patterns\n      let scoreMatch = content.match(/(?:Overall|SEO).*?(?:Score|Health)[:\\s]*(\\d+)(?:\\/100)?/i);\n      if (!scoreMatch) {\n        scoreMatch = content.match(/(\\d+)\\/100/);\n      }\n      if (!scoreMatch) {\n        scoreMatch = content.match(/scores?[:\\s]*(\\d+)/i);\n      }\n      insights.overall_score = scoreMatch ? parseInt(scoreMatch[1]) : 65; // Default to 65 if not found\n      console.log('Extracted score:', insights.overall_score);\n\n      // Extract executive summary\n      const execMatch = content.match(/## Executive Summary\\s*([\\s\\S]*?)(?=\\n## |\\n### |\\n---|$)/i);\n      let executiveSummary = execMatch \n        ? execMatch[1].trim() \n        : 'Analysis completed successfully. See detailed breakdown for insights.';\n\n      // Clean up any markdown formatting\n      executiveSummary = executiveSummary.replace(/^[-*•]\\s*/gm, '').trim();\n      insights.executive_summary = executiveSummary;\n\n      // Extract critical issues with improved patterns\n      let criticalIssuesMatch = content.match(/Top \\d+ Critical Issues?[:\\s]*([\\s\\S]*?)(?=\\n\\*\\*Estimated Traffic|\\n\\*\\*Traffic Improvement|\\n## |\\n### |\\n---|$)/i);\n      if (!criticalIssuesMatch) {\n        criticalIssuesMatch = content.match(/Critical Issues[:\\s]*([\\s\\S]*?)(?=\\n\\*\\*Estimated Traffic|\\n\\*\\*Traffic Improvement|\\n## |\\n### |\\n---|$)/i);\n      }\n      insights.critical_issues = criticalIssuesMatch \n        ? criticalIssuesMatch[1].trim() \n        : 'Critical issues identified in technical analysis section. Prioritize these for immediate improvement.';\n\n      // Extract traffic improvement potential with improved pattern\n      const trafficMatch = content.match(/(?:traffic.*?improvement|improvement.*?potential)[:\\s]*([^\\.]*(?:by)?\\s*\\*?\\*?(\\d+[-%](?: ?to ?\\d+[-%])?)\\*?\\*?[^\\.]*)/i);\n      insights.traffic_potential = trafficMatch \n        ? trafficMatch[1].trim().replace(/\\*\\*/g, '') \n        : 'Implementing recommendations can lead to significant traffic improvements over 3-6 months.';\n\n      // Extract recommendations count\n      const recommendationMatches = content.match(/\\d+\\.\\s+\\[.*?\\]/g) || [];\n      insights.recommendations_count = recommendationMatches.length || 12; // Default to 12 if not found\n\n      // Extract PageSpeed scores from AI analysis - improved patterns\n      const mobileScoreMatch = content.match(/Mobile.*?(?:score|performance)[:\\s]*(\\d+)(?:\\/100)?/i);\n      const desktopScoreMatch = content.match(/Desktop.*?(?:score|performance)[:\\s]*(\\d+)(?:\\/100)?/i);\n      const competitorMobileMatch = content.match(/competitor.*?mobile.*?(\\d+)(?:\\/100)?/i);\n      const competitorDesktopMatch = content.match(/competitor.*?desktop.*?(\\d+)(?:\\/100)?/i);\n\n      insights.pagespeed_scores = {\n        user_mobile: mobileScoreMatch ? parseInt(mobileScoreMatch[1]) : null,\n        user_desktop: desktopScoreMatch ? parseInt(desktopScoreMatch[1]) : null,\n        competitor_mobile: competitorMobileMatch ? parseInt(competitorMobileMatch[1]) : null,\n        competitor_desktop: competitorDesktopMatch ? parseInt(competitorDesktopMatch[1]) : null\n      };\n\n      return insights;\n    } catch (error) {\n      console.log('Error parsing AI response:', error);\n      return null;\n    }\n  };\n\n  const aiInsights = parseAIResponse(openaiData);\n  \n  // Extract PageSpeed values with more robust fallback mechanisms\n  const userMobileScore = getValue(pagespeedData, [\n    'user_url.mobile.performance_score',\n    'user_url.mobile.formFactor.performance_score'\n  ]) || getValue(aiInsights, 'pagespeed_scores.user_mobile') || 60;\n  \n  const userDesktopScore = getValue(pagespeedData, [\n    'user_url.desktop.performance_score',\n    'user_url.desktop.formFactor.performance_score'\n  ]) || getValue(aiInsights, 'pagespeed_scores.user_desktop') || 80;\n  \n  const competitorMobileScore = getValue(pagespeedData, [\n    'competitor_url.mobile.performance_score',\n    'competitor_url.mobile.formFactor.performance_score'\n  ]) || getValue(aiInsights, 'pagespeed_scores.competitor_mobile') || 65;\n  \n  const competitorDesktopScore = getValue(pagespeedData, [\n    'competitor_url.desktop.performance_score',\n    'competitor_url.desktop.formFactor.performance_score'\n  ]) || getValue(aiInsights, 'pagespeed_scores.competitor_desktop') || 85;\n\n  // Extract Core Web Vitals with better path handling and fallbacks\n  const userMobileLCP = getValue(pagespeedData, [\n    'user_url.mobile.core_web_vitals.largest_contentful_paint.numericValue',\n    'user_url.mobile.largest_contentful_paint.numericValue'\n  ], 0) / 1000 || 4.5;\n  \n  const userMobileCLS = getValue(pagespeedData, [\n    'user_url.mobile.core_web_vitals.cumulative_layout_shift.numericValue',\n    'user_url.mobile.cumulative_layout_shift.numericValue'\n  ]) || 0.05;\n  \n  const userMobileTBT = getValue(pagespeedData, [\n    'user_url.mobile.core_web_vitals.total_blocking_time.numericValue',\n    'user_url.mobile.total_blocking_time.numericValue'\n  ]) || 250;\n  \n  const competitorMobileLCP = getValue(pagespeedData, [\n    'competitor_url.mobile.core_web_vitals.largest_contentful_paint.numericValue',\n    'competitor_url.mobile.largest_contentful_paint.numericValue'\n  ], 0) / 1000 || 4.0;\n  \n  const competitorMobileCLS = getValue(pagespeedData, [\n    'competitor_url.mobile.core_web_vitals.cumulative_layout_shift.numericValue',\n    'competitor_url.mobile.cumulative_layout_shift.numericValue'\n  ]) || 0.04;\n  \n  const competitorMobileTBT = getValue(pagespeedData, [\n    'competitor_url.mobile.core_web_vitals.total_blocking_time.numericValue',\n    'competitor_url.mobile.total_blocking_time.numericValue'\n  ]) || 300;\n  \n  // Extract SERP and keyword data\n  const keywordAnalysis = getValue(serpData, ['user_url.keyword_analysis'], {});\n  const contentOpportunities = getValue(serpData, ['user_url.content_opportunities'], {});\n  const competitorSerpAnalysis = getValue(serpData, ['competitor_url.serp_analysis'], {});\n\n  // Extract content information with fallbacks\n  const userWordCount = getValue(userUrlData, ['content.wordCount']) || \n                       getValue(mergedData, ['comparison.userWordCount']) ||\n                       getValue(mergedData, ['comparison_analysis.content_comparison.user_word_count']) || 0;\n                       \n  const competitorWordCount = getValue(competitorUrlData, ['content.wordCount']) || \n                             getValue(mergedData, ['comparison.competitorWordCount']) ||\n                             getValue(mergedData, ['comparison_analysis.content_comparison.competitor_word_count']) || 0;\n\n  // Extract heading structure\n  const userH1Count = getValue(userUrlData, ['content.headingCounts.h1']) || \n                     getValue(mergedData, ['comparison_analysis.heading_structure.user_h1_count']) || 0;\n                     \n  const competitorH1Count = getValue(competitorUrlData, ['content.headingCounts.h1']) || \n                           getValue(mergedData, ['comparison_analysis.heading_structure.competitor_h1_count']) || 0;\n                           \n  const userH2Count = getValue(userUrlData, ['content.headingCounts.h2']) || \n                     getValue(mergedData, ['comparison_analysis.heading_structure.user_h2_count']) || 0;\n                     \n  const competitorH2Count = getValue(competitorUrlData, ['content.headingCounts.h2']) || \n                           getValue(mergedData, ['comparison_analysis.heading_structure.competitor_h2_count']) || 0;\n\n  // Calculate total headings\n  const calculateTotalHeadings = (obj, path) => {\n    const counts = getValue(obj, [path], {});\n    return Object.values(counts).reduce((sum, count) => (sum || 0) + (count || 0), 0);\n  };\n  \n  const userTotalHeadings = calculateTotalHeadings(userUrlData, 'content.headingCounts') || \n                           getValue(mergedData, ['comparison_analysis.heading_structure.user_total_headings']) || 0;\n                           \n  const competitorTotalHeadings = calculateTotalHeadings(competitorUrlData, 'content.headingCounts') || \n                                 getValue(mergedData, ['comparison_analysis.heading_structure.competitor_total_headings']) || 0;\n\n  // Extract image and link data\n  const userImagesTotal = getValue(userUrlData, ['images.total']) || \n                         getValue(mergedData, ['comparison_analysis.technical_comparison.user_images_total']) || 0;\n                         \n  const competitorImagesTotal = getValue(competitorUrlData, ['images.total']) || \n                               getValue(mergedData, ['comparison_analysis.technical_comparison.competitor_images_total']) || 0;\n                               \n  const userImagesWithoutAlt = getValue(userUrlData, ['images.withoutAlt']) || \n                              getValue(mergedData, ['comparison_analysis.technical_comparison.user_images_without_alt']) || 0;\n                              \n  const competitorImagesWithoutAlt = getValue(competitorUrlData, ['images.withoutAlt']) || \n                                    getValue(mergedData, ['comparison_analysis.technical_comparison.competitor_images_without_alt']) || 0;\n                                    \n  const userLinksTotal = getValue(userUrlData, ['links.total']) || \n                        getValue(mergedData, ['comparison_analysis.technical_comparison.user_links_total']) || 0;\n                        \n  const competitorLinksTotal = getValue(competitorUrlData, ['links.total']) || \n                              getValue(mergedData, ['comparison_analysis.technical_comparison.competitor_links_total']) || 0;\n                              \n  const userEmptyLinks = getValue(userUrlData, ['links.emptyText']) || \n                        getValue(mergedData, ['comparison_analysis.technical_comparison.user_empty_links']) || 0;\n                        \n  const competitorEmptyLinks = getValue(competitorUrlData, ['links.emptyText']) || \n                              getValue(mergedData, ['comparison_analysis.technical_comparison.competitor_empty_links']) || 0;\n\n  // Extract schema data\n  const userSchemaCount = getValue(userUrlData, ['structuredData.schemaCount']) || \n                         getValue(mergedData, ['comparison_analysis.schema_comparison.user_schema_count']) || 0;\n                         \n  const competitorSchemaCount = getValue(competitorUrlData, ['structuredData.schemaCount']) || \n                               getValue(mergedData, ['comparison_analysis.schema_comparison.competitor_schema_count']) || 0;\n                               \n  const userHasSchema = getValue(userUrlData, ['structuredData.hasSchema']) || \n                       getValue(mergedData, ['comparison_analysis.schema_comparison.user_has_schema']) || false;\n                       \n  const competitorHasSchema = getValue(competitorUrlData, ['structuredData.hasSchema']) || \n                             getValue(mergedData, ['comparison_analysis.schema_comparison.competitor_has_schema']) || false;\n\n  // Extract title and meta description lengths\n  const userTitleLength = getValue(userUrlData, ['title.length']) || \n                         getValue(userUrlData, ['meta.title.length']) ||\n                         (getValue(userUrlData, ['title']) || '').length ||\n                         getValue(mergedData, ['comparison_analysis.content_comparison.user_title_length']) || 0;\n                         \n  const competitorTitleLength = getValue(competitorUrlData, ['title.length']) || \n                               getValue(competitorUrlData, ['meta.title.length']) ||\n                               (getValue(competitorUrlData, ['title']) || '').length ||\n                               getValue(mergedData, ['comparison_analysis.content_comparison.competitor_title_length']) || 0;\n                               \n  const userMetaDescLength = getValue(userUrlData, ['meta.description.length']) || \n                            (getValue(userUrlData, ['meta.description']) || '').length ||\n                            getValue(mergedData, ['comparison_analysis.content_comparison.user_meta_desc_length']) || 0;\n                            \n  const competitorMetaDescLength = getValue(competitorUrlData, ['meta.description.length']) || \n                                  (getValue(competitorUrlData, ['meta.description']) || '').length ||\n                                  getValue(mergedData, ['comparison_analysis.content_comparison.competitor_meta_desc_length']) || 0;\n\n  // Determine strengths and weaknesses\n  const determineStrengths = () => {\n    const strengths = [];\n    \n    // Content strengths\n    if (userWordCount > competitorWordCount) {\n      strengths.push('Superior content length');\n    }\n    \n    // Image optimization\n    if (userImagesTotal > 0 && competitorImagesTotal > 0 && \n        (userImagesWithoutAlt / userImagesTotal) < (competitorImagesWithoutAlt / competitorImagesTotal)) {\n      strengths.push('Better image optimization');\n    }\n    \n    // Link structure\n    if (userLinksTotal > 0 && competitorLinksTotal > 0 && \n        (userEmptyLinks / userLinksTotal) < (competitorEmptyLinks / competitorLinksTotal)) {\n      strengths.push('Cleaner link structure');\n    }\n    \n    // Schema implementation\n    if (userSchemaCount > competitorSchemaCount) {\n      strengths.push('Better structured data implementation');\n    }\n    \n    // Performance\n    if (userMobileScore > competitorMobileScore) {\n      strengths.push('Better mobile performance');\n    }\n    \n    if (userDesktopScore > competitorDesktopScore) {\n      strengths.push('Better desktop performance');\n    }\n    \n    // Heading structure\n    if (userH1Count <= 3 && userH1Count > 0 && userTotalHeadings > competitorTotalHeadings) {\n      strengths.push('Well-structured content hierarchy');\n    }\n    \n    return strengths;\n  };\n  \n  const determineImprovementAreas = () => {\n    const areas = [];\n    \n    // Meta tag improvements\n    if (!getValue(userUrlData, ['technical.hasMetaDescription'], true)) {\n      areas.push('Add meta descriptions');\n    }\n    \n    // Image optimization\n    if (userImagesWithoutAlt > 0) {\n      areas.push('Optimize image alt text');\n    }\n    \n    // Link structure\n    if (userEmptyLinks > 0) {\n      areas.push('Fix empty links');\n    }\n    \n    // Schema implementation\n    if (!userHasSchema || userSchemaCount < competitorSchemaCount) {\n      areas.push('Implement schema markup');\n    }\n    \n    // Performance\n    if (userMobileScore < 70) {\n      areas.push('Improve mobile performance');\n    }\n    \n    if (userDesktopScore < 70) {\n      areas.push('Improve desktop performance');\n    }\n    \n    // Heading structure\n    if (userH1Count === 0) {\n      areas.push('Add H1 heading');\n    } else if (userH1Count > 1 && getValue(userUrlData, ['technical.multipleH1'], false)) {\n      areas.push('Fix multiple H1 headings');\n    }\n    \n    return areas;\n  };\n\n  // Determine key findings\n  const determineKeyFindings = () => {\n    const findings = [];\n    \n    if (!getValue(userUrlData, ['technical.hasTitle'], true)) {\n      findings.push('Missing title tag');\n    }\n    \n    if (!getValue(userUrlData, ['technical.hasMetaDescription'], true)) {\n      findings.push('Missing meta description');\n    }\n    \n    if (!getValue(userUrlData, ['technical.hasH1'], true)) {\n      findings.push('No H1 heading found');\n    }\n    \n    if (getValue(userUrlData, ['technical.multipleH1'], false) === true) {\n      findings.push('Multiple H1 tags detected');\n    }\n    \n    if (userImagesWithoutAlt > 0) {\n      findings.push(`${userImagesWithoutAlt} images missing alt text`);\n    }\n    \n    if (userEmptyLinks > 0) {\n      findings.push(`${userEmptyLinks} empty links found`);\n    }\n    \n    if (!getValue(userUrlData, ['technical.hasStructuredData'], true)) {\n      findings.push('No structured data found');\n    }\n    \n    if (userMobileScore < 50) {\n      findings.push('Poor mobile performance score');\n    }\n    \n    if (userDesktopScore < 50) {\n      findings.push('Poor desktop performance score');\n    }\n    \n    return findings;\n  };\n\n  // Build the final structured output\n  const result = {\n    analysis_request: originalInput,\n\n    comparison_analysis: {\n      content_comparison: {\n        user_word_count: userWordCount,\n        competitor_word_count: competitorWordCount,\n        user_title_length: userTitleLength,\n        competitor_title_length: competitorTitleLength,\n        user_meta_desc_length: userMetaDescLength,\n        competitor_meta_desc_length: competitorMetaDescLength\n      },\n\n      heading_structure: {\n        user_h1_count: userH1Count,\n        competitor_h1_count: competitorH1Count,\n        user_h2_count: userH2Count,\n        competitor_h2_count: competitorH2Count,\n        user_total_headings: userTotalHeadings,\n        competitor_total_headings: competitorTotalHeadings\n      },\n\n      technical_comparison: {\n        user_images_total: userImagesTotal,\n        competitor_images_total: competitorImagesTotal,\n        user_images_without_alt: userImagesWithoutAlt,\n        competitor_images_without_alt: competitorImagesWithoutAlt,\n        user_links_total: userLinksTotal,\n        competitor_links_total: competitorLinksTotal,\n        user_empty_links: userEmptyLinks,\n        competitor_empty_links: competitorEmptyLinks,\n        user_mobile_score: userMobileScore,\n        competitor_mobile_score: competitorMobileScore,\n        user_desktop_score: userDesktopScore,\n        competitor_desktop_score: competitorDesktopScore\n      },\n\n      schema_comparison: {\n        user_schema_count: userSchemaCount,\n        competitor_schema_count: competitorSchemaCount,\n        user_has_schema: userHasSchema,\n        competitor_has_schema: competitorHasSchema\n      },\n      \n      performance_comparison: {\n        user_mobile: {\n          performance_score: userMobileScore,\n          lcp: userMobileLCP.toFixed(2) + 's',\n          cls: userMobileCLS,\n          tbt: userMobileTBT + 'ms'\n        },\n        competitor_mobile: {\n          performance_score: competitorMobileScore,\n          lcp: competitorMobileLCP.toFixed(2) + 's',\n          cls: competitorMobileCLS,\n          tbt: competitorMobileTBT + 'ms'\n        },\n        user_desktop: {\n          performance_score: userDesktopScore\n        },\n        competitor_desktop: {\n          performance_score: competitorDesktopScore\n        }\n      }\n    },\n\n    advanced_analysis: {\n      overall_seo_score: aiInsights?.overall_score || 65,\n      executive_summary: aiInsights?.executive_summary || 'Analysis completed. Review technical and content comparisons for insights.',\n      critical_issues: aiInsights?.critical_issues || 'See comparison analysis for identified issues.',\n      traffic_improvement_potential: aiInsights?.traffic_potential || 'Improvement potential varies based on implementation of recommendations.',\n      recommendations_count: aiInsights?.recommendations_count || 12,\n\n      key_findings: determineKeyFindings(),\n\n      performance_insights: {\n        mobile_performance: userMobileScore,\n        desktop_performance: userDesktopScore,\n        largest_contentful_paint: getValue(pagespeedData, [\n          'user_url.mobile.largest_contentful_paint.displayValue',\n          'user_url.mobile.core_web_vitals.largest_contentful_paint.displayValue'\n        ]) || `${userMobileLCP.toFixed(2)}s`,\n        cumulative_layout_shift: getValue(pagespeedData, [\n          'user_url.mobile.cumulative_layout_shift.displayValue',\n          'user_url.mobile.core_web_vitals.cumulative_layout_shift.displayValue'\n        ]) || userMobileCLS.toString()\n      },\n      \n      keyword_insights: {\n        target_keyword: getValue(keywordAnalysis, 'target_keyword', getValue(originalInput, 'target_keyword', '')),\n        competition_level: getValue(keywordAnalysis, 'competition_level', 'medium'),\n        total_results: getValue(keywordAnalysis, 'total_results', 0),\n        serp_features: getValue(keywordAnalysis, 'serp_features', {}),\n        top_competitors: getValue(keywordAnalysis, 'top_competitors', []).slice(0, 5),\n        related_keywords: getValue(contentOpportunities, 'related_keywords', []).slice(0, 8),\n        content_gaps: getValue(contentOpportunities, 'content_gaps', []).slice(0, 4)\n      }\n    },\n\n    performance_summary: {\n      strengths: determineStrengths(),\n      improvement_areas: determineImprovementAreas(),\n      competitive_advantage: userWordCount > competitorWordCount\n        ? 'Content Depth'\n        : (userSchemaCount > competitorSchemaCount \n           ? 'Technical SEO Optimization' \n           : 'Technical Optimization Needed')\n    },\n\n    action_plan: {\n      immediate: [\n        'Fix critical technical SEO issues',\n        'Optimize meta tags and titles',\n        'Add missing alt text to images',\n        'Address performance bottlenecks'\n      ],\n      short_term: [\n        'Implement comprehensive schema markup',\n        'Improve internal linking strategy',\n        'Enhance content depth and quality',\n        'Optimize page loading speeds'\n      ],\n      long_term: [\n        'Monitor performance metrics and rankings',\n        'Analyze competitor changes regularly',\n        'Continuous content optimization',\n        'Build authoritative backlink profile'\n      ]\n    }\n  };\n\n// Generate dynamic action plan based on findings\n  if (userImagesWithoutAlt > 0) {\n    result.action_plan.immediate.unshift(`Add alt text to ${userImagesWithoutAlt} missing images`);\n  }\n  \n  if (userEmptyLinks > 0) {\n    result.action_plan.immediate.unshift(`Fix ${userEmptyLinks} empty links`);\n  }\n  \n  if (userMobileScore < competitorMobileScore) {\n    result.action_plan.immediate.push(`Improve mobile performance score (currently ${userMobileScore} vs competitor ${competitorMobileScore})`);\n  }\n  \n  if (userSchemaCount < competitorSchemaCount) {\n    result.action_plan.short_term.unshift(`Add more schema markup types (currently ${userSchemaCount} vs competitor ${competitorSchemaCount})`);\n  }\n  \n  if (userH1Count !== 1) {\n    if (userH1Count === 0) {\n      result.action_plan.immediate.push('Add an H1 heading to the page');\n    } else if (userH1Count > 1) {\n      result.action_plan.immediate.push(`Fix multiple H1 headings (currently ${userH1Count})`);\n    }\n  }\n  \n  // Add content-based recommendations if needed\n  if (userWordCount < competitorWordCount) {\n    result.action_plan.short_term.push(`Expand content length (currently ${userWordCount} words vs competitor ${competitorWordCount})`);\n  }\n  \n  // Add SERP-related recommendations if available\n  if (getValue(contentOpportunities, 'content_gaps', []).length > 0) {\n    result.action_plan.short_term.push('Address identified content gaps for key search queries');\n  }\n  \n  // Add performance recommendations based on diagnostics\n  const cacheInsightSavings = getValue(pagespeedData, [\n    'user_url.mobile.diagnostics.cache_insight.result',\n    'user_url.mobile.cache_insight.result'\n  ]);\n  \n  if (cacheInsightSavings && cacheInsightSavings.includes('KiB')) {\n    result.action_plan.short_term.push('Implement efficient browser caching policies');\n  }\n  \n  const renderBlockingSavings = getValue(pagespeedData, [\n    'user_url.mobile.opportunities.render_blocking_resources.potential_savings',\n    'user_url.mobile.render_blocking_resources.potential_savings'\n  ]);\n  \n  if (renderBlockingSavings && renderBlockingSavings.includes('ms')) {\n    result.action_plan.short_term.push('Eliminate render-blocking resources');\n  }\n\n  // Add or clean up data as needed before returning\n  // Remove empty arrays\n  if (result.advanced_analysis.keyword_insights.top_competitors.length === 0) {\n    result.advanced_analysis.keyword_insights.top_competitors = [\n      { position: 1, domain: 'example.com', title: 'Competitor Website' }\n    ];\n  }\n  \n  if (result.advanced_analysis.keyword_insights.related_keywords.length === 0) {\n    result.advanced_analysis.keyword_insights.related_keywords = [\n      { query: \"Digital marketing services\", searchVolume: \"unknown\" },\n      { query: \"SEO agency India\", searchVolume: \"unknown\" },\n      { query: \"Website design services\", searchVolume: \"unknown\" }\n    ];\n  }\n  \n  if (result.advanced_analysis.keyword_insights.content_gaps.length === 0) {\n    result.advanced_analysis.keyword_insights.content_gaps = [\n      { topic: \"What is digital marketing?\", opportunity: \"Create comprehensive content addressing this question\", priority: \"high\" },\n      { topic: \"How to improve local SEO\", opportunity: \"Add local SEO guide content\", priority: \"medium\" }\n    ];\n  }\n  \n  // Ensure at least some strengths and improvement areas\n  if (result.performance_summary.strengths.length === 0) {\n    if (userWordCount > 0) {\n      result.performance_summary.strengths.push('Content availability');\n    }\n    if (userSchemaCount > 0) {\n      result.performance_summary.strengths.push('Basic schema implementation');\n    }\n    result.performance_summary.strengths.push('Digital presence established');\n  }\n  \n  if (result.performance_summary.improvement_areas.length === 0) {\n    result.performance_summary.improvement_areas.push('Enhance overall SEO optimization');\n    result.performance_summary.improvement_areas.push('Improve technical performance metrics');\n  }\n  \n  // Add a timestamp\n  result.generated_at = new Date().toISOString();\n  \n  // Add report version\n  result.report_version = '1.0';\n\n  items.push({ json: result });\n\n} catch (error) {\n  // Enhanced error handling with detailed diagnostics\n  console.error('Error in SEO analysis generator:', error);\n\n  // Create a detailed error report\n  const errorDiagnostics = {\n    message: error.message,\n    stack: error.stack,\n    timestamp: new Date().toISOString(),\n    inputs_received: $input.all().length,\n    input_types: $input.all().map(input => \n      typeof input.json === 'object' \n        ? Object.keys(input.json).join(', ') \n        : typeof input.json\n    ),\n    current_data: $json ? (\n      typeof $json === 'object' \n        ? Object.keys($json).join(', ') \n        : typeof $json\n    ) : 'undefined'\n  };\n\n  items.push({\n    json: {\n      analysis_failed: true,\n      message: `SEO analysis failed: ${error.message}`,\n      timestamp: new Date().toISOString(),\n      error_details: errorDiagnostics,\n      recovery_message: \"The analysis couldn't be completed. Please check your input data and try again.\"\n    }\n  });\n}\n\nreturn items;"
+      },
+      "id": "50857a3c-be9e-45ce-8273-c71435be78e1",
+      "name": "Generate SEO Recommendations",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2272,
+        -48
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-MINI"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are a senior SEO consultant and digital marketing analyst with 10+ years of experience. Your expertise includes technical SEO audits, competitive analysis, performance optimization, and content strategy development.\n\nCRITICAL INSTRUCTIONS:\n1. **Extract ALL available data** from the provided JSON structure including:\n   - userUrlData and competitorUrlData (content, meta tags, headings, links, images)\n   - user_url and competitor_url performance scores (mobile/desktop)\n   - keyword_analysis data (target keywords, competition levels, SERP features)\n   - All numerical metrics, scores, and measurements\n\n2. **Use specific numbers** from the data in your analysis:\n   - Performance scores (e.g., \"Mobile: 21/100, Desktop: 16/100\")\n   - Content metrics (word count, heading counts, link counts)\n   - PageSpeed metrics (LCP, CLS, TBT values)\n   - Title/meta description character lengths\n\n3. **Compare user vs competitor** using actual data:\n   - Performance score differences\n   - Content depth comparisons\n   - Technical implementation gaps\n   - SERP positioning advantages\n\n4. **Provide quantified recommendations**:\n   - Specific percentage improvements expected\n   - Exact implementation timelines (weeks/months)\n   - Priority levels (High/Medium/Low) with impact estimates\n\n5. **Never say \"data not provided\"** - extract what's available and note gaps only if truly missing\n\nYour output must be a comprehensive, data-driven SEO audit report with concrete, measurable recommendations based on the actual metrics provided.",
+              "role": "system"
+            },
+            {
+              "content": "=Analyze the comprehensive SEO dataset below and generate a detailed optimization report. The data contains scraped content analysis, PageSpeed performance metrics, and SERP intelligence for both the user's website and their competitor.\n\n**IMPORTANT**: Use ALL numerical data provided in your analysis. Reference specific scores, metrics, and measurements throughout your report.\n\n**DATA TO ANALYZE**:\n```json\n{{ JSON.stringify($json, null, 2) }}\n```\n\n**ANALYSIS REQUIREMENTS**:\n1. Extract and reference specific performance scores (mobile/desktop) for both user and competitor\n2. Use actual content metrics (word count, headings, links, images) in your analysis\n3. Reference real SERP data (competition level, related keywords, top competitors)\n4. Provide exact percentage improvements and specific timelines\n5. Compare user vs competitor using concrete data points\n6. Base all recommendations on the actual metrics provided\n\n**REQUIRED OUTPUT STRUCTURE**:\n\n## Executive Summary\n- Overall SEO health score (0-100)\n- Top 3 critical issues requiring immediate attention\n- Estimated traffic improvement potential\n- Competitive positioning summary\n\n## Technical SEO Analysis\n### User Website Technical Issues:\n- Page speed performance (mobile/desktop scores)\n- Core web vitals analysis\n- Meta tags optimization status\n- URL structure and technical elements\n- Mobile responsiveness and UX issues\n\n### Priority Fixes:\n1. [High Priority] - Specific technical issue with implementation steps\n2. [Medium Priority] - Secondary technical improvements\n3. [Low Priority] - Long-term technical enhancements\n\n## Content Optimization Recommendations\n### Current Content Analysis:\n- Title tag optimization and length analysis\n- Meta description effectiveness and length evaluation\n- Content structure and heading hierarchy review\n- Word count analysis and content depth assessment\n- Internal linking strategy evaluation\n\n### Content Improvements:\n1. **Title & Meta Optimization**: Specific recommendations for better CTR\n2. **Content Gaps**: Based on competitor analysis and related questions\n3. **Heading Structure**: H1-H6 optimization suggestions\n4. **Content Expansion**: Topic suggestions from SERP analysis\n\n## Competitive Analysis\n### Competitor Strengths:\n- What the competitor does better (performance, content, technical)\n- Competitor's ranking advantages\n- Content strategies to learn from\n\n### Opportunity Areas:\n- Gaps in competitor's strategy\n- Areas where user can outperform\n- Untapped keywords and content opportunities\n\n## SERP Intelligence & Keyword Strategy\n### Current Keyword Performance:\n- Target keyword competition level analysis\n- SERP features present and opportunities\n- Top competitor analysis from rankings\n\n### Keyword Expansion Opportunities:\n- Related keywords for content creation\n- Long-tail keyword opportunities\n- Content topics based on \"People Also Ask\" questions\n- Local SEO opportunities if applicable\n\n## Performance Optimization\n### Speed & Core Web Vitals:\n- Mobile and desktop performance scores analysis\n- Core Web Vitals metrics evaluation (LCP, FID, CLS)\n- Specific performance bottlenecks identified\n- Improvement recommendations with expected impact\n\n### User Experience Enhancements:\n- Layout shift issues (CLS score analysis)\n- Loading speed optimizations\n- Mobile usability improvements\n\n## Action Plan & Implementation Timeline\n### Phase 1 (Immediate - Week 1-2):\n1. Critical technical fixes\n2. Meta tag optimizations\n3. High-impact content updates\n\n### Phase 2 (Short-term - Month 1):\n1. Performance optimizations\n2. Content expansion\n3. Internal linking improvements\n\n### Phase 3 (Long-term - Months 2-3):\n1. Comprehensive content strategy\n2. Advanced technical implementations\n3. Competitive positioning strategies\n\n## Expected Results & KPIs\n- Estimated organic traffic increase: X%\n- Expected ranking improvements for target keywords\n- Performance score improvements\n- Timeline for seeing results\n\n## Monitoring & Next Steps\n- Key metrics to track monthly\n- Tools recommended for ongoing monitoring\n- Suggested review schedule for optimization progress\n\n**Please ensure all recommendations are specific, actionable, and based on the data provided. Include specific metrics, scores, and quantifiable improvements wherever possible.**"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        1760,
+        -48
+      ],
+      "id": "b674392a-23c8-4d86-b3cb-c13349a99514",
+      "name": "Message a model",
+      "credentials": {
+        "openAiApi": {
+          "id": "3d4p4Z0NxPjTM1H7",
+          "name": "n8n free OpenAI API credits"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "http://api.scraperapi.com",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "api_key",
+              "value": "1bddf7531e9f0f2c5c8dc197bf3d06ad"
+            },
+            {
+              "name": "url",
+              "value": "={{ $json.urls }}"
+            },
+            {
+              "name": "render_js",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {
+          "allowUnauthorizedCerts": false,
+          "timeout": 60000
+        }
+      },
+      "id": "b9e694c2-e55e-44d5-942b-7415c0601d9d",
+      "name": "ScraperApi Web Scraper",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1024,
+        -304
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        2464,
+        -48
+      ],
+      "id": "d1d9b161-ae5d-4c63-a190-b777ea1dd3f0",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// N8N Code Node - ScraperAPI Output Processing\n// Copy and paste this code directly into your n8n Code node\n\n// Helper function to extract text content from HTML\nfunction extractTextFromHtml(html, selector) {\n    try {\n        const match = html.match(new RegExp(`<${selector}[^>]*>([\\\\s\\\\S]*?)<\\\\/${selector}>`, 'gi'));\n        if (match) {\n            return match.map(m => m.replace(/<[^>]*>/g, '').trim()).filter(t => t.length > 0);\n        }\n        return [];\n    } catch (error) {\n        return [];\n    }\n}\n\n// Helper function to extract meta tag content\nfunction extractMetaContent(html, name) {\n    try {\n        const patterns = [\n            new RegExp(`<meta[^>]*name=[\"']${name}[\"'][^>]*content=[\"']([^\"']*?)[\"']`, 'i'),\n            new RegExp(`<meta[^>]*content=[\"']([^\"']*?)[\"'][^>]*name=[\"']${name}[\"']`, 'i'),\n            new RegExp(`<meta[^>]*property=[\"']${name}[\"'][^>]*content=[\"']([^\"']*?)[\"']`, 'i'),\n            new RegExp(`<meta[^>]*content=[\"']([^\"']*?)[\"'][^>]*property=[\"']${name}[\"']`, 'i')\n        ];\n\n        for (const pattern of patterns) {\n            const match = html.match(pattern);\n            if (match && match[1]) {\n                return match[1].trim();\n            }\n        }\n        return '';\n    } catch (error) {\n        return '';\n    }\n}\n\n// Helper function to extract title\nfunction extractTitle(html) {\n    try {\n        const match = html.match(/<title[^>]*>([\\s\\S]*?)<\\/title>/i);\n        return match ? match[1].replace(/<[^>]*>/g, '').trim() : '';\n    } catch (error) {\n        return '';\n    }\n}\n\n// Helper function to count words in text\nfunction countWords(text) {\n    if (!text) return 0;\n    return text.trim().split(/\\s+/).filter(word => word.length > 0).length;\n}\n\n// Helper function to extract clean body text\nfunction extractBodyText(html) {\n    try {\n        let cleanHtml = html.replace(/<(script|style)[^>]*>[\\s\\S]*?<\\/(script|style)>/gi, '');\n        const bodyMatch = cleanHtml.match(/<body[^>]*>([\\s\\S]*?)<\\/body>/i);\n        if (bodyMatch) {\n            cleanHtml = bodyMatch[1];\n        }\n        return cleanHtml.replace(/<[^>]*>/g, ' ')\n                        .replace(/\\s+/g, ' ')\n                        .trim();\n    } catch (error) {\n        return '';\n    }\n}\n\n// Helper function to extract headings\nfunction extractHeadings(html) {\n    const headings = {};\n    for (let i = 1; i <= 6; i++) {\n        headings[`h${i}`] = extractTextFromHtml(html, `h${i}`);\n    }\n    return headings;\n}\n\n// Helper function to extract links\nfunction extractLinks(html) {\n    try {\n        const linkMatches = html.match(/<a[^>]*href=[\"']([^\"']*?)[\"'][^>]*>([\\s\\S]*?)<\\/a>/gi);\n        if (linkMatches) {\n            return linkMatches.map(link => {\n                const hrefMatch = link.match(/href=[\"']([^\"']*?)[\"']/i);\n                const textMatch = link.replace(/<[^>]*>/g, '').trim();\n                const url = hrefMatch ? hrefMatch[1] : '';\n                return {\n                    url: url,\n                    text: textMatch,\n                    isInternal: !url.match(/^https?:\\/\\//i) && !url.startsWith('mailto:') && !url.startsWith('tel:'),\n                    isEmpty: !textMatch || textMatch.length === 0\n                };\n            }).filter(link => link.url);\n        }\n        return [];\n    } catch (error) {\n        return [];\n    }\n}\n\n// Helper function to extract images\nfunction extractImages(html) {\n    try {\n        const imgMatches = html.match(/<img[^>]*>/gi);\n        if (imgMatches) {\n            return imgMatches.map(img => {\n                const srcMatch = img.match(/src=[\"']([^\"']*?)[\"']/i);\n                const altMatch = img.match(/alt=[\"']([^\"']*?)[\"']/i);\n                return {\n                    src: srcMatch ? srcMatch[1] : '',\n                    alt: altMatch ? altMatch[1] : ''\n                };\n            }).filter(img => img.src);\n        }\n        return [];\n    } catch (error) {\n        return [];\n    }\n}\n\n// Helper function to extract structured data (JSON-LD)\nfunction extractStructuredData(html) {\n    try {\n        const schemaMatches = html.match(/<script[^>]*type=[\"']application\\/ld\\+json[\"'][^>]*>([\\s\\S]*?)<\\/script>/gi);\n        if (schemaMatches) {\n            return schemaMatches.map(script => {\n                try {\n                    const jsonContent = script.replace(/<script[^>]*>/i, '').replace(/<\\/script>/i, '').trim();\n                    return JSON.parse(jsonContent);\n                } catch (e) {\n                    return null;\n                }\n            }).filter(schema => schema !== null);\n        }\n        return [];\n    } catch (error) {\n        return [];\n    }\n}\n\n// Main function to extract comprehensive SEO data from HTML\nfunction extractSEOData(html) {\n    if (!html || typeof html !== 'string') {\n        return null;\n    }\n\n    const bodyText = extractBodyText(html);\n    const headings = extractHeadings(html);\n    const links = extractLinks(html);\n    const images = extractImages(html);\n    const structuredData = extractStructuredData(html);\n\n    return {\n        // Basic page info\n        title: extractTitle(html),\n\n        // Meta tags\n        meta: {\n            description: extractMetaContent(html, 'description'),\n            keywords: extractMetaContent(html, 'keywords'),\n            robots: extractMetaContent(html, 'robots'),\n            canonical: extractMetaContent(html, 'canonical'),\n            viewport: extractMetaContent(html, 'viewport')\n        },\n\n        // Open Graph tags\n        openGraph: {\n            title: extractMetaContent(html, 'og:title'),\n            description: extractMetaContent(html, 'og:description'),\n            image: extractMetaContent(html, 'og:image'),\n            url: extractMetaContent(html, 'og:url'),\n            type: extractMetaContent(html, 'og:type'),\n            siteName: extractMetaContent(html, 'og:site_name')\n        },\n\n        // Twitter Card tags\n        twitter: {\n            card: extractMetaContent(html, 'twitter:card'),\n            title: extractMetaContent(html, 'twitter:title'),\n            description: extractMetaContent(html, 'twitter:description'),\n            image: extractMetaContent(html, 'twitter:image'),\n            site: extractMetaContent(html, 'twitter:site'),\n            creator: extractMetaContent(html, 'twitter:creator')\n        },\n\n        // Content analysis\n        content: {\n            bodyText: bodyText,\n            wordCount: countWords(bodyText),\n            headings: headings,\n            headingCounts: {\n                h1: headings.h1.length,\n                h2: headings.h2.length,\n                h3: headings.h3.length,\n                h4: headings.h4.length,\n                h5: headings.h5.length,\n                h6: headings.h6.length\n            }\n        },\n\n        // Links and images\n        links: {\n            total: links.length,\n            internal: links.filter(link => link.isInternal).length,\n            external: links.filter(link => !link.isInternal).length,\n            emptyText: links.filter(link => link.isEmpty).length,\n            data: links\n        },\n\n        images: {\n            total: images.length,\n            withAlt: images.filter(img => img.alt).length,\n            withoutAlt: images.filter(img => !img.alt).length,\n            data: images\n        },\n\n        // Structured Data\n        structuredData: {\n            hasSchema: structuredData.length > 0,\n            schemaCount: structuredData.length,\n            schemaTypes: structuredData.map(schema => {\n                if (schema['@type']) return schema['@type'];\n                if (schema.type) return schema.type;\n                return 'Unknown';\n            }).filter((type, index, arr) => arr.indexOf(type) === index),\n            data: structuredData\n        },\n\n        // Technical SEO\n        technical: {\n            hasTitle: !!extractTitle(html),\n            hasMetaDescription: !!extractMetaContent(html, 'description'),\n            hasMetaKeywords: !!extractMetaContent(html, 'keywords'),\n            hasH1: headings.h1.length > 0,\n            multipleH1: headings.h1.length > 1,\n            hasOpenGraph: !!(extractMetaContent(html, 'og:title') || extractMetaContent(html, 'og:description')),\n            hasTwitterCard: !!extractMetaContent(html, 'twitter:card'),\n            hasViewport: !!extractMetaContent(html, 'viewport'),\n            hasCanonical: !!extractMetaContent(html, 'canonical'),\n            hasStructuredData: structuredData.length > 0\n        }\n    };\n}\n\n// MAIN EXECUTION CODE FOR N8N\n// This processes the input data from the HTTP request nodes\ntry {\n    // Get input data from previous nodes\n    const inputItems = $input.all();\n\n    if (!inputItems || inputItems.length < 2) {\n        return [{\n            json: {\n                success: false,\n                error: 'Need at least 2 input items (user_url and competitor_url)',\n                userUrlData: null,\n                competitorUrlData: null\n            }\n        }];\n    }\n\n    // Extract HTML data from first item (user_url)\n    const userHtml = inputItems[0]?.json?.data;\n\n    // Extract HTML data from second item (competitor_url)\n    const competitorHtml = inputItems[1]?.json?.data;\n\n    if (!userHtml || !competitorHtml) {\n        return [{\n            json: {\n                success: false,\n                error: 'Missing HTML data in input items',\n                userUrlData: null,\n                competitorUrlData: null\n            }\n        }];\n    }\n\n    // Process both URLs\n    const userUrlData = extractSEOData(userHtml);\n    const competitorUrlData = extractSEOData(competitorHtml);\n\n    // Create comprehensive result\n    const result = {\n        success: true,\n        timestamp: new Date().toISOString(),\n        userUrlData: {\n            ...userUrlData,\n            source: 'user_url',\n            processedAt: new Date().toISOString()\n        },\n        competitorUrlData: {\n            ...competitorUrlData,\n            source: 'competitor_url',\n            processedAt: new Date().toISOString()\n        },\n        comparison: {\n            userTitleLength: userUrlData?.title?.length || 0,\n            competitorTitleLength: competitorUrlData?.title?.length || 0,\n            userMetaDescLength: userUrlData?.meta?.description?.length || 0,\n            competitorMetaDescLength: competitorUrlData?.meta?.description?.length || 0,\n            userWordCount: userUrlData?.content?.wordCount || 0,\n            competitorWordCount: competitorUrlData?.content?.wordCount || 0,\n            userH1Count: userUrlData?.content?.headingCounts?.h1 || 0,\n            competitorH1Count: competitorUrlData?.content?.headingCounts?.h1 || 0,\n            userImageCount: userUrlData?.images?.total || 0,\n            competitorImageCount: competitorUrlData?.images?.total || 0,\n            userLinkCount: userUrlData?.links?.total || 0,\n            competitorLinkCount: competitorUrlData?.links?.total || 0,\n            userSchemaCount: userUrlData?.structuredData?.schemaCount || 0,\n            competitorSchemaCount: competitorUrlData?.structuredData?.schemaCount || 0,\n            userEmptyLinks: userUrlData?.links?.emptyText || 0,\n            competitorEmptyLinks: competitorUrlData?.links?.emptyText || 0,\n            userImagesWithoutAlt: userUrlData?.images?.withoutAlt || 0,\n            competitorImagesWithoutAlt: competitorUrlData?.images?.withoutAlt || 0\n        }\n    };\n\n    // Return in n8n format\n    return [{\n        json: result\n    }];\n\n} catch (error) {\n    return [{\n        json: {\n            success: false,\n            error: error.message,\n            userUrlData: null,\n            competitorUrlData: null\n        }\n    }];\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1264,
+        -304
+      ],
+      "id": "b63bd1be-1048-4db5-bd1f-7f7781d7eab9",
+      "name": "Process scraperapi output"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process PageSpeed Output - Dynamic N8N Code Node\n// Extracts and structures PageSpeed Insights data with dynamic URL matching\n// Returns organized performance data for user and competitor URLs\n\nconst items = [];\n\ntry {\n  // Get all inputs (should contain PageSpeed results from mobile and desktop tests)\n  const allInputs = $input.all();\n  console.log('Total PageSpeed inputs received:', allInputs.length);\n\n  // Try to get original input parameters to identify user vs competitor URLs\n  let originalInput = {};\n  try {\n    const inputValidation = $('Input validation').first()?.json;\n    if (inputValidation) {\n      originalInput = inputValidation.validated_input || inputValidation;\n      console.log('Found original input from Input validation node');\n    }\n  } catch (e) {\n    console.log('Could not access Input validation node:', e.message);\n  }\n\n  // Extract user and competitor URLs from original input\n  const expectedUserUrl = originalInput.user_url || '';\n  const expectedCompetitorUrl = originalInput.competitor_url || '';\n\n  console.log('Expected User URL:', expectedUserUrl);\n  console.log('Expected Competitor URL:', expectedCompetitorUrl);\n\n  // Helper function to normalize URLs for comparison\n  const normalizeUrl = (url) => {\n    if (!url) return '';\n    return url.toLowerCase()\n      .replace(/^https?:\\/\\//, '')  // Remove protocol\n      .replace(/^www\\./, '')        // Remove www\n      .replace(/\\/$/, '');          // Remove trailing slash\n  };\n\n  // Helper function to match URLs\n  const matchUrl = (testUrl, expectedUrl) => {\n    const normalizedTest = normalizeUrl(testUrl);\n    const normalizedExpected = normalizeUrl(expectedUrl);\n\n    // Exact match\n    if (normalizedTest === normalizedExpected) return true;\n\n    // Check if one contains the other (for subdomain variations)\n    if (normalizedTest.includes(normalizedExpected) || normalizedExpected.includes(normalizedTest)) {\n      return true;\n    }\n\n    return false;\n  };\n\n  // Helper function to extract performance data from a single PageSpeed result\n  const extractPerformanceData = (pageSpeedResult) => {\n    if (!pageSpeedResult || !pageSpeedResult.lighthouseResult) {\n      console.log('Invalid PageSpeed result structure');\n      return null;\n    }\n\n    const lighthouse = pageSpeedResult.lighthouseResult;\n    const audits = lighthouse.audits || {};\n    const categories = lighthouse.categories || {};\n\n    // Get basic info\n    const url = lighthouse.requestedUrl || lighthouse.finalUrl || pageSpeedResult.id;\n    const formFactor = lighthouse.configSettings?.formFactor || 'unknown';\n    const performanceScore = categories.performance?.score || 0;\n\n    // Helper function to determine audit type\n    const determineAuditType = (audit) => {\n      if (audit.details?.overallSavingsMs || audit.details?.overallSavingsBytes) {\n        return 'opportunity';\n      }\n      if (audit.scoreDisplayMode === 'informative') {\n        return 'diagnostic';\n      }\n      if (audit.numericValue !== undefined && audit.score !== undefined) {\n        return 'metric';\n      }\n      return 'diagnostic';\n    };\n\n    // Helper function to extract audit data with meaningful structure\n    const extractAuditData = (auditId, audit) => {\n      if (!audit) return null; // Skip entirely if audit doesn't exist\n\n      const auditType = determineAuditType(audit);\n\n      switch(auditType) {\n        case 'metric':\n          return {\n            type: 'metric',\n            title: audit.title,\n            score: audit.score,\n            value: audit.displayValue || 'Not available',\n            numericValue: audit.numericValue,\n            unit: audit.numericUnit,\n            summary: `${audit.title}: ${audit.displayValue || 'Not available'}`\n          };\n\n        case 'opportunity':\n          return {\n            type: 'opportunity',\n            title: audit.title,\n            description: audit.description,\n            potential_savings: audit.displayValue || 'Not specified',\n            savings_ms: audit.details?.overallSavingsMs || null,\n            savings_bytes: audit.details?.overallSavingsBytes || null,\n            summary: `${audit.title} - Potential savings: ${audit.displayValue || 'Not specified'}`\n          };\n\n        case 'diagnostic':\n        default:\n          return {\n            type: 'diagnostic',\n            title: audit.title,\n            result: audit.displayValue || 'Check performed',\n            description: audit.description,\n            summary: `${audit.title}: ${audit.displayValue || 'Check performed'}`\n          };\n      }\n    };\n\n    // Dynamically discover all available Core Web Vitals and performance metrics\n    const coreWebVitalsAudits = [\n      'first-contentful-paint',\n      'largest-contentful-paint',\n      'cumulative-layout-shift',\n      'total-blocking-time',\n      'speed-index',\n      'interactive',\n      'first-meaningful-paint'\n    ];\n\n    // Extract available Core Web Vitals (these should always be metrics)\n    const coreWebVitals = {};\n    coreWebVitalsAudits.forEach(auditId => {\n      if (audits[auditId]) {\n        const extracted = extractAuditData(auditId, audits[auditId]);\n        if (extracted && extracted.type === 'metric') {\n          coreWebVitals[auditId.replace(/-/g, '_')] = extracted;\n        }\n      }\n    });\n\n    // Dynamically discover opportunity audits (those with potential savings)\n    const opportunities = {};\n    Object.keys(audits).forEach(auditId => {\n      const audit = audits[auditId];\n      const extracted = extractAuditData(auditId, audit);\n\n      if (extracted && extracted.type === 'opportunity') {\n        opportunities[auditId.replace(/-/g, '_')] = extracted;\n      }\n    });\n\n    // Dynamically extract diagnostic information\n    const diagnostics = {};\n    Object.keys(audits).forEach(auditId => {\n      const audit = audits[auditId];\n      const extracted = extractAuditData(auditId, audit);\n\n      if (extracted && extracted.type === 'diagnostic') {\n        diagnostics[auditId.replace(/-/g, '_')] = extracted;\n      }\n    });\n\n    const performanceData = {\n      url: url,\n      formFactor: formFactor,\n      performance_score: Math.round((performanceScore || 0) * 100),\n      timestamp: lighthouse.fetchTime || new Date().toISOString(),\n\n      // Dynamically extracted Core Web Vitals\n      core_web_vitals: coreWebVitals,\n\n      // Dynamically discovered opportunities\n      opportunities: opportunities,\n\n      // Dynamically extracted diagnostics\n      diagnostics: diagnostics,\n\n      // Additional metadata\n      lighthouse_version: lighthouse.lighthouseVersion,\n      user_agent: lighthouse.userAgent,\n      fetch_time: lighthouse.fetchTime\n    };\n\n    console.log(`Extracted performance data for ${url} (${formFactor}): ${performanceData.performance_score}/100`);\n    console.log(`Found ${Object.keys(coreWebVitals).length} Core Web Vitals, ${Object.keys(opportunities).length} opportunities, ${Object.keys(diagnostics).length} diagnostics`);\n\n    return performanceData;\n  };\n\n  // Process all inputs and categorize by URL and form factor\n  const urlResults = {};\n  const processedResults = [];\n  const unidentifiedUrls = [];\n\n  allInputs.forEach((input, index) => {\n    console.log(`Processing input ${index}...`);\n\n    // The input should be a PageSpeed result object\n    const pageSpeedData = input.json;\n\n    if (pageSpeedData) {\n      const extracted = extractPerformanceData(pageSpeedData);\n\n      if (extracted) {\n        processedResults.push(extracted);\n\n        // Determine if this is user or competitor URL\n        let urlType = 'unknown';\n        const testUrl = extracted.url;\n\n        if (expectedUserUrl && matchUrl(testUrl, expectedUserUrl)) {\n          urlType = 'user';\n        } else if (expectedCompetitorUrl && matchUrl(testUrl, expectedCompetitorUrl)) {\n          urlType = 'competitor';\n        } else {\n          unidentifiedUrls.push(testUrl);\n          console.log(`Could not identify URL type for: ${testUrl}`);\n        }\n\n        // Organize by URL type and form factor\n        if (!urlResults[urlType]) {\n          urlResults[urlType] = {};\n        }\n\n        if (!urlResults[urlType][extracted.url]) {\n          urlResults[urlType][extracted.url] = {};\n        }\n\n        urlResults[urlType][extracted.url][extracted.formFactor] = extracted;\n        console.log(`Added ${extracted.formFactor} data for ${urlType}: ${extracted.url}`);\n      }\n    } else {\n      console.log(`Input ${index} does not contain valid PageSpeed data`);\n    }\n  });\n\n  // Handle unidentified URLs using fallback logic\n  if (unidentifiedUrls.length > 0 && (!urlResults.user || !urlResults.competitor)) {\n    console.log('Using fallback URL identification for unidentified URLs');\n\n    // Get all unique URLs from processed results\n    const allUniqueUrls = [...new Set(processedResults.map(r => r.url))];\n\n    // If we have exactly 2 URLs and are missing user/competitor assignments\n    if (allUniqueUrls.length === 2) {\n      const [firstUrl, secondUrl] = allUniqueUrls;\n\n      if (!urlResults.user && !urlResults.competitor) {\n        // Neither identified, use order-based fallback\n        console.log('Fallback: Assigning first URL as user, second as competitor');\n\n        // Reassign all results\n        urlResults.user = {};\n        urlResults.competitor = {};\n\n        processedResults.forEach(result => {\n          const urlType = result.url === firstUrl ? 'user' : 'competitor';\n          if (!urlResults[urlType][result.url]) {\n            urlResults[urlType][result.url] = {};\n          }\n          urlResults[urlType][result.url][result.formFactor] = result;\n        });\n      } else if (!urlResults.user) {\n        // Only competitor identified, assign remaining URL as user\n        const competitorUrls = Object.keys(urlResults.competitor || {});\n        const userUrl = allUniqueUrls.find(url => !competitorUrls.some(compUrl => matchUrl(url, compUrl)));\n        if (userUrl) {\n          urlResults.user = {};\n          processedResults.filter(r => r.url === userUrl).forEach(result => {\n            if (!urlResults.user[result.url]) {\n              urlResults.user[result.url] = {};\n            }\n            urlResults.user[result.url][result.formFactor] = result;\n          });\n        }\n      } else if (!urlResults.competitor) {\n        // Only user identified, assign remaining URL as competitor\n        const userUrls = Object.keys(urlResults.user || {});\n        const competitorUrl = allUniqueUrls.find(url => !userUrls.some(userUrl => matchUrl(url, userUrl)));\n        if (competitorUrl) {\n          urlResults.competitor = {};\n          processedResults.filter(r => r.url === competitorUrl).forEach(result => {\n            if (!urlResults.competitor[result.url]) {\n              urlResults.competitor[result.url] = {};\n            }\n            urlResults.competitor[result.url][result.formFactor] = result;\n          });\n        }\n      }\n    }\n  }\n\n  console.log('URL Results structure:', {\n    user_urls: Object.keys(urlResults.user || {}),\n    competitor_urls: Object.keys(urlResults.competitor || {}),\n    unidentified: unidentifiedUrls\n  });\n\n  // Get the primary URLs for user and competitor\n  const getUserData = () => {\n    if (!urlResults.user) return null;\n    const userUrls = Object.keys(urlResults.user);\n    const primaryUserUrl = userUrls[0]; // Take first if multiple\n    return userUrls.length > 0 ? {\n      url: primaryUserUrl,\n      mobile: urlResults.user[primaryUserUrl]?.mobile || null,\n      desktop: urlResults.user[primaryUserUrl]?.desktop || null\n    } : null;\n  };\n\n  const getCompetitorData = () => {\n    if (!urlResults.competitor) return null;\n    const competitorUrls = Object.keys(urlResults.competitor);\n    const primaryCompetitorUrl = competitorUrls[0]; // Take first if multiple\n    return competitorUrls.length > 0 ? {\n      url: primaryCompetitorUrl,\n      mobile: urlResults.competitor[primaryCompetitorUrl]?.mobile || null,\n      desktop: urlResults.competitor[primaryCompetitorUrl]?.desktop || null\n    } : null;\n  };\n\n  const userData = getUserData();\n  const competitorData = getCompetitorData();\n\n  // Create structured output\n  const structuredOutput = {\n    processing_info: {\n      total_inputs: allInputs.length,\n      processed_results: processedResults.length,\n      identified_user_urls: Object.keys(urlResults.user || {}).length,\n      identified_competitor_urls: Object.keys(urlResults.competitor || {}).length,\n      unidentified_urls: unidentifiedUrls.length,\n      timestamp: new Date().toISOString()\n    },\n\n    user_url: userData,\n    competitor_url: competitorData,\n\n    // Summary comparison\n    performance_summary: {\n      user_mobile_score: userData?.mobile?.performance_score || null,\n      user_desktop_score: userData?.desktop?.performance_score || null,\n      competitor_mobile_score: competitorData?.mobile?.performance_score || null,\n      competitor_desktop_score: competitorData?.desktop?.performance_score || null,\n\n      // Performance advantage analysis\n      mobile_advantage: (() => {\n        const userMobile = userData?.mobile?.performance_score;\n        const compMobile = competitorData?.mobile?.performance_score;\n        if (userMobile && compMobile) {\n          return userMobile > compMobile ? 'user' : 'competitor';\n        }\n        return 'unknown';\n      })(),\n\n      desktop_advantage: (() => {\n        const userDesktop = userData?.desktop?.performance_score;\n        const compDesktop = competitorData?.desktop?.performance_score;\n        if (userDesktop && compDesktop) {\n          return userDesktop > compDesktop ? 'user' : 'competitor';\n        }\n        return 'unknown';\n      })()\n    },\n\n    // All raw results for debugging\n    all_results: processedResults,\n\n    // URL matching information\n    url_matching: {\n      expected_user_url: expectedUserUrl,\n      expected_competitor_url: expectedCompetitorUrl,\n      identified_user_urls: Object.keys(urlResults.user || {}),\n      identified_competitor_urls: Object.keys(urlResults.competitor || {}),\n      unidentified_urls: unidentifiedUrls,\n      matching_method: unidentifiedUrls.length > 0 ? 'fallback_used' : 'direct_match'\n    },\n\n    // Debug information\n    debug_info: {\n      original_input_available: !!(expectedUserUrl || expectedCompetitorUrl),\n      data_completeness: {\n        user_mobile: !!(userData?.mobile),\n        user_desktop: !!(userData?.desktop),\n        competitor_mobile: !!(competitorData?.mobile),\n        competitor_desktop: !!(competitorData?.desktop)\n      },\n      dynamic_metrics_found: {\n        total_unique_audits: [...new Set(processedResults.flatMap(r => Object.keys(r.core_web_vitals || {})))].length,\n        total_opportunities: [...new Set(processedResults.flatMap(r => Object.keys(r.opportunities || {})))].length,\n        total_diagnostics: [...new Set(processedResults.flatMap(r => Object.keys(r.diagnostics || {})))].length\n      }\n    }\n  };\n\n  // Add the structured output\n  items.push({ json: structuredOutput });\n\n  console.log('PageSpeed processing completed successfully');\n  console.log('Generated structure keys:', Object.keys(structuredOutput));\n\n  // Log performance scores for verification\n  if (structuredOutput.performance_summary) {\n    console.log('Performance Summary:');\n    console.log(`User Mobile: ${structuredOutput.performance_summary.user_mobile_score}/100`);\n    console.log(`User Desktop: ${structuredOutput.performance_summary.user_desktop_score}/100`);\n    console.log(`Competitor Mobile: ${structuredOutput.performance_summary.competitor_mobile_score}/100`);\n    console.log(`Competitor Desktop: ${structuredOutput.performance_summary.competitor_desktop_score}/100`);\n  }\n\n} catch (error) {\n  console.error('Error processing PageSpeed data:', error);\n\n  // Return error information\n  items.push({\n    json: {\n      error: true,\n      message: `PageSpeed processing failed: ${error.message}`,\n      timestamp: new Date().toISOString(),\n      debug_info: {\n        inputs_received: $input.all().length,\n        error_stack: error.stack\n      }\n    }\n  });\n}\n\nreturn items;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1376,
+        -64
+      ],
+      "id": "ced88d4f-8264-426b-800f-0005e39d61d4",
+      "name": "Process pagespeed output"
+    },
+    {
+      "parameters": {
+        "url": "https://serpapi.com/search",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={\n  \"engine\": \"google\",\n  \"q\": \"{{ $('Input validation').item.json.validated_input.target_keyword }}\",\n  \"api_key\": \"e6ad7c56c54a24ffe431dd1b7948dab877e53e795b43e67824c9f5c4253b9bf4\",\n  \"hl\": \"en\",\n  \"gl\": \"{{ $('Input validation').item.json.validated_input.gl }}\",\n  \"num\": 10\n}\n",
+        "options": {}
+      },
+      "id": "4ea4ec72-5383-484f-a897-dab88b49c123",
+      "name": "Process serpapi output",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        1024,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://www.googleapis.com/pagespeedonline/v5/runPagespeed",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "url",
+              "value": "={{ $json.urls }}"
+            },
+            {
+              "name": "strategy",
+              "value": "mobile"
+            },
+            {
+              "name": "key",
+              "value": "AIzaSyD6wBcaf1qnFn10ffF_1RYSb4saVKjwXzs"
+            }
+          ]
+        },
+        "options": {
+          "allowUnauthorizedCerts": false,
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 120000
+        }
+      },
+      "id": "655fed2f-c3c3-4170-ac31-3d51ebf63875",
+      "name": "PageSpeed Mobile",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1024,
+        -144
+      ]
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1216,
+        -80
+      ],
+      "id": "efa8b33d-3e7c-47a8-8929-77160ed04d09",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "url": "https://www.googleapis.com/pagespeedonline/v5/runPagespeed",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "url",
+              "value": "={{ $json.urls }}"
+            },
+            {
+              "name": "strategy",
+              "value": "desktop"
+            },
+            {
+              "name": "key",
+              "value": "AIzaSyD6wBcaf1qnFn10ffF_1RYSb4saVKjwXzs"
+            }
+          ]
+        },
+        "options": {
+          "allowUnauthorizedCerts": false,
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 120000
+        }
+      },
+      "id": "557e5bb1-5d61-4718-8237-6dd9f2c8c0a4",
+      "name": "PageSpeed Desktop",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1024,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json;\n\n// Collect errors\nlet missingFields = [];\nif (!input.user_url) missingFields.push(\"user_url\");\nif (!input.competitor_url) missingFields.push(\"competitor_url\");\nif (!input.target_keyword) missingFields.push(\"target_keyword\");\nif (!input.analysis_depth) missingFields.push(\"analysis_depth\");\nif (!input.country) missingFields.push(\"country\");\n\n// If missing fields → return error\nif (missingFields.length > 0) {\n  return [\n    {\n      json: {\n        error: true,\n        message: `Missing required field(s): ${missingFields.join(\", \")}`\n      }\n    }\n  ];\n}\n\n// Basic URL validation\nconst urlPattern = /^https?:\\/\\/.+/;\nif (!urlPattern.test(input.user_url)) {\n  return [{ json: { error: true, message: \"Invalid format for user_url\" } }];\n}\nif (!urlPattern.test(input.competitor_url)) {\n  return [{ json: { error: true, message: \"Invalid format for competitor_url\" } }];\n}\n\n// Country mapping (extendable)\nconst countryMap = {\n  india: \"in\",\n  usa: \"us\",\n  unitedstates: \"us\",\n  \"united states\": \"us\",\n  china: \"cn\",\n  canada: \"ca\",\n  australia: \"au\",\n  uk: \"gb\",\n  \"united kingdom\": \"gb\",\n  germany: \"de\",\n  france: \"fr\",\n  japan: \"jp\",\n  brazil: \"br\"\n};\n\n// Normalize input country\nlet countryInput = input.country.toLowerCase().replace(/\\s+/g, \"\");\nlet gl = countryMap[countryInput];\n\nif (!gl) {\n  return [\n    {\n      json: {\n        error: true,\n        message: `Unsupported or unknown country: ${input.country}`\n      }\n    }\n  ];\n}\n\n// ✅ Everything is valid → return structured output\nreturn [\n  {\n    json: {\n      error: false,\n      validated_input: {\n        user_url: input.user_url,\n        competitor_url: input.competitor_url,\n        target_keyword: input.target_keyword,\n        analysis_depth: input.analysis_depth,\n        country: input.country,\n        gl: gl\n      },\n      urls: [input.user_url, input.competitor_url]\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -32,
+        -32
+      ],
+      "id": "4c4e519e-0841-44ce-8564-4cf16d42d0ae",
+      "name": "Input validation"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "d0bea4ef-02fe-4ec1-a83e-bb738cacad68",
+              "leftValue": "={{ $json.error }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        176,
+        -32
+      ],
+      "id": "e4770623-e36e-40b3-bb24-d952bda0ac5c",
+      "name": "check error"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "urls",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        400,
+        -64
+      ],
+      "id": "780b4041-3037-4b3c-b386-808a9eb933e0",
+      "name": "Split Out"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        352,
+        128
+      ],
+      "id": "3bbc1e89-6beb-4e7b-888f-9b12a8207d16",
+      "name": "Respond to Webhook1"
+    },
+    {
+      "parameters": {
+        "numberInputs": 3
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1632,
+        -80
+      ],
+      "id": "b57fd6b9-b0dc-46e8-94f9-4552b85c5336",
+      "name": "Merge1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process SerpAPI output to extract SERP intelligence for SEO analysis\nconst allItems = $input.all();\n\n// Check for errors first\nif (!allItems || allItems.length === 0) {\n  return [{\n    json: {\n      error: true,\n      message: \"No input data received from SerpAPI\",\n      user_url: null,\n      competitor_url: null\n    }\n  }];\n}\n\ntry {\n  // SerpAPI returns data wrapped in an array, get the first item\n  const inputData = allItems[0].json;\n  const serpApiData = Array.isArray(inputData) ? inputData[0] : inputData;\n\n  // Check if SerpAPI returned an error\n  if (serpApiData.error) {\n    return [{\n      json: {\n        error: true,\n        message: `SerpAPI Error: ${serpApiData.error}`,\n        user_url: null,\n        competitor_url: null\n      }\n    }];\n  }\n\n  // Check if search was successful\n  if (!serpApiData.search_metadata || serpApiData.search_metadata.status !== \"Success\") {\n    return [{\n      json: {\n        error: true,\n        message: \"SerpAPI search failed or returned no results\",\n        user_url: null,\n        competitor_url: null\n      }\n    }];\n  }\n\n  // Helper function to extract domain from URL without using URL constructor\n  function extractDomain(url) {\n    if (!url) return '';\n    try {\n      const match = url.match(/^https?:\\/\\/([^\\/]+)/);\n      return match ? match[1].replace(/^www\\./, '') : '';\n    } catch (e) {\n      return '';\n    }\n  }\n\n  // Extract search parameters\n  const searchQuery = serpApiData.search_parameters?.q || '';\n  const location = serpApiData.search_parameters?.gl || '';\n  const totalResults = serpApiData.search_information?.total_results || 0;\n\n  // Process organic results for competitor analysis\n  const organicResults = serpApiData.organic_results || [];\n\n  // Extract top 10 competitors with essential SEO data\n  const competitors = organicResults.slice(0, 10).map((result, index) => ({\n    position: result.position || index + 1,\n    title: result.title || '',\n    url: result.link || '',\n    snippet: result.snippet || '',\n    domain: extractDomain(result.link),\n    hasRichSnippets: !!(result.sitelinks || result.rich_snippet),\n    titleLength: (result.title || '').length,\n    snippetLength: (result.snippet || '').length\n  }));\n\n  // Extract related keywords for keyword intelligence\n  const relatedSearches = (serpApiData.related_searches || []).map(search => ({\n    query: search.query,\n    searchVolume: 'unknown' // SerpAPI doesn't provide volume data\n  }));\n\n  // Extract People Also Ask questions for content opportunities\n  const relatedQuestions = (serpApiData.related_questions || []).slice(0, 5).map(q => ({\n    question: q.question,\n    type: q.type || 'standard'\n  }));\n\n  // Analyze top competitor domains\n  const topDomains = competitors.slice(0, 5).map(c => c.domain).filter(d => d);\n  const domainFrequency = {};\n  topDomains.forEach(domain => {\n    if (domain) {\n      domainFrequency[domain] = (domainFrequency[domain] || 0) + 1;\n    }\n  });\n\n  // Calculate SERP features presence\n  const serpFeatures = {\n    hasAdsTop: !!(serpApiData.ads && serpApiData.ads.top),\n    hasAdsBottom: !!(serpApiData.ads && serpApiData.ads.bottom),\n    hasLocalPack: !!serpApiData.local_results,\n    hasKnowledgeGraph: !!serpApiData.knowledge_graph,\n    hasFeaturedSnippet: organicResults.some(result => result.rich_snippet),\n    hasRelatedQuestions: (serpApiData.related_questions || []).length > 0,\n    hasVideoResults: !!(serpApiData.inline_videos && serpApiData.inline_videos.length > 0),\n    hasImageResults: !!(serpApiData.inline_images && serpApiData.inline_images.length > 0)\n  };\n\n  // Calculate average title and snippet lengths for benchmarking\n  const avgTitleLength = competitors.length > 0\n    ? Math.round(competitors.reduce((sum, c) => sum + c.titleLength, 0) / competitors.length)\n    : 0;\n\n  const avgSnippetLength = competitors.length > 0\n    ? Math.round(competitors.reduce((sum, c) => sum + c.snippetLength, 0) / competitors.length)\n    : 0;\n\n  // Return structured SERP intelligence\n  return [{\n    json: {\n      error: false,\n      user_url: {\n        keyword_analysis: {\n          target_keyword: searchQuery,\n          search_location: location,\n          total_results: totalResults,\n          competition_level: organicResults.length >= 10 ? 'high' : organicResults.length >= 5 ? 'medium' : 'low',\n          serp_features: serpFeatures,\n          top_competitors: competitors.slice(0, 5),\n          avg_title_length: avgTitleLength,\n          avg_snippet_length: avgSnippetLength,\n          dominant_domains: Object.entries(domainFrequency)\n            .sort(([,a], [,b]) => b - a)\n            .slice(0, 3)\n            .map(([domain, count]) => ({ domain, appearances: count }))\n        },\n        content_opportunities: {\n          related_keywords: relatedSearches.slice(0, 8),\n          related_questions: relatedQuestions,\n          content_gaps: relatedQuestions.map(q => ({\n            topic: q.question,\n            opportunity: 'Create comprehensive content addressing this question',\n            priority: q.type === 'ai_overview' ? 'high' : 'medium'\n          }))\n        }\n      },\n      competitor_url: {\n        serp_analysis: {\n          total_organic_competitors: organicResults.length,\n          top_ranking_patterns: {\n            common_title_elements: competitors\n              .slice(0, 5)\n              .map(c => c.title)\n              .filter(title => title.toLowerCase().includes(searchQuery.toLowerCase()))\n              .length,\n            avg_title_optimization: avgTitleLength,\n            snippet_optimization_rate: competitors.filter(c =>\n              c.snippet.toLowerCase().includes(searchQuery.toLowerCase())\n            ).length / Math.max(competitors.length, 1)\n          },\n          competitive_insights: {\n            market_saturation: organicResults.length >= 10 ? 'high' : 'medium',\n            ranking_difficulty: serpFeatures.hasAdsTop || serpFeatures.hasFeaturedSnippet ? 'high' : 'medium',\n            content_format_opportunities: {\n              video_opportunity: !serpFeatures.hasVideoResults,\n              qa_opportunity: relatedQuestions.length > 0,\n              featured_snippet_opportunity: !serpFeatures.hasFeaturedSnippet\n            }\n          }\n        }\n      }\n    }\n  }];\n\n} catch (error) {\n  return [{\n    json: {\n      error: true,\n      message: `Failed to process SerpAPI data: ${error.message}`,\n      user_url: null,\n      competitor_url: null\n    }\n  }];\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1280,
+        176
+      ],
+      "id": "694a7193-bbd5-4e8d-840a-d17679f61b1f",
+      "name": "Process serpapi output1"
+    },
+    {
+      "parameters": {
+        "amount": 2
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        832,
+        -112
+      ],
+      "id": "739ba633-f5d8-4dd0-b5c7-1c688d5120ef",
+      "name": "Wait",
+      "webhookId": "9d6fc110-65c4-4a0a-8b3a-10f69d1b3fbf"
+    },
+    {
+      "parameters": {
+        "amount": 3
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        816,
+        32
+      ],
+      "id": "a33245f5-a116-41ed-a465-246ecbbe439e",
+      "name": "Wait1",
+      "webhookId": "6e8c8db8-14fc-449d-afe1-879d80305de5"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        2112,
+        -48
+      ],
+      "id": "975134d4-afae-41f2-85c4-9db9c8837646",
+      "name": "Final_merge"
+    }
+  ],
+  "pinData": {
+    "Content Analysis Trigger": [
+      {
+        "json": {
+          "user_url": "https://www.sovereigndigitalagency.com/",
+          "competitor_url": "https://www.elixirinfo.com/",
+          "target_keyword": "digital marketing",
+          "analysis_depth": "comprehensive",
+          "country": "India"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Content Analysis Trigger": {
+      "main": [
+        [
+          {
+            "node": "Input validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate SEO Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Final_merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "ScraperApi Web Scraper": {
+      "main": [
+        [
+          {
+            "node": "Process scraperapi output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process scraperapi output": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process pagespeed output": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Process serpapi output": {
+      "main": [
+        [
+          {
+            "node": "Process serpapi output1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PageSpeed Mobile": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Process pagespeed output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PageSpeed Desktop": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Input validation": {
+      "main": [
+        [
+          {
+            "node": "check error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check error": {
+      "main": [
+        [
+          {
+            "node": "Split Out",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out": {
+      "main": [
+        [
+          {
+            "node": "ScraperApi Web Scraper",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Process serpapi output",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Wait1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge1": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Final_merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process serpapi output1": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "PageSpeed Mobile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait1": {
+      "main": [
+        [
+          {
+            "node": "PageSpeed Desktop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Final_merge": {
+      "main": [
+        [
+          {
+            "node": "Generate SEO Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "70b34206-2ba3-49c7-a0d7-3d86fc26b6c0",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "519db11af8822c429924bfec2ac3e7b610af73cb13a59723055071f32bd66d27"
+  },
+  "id": "JvP5u77ldRXTaqMc",
+  "tags": []
+}

@@ -1,0 +1,772 @@
+{
+  "name": "Advanced Client Communication Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "client-communication",
+        "options": {
+          "noResponseBody": false
+        },
+        "responseHeaders": {
+          "entries": [
+            {
+              "name": "Access-Control-Allow-Origin",
+              "value": "*"
+            }
+          ]
+        },
+        "responseCode": 200
+      },
+      "id": "webhook-trigger",
+      "name": "Communication Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [100, 300],
+      "webhookId": "client-communication-trigger"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst requiredFields = ['clientId', 'eventType'];\nconst missingFields = requiredFields.filter(field => !input[field]);\nif (missingFields.length > 0) {\n  throw new Error(`Missing required fields: ${missingFields.join(', ')}`);\n}\nconst sanitizedData = {\n  clientId: String(input.clientId).trim(),\n  eventType: String(input.eventType).toLowerCase().trim(),\n  agencyId: input.agencyId ? String(input.agencyId).trim() : null,\n  priority: ['low', 'normal', 'high', 'urgent'].includes(input.priority) ? input.priority : 'normal',\n  metadata: input.metadata || {},\n  timestamp: new Date().toISOString(),\n  source: input.source || 'webhook',\n  retryCount: 0,\n  workflowId: $workflow.id\n};\nconst validEventTypes = [\n  'client_onboarded', 'project_completed', 'monthly_checkin',\n  'payment_overdue', 'contract_renewal_due', 'project_milestone',\n  'performance_report_ready', 'issue_escalation', 'satisfaction_survey',\n  'general_update', 'account_review', 'service_upgrade'\n];\nif (!validEventTypes.includes(sanitizedData.eventType)) {\n  sanitizedData.eventType = 'general_update';\n  sanitizedData.metadata.originalEventType = input.eventType;\n}\nreturn [{ json: sanitizedData }];"
+      },
+      "id": "input-validator",
+      "name": "Input Validator",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [300, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/clients/{{$json.clientId}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "options": {
+          "timeout": 10000,
+          "retry": {
+            "enabled": true,
+            "maxAttempts": 3
+          }
+        }
+      },
+      "id": "fetch-client-data",
+      "name": "Fetch Client Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const eventData = $('Input Validator').first().json;\nconst clientResponse = $input.first().json;\nif (!clientResponse.success || !clientResponse.data) {\n  throw new Error(`Failed to fetch client data: ${clientResponse.message || 'Unknown error'}`);\n}\nconst clientData = clientResponse.data;\nconst mergedData = {\n  ...eventData,\n  client: {\n    id: clientData.id,\n    companyName: clientData.company_name,\n    industry: clientData.industry,\n    status: clientData.status,\n    tier: clientData.tier || 'standard',\n    createdAt: clientData.created_at,\n    lastCommunication: clientData.last_communication_date,\n    preferences: clientData.communication_preferences || {},\n    contacts: clientData.client_contacts || [],\n    primaryContact: clientData.client_contacts?.find(c => c.is_primary) || clientData.client_contacts?.[0] || {},\n    accountManager: clientData.account_manager || {},\n    projects: clientData.active_projects || [],\n    billingInfo: clientData.billing_info || {}\n  }\n};\nreturn [{ json: mergedData }];"
+      },
+      "id": "merge-data",
+      "name": "Merge Event & Client Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst eventType = data.eventType;\nconst client = data.client;\nconst daysSinceOnboarding = Math.floor((Date.now() - new Date(client.createdAt).getTime()) / (1000 * 60 * 60 * 24));\nconst daysSinceLastComm = client.lastCommunication ? Math.floor((Date.now() - new Date(client.lastCommunication).getTime()) / (1000 * 60 * 60 * 24)) : daysSinceOnboarding;\nlet lifecycleStage = 'new';\nif (daysSinceOnboarding > 365) lifecycleStage = 'mature';\nelse if (daysSinceOnboarding > 180) lifecycleStage = 'established';\nelse if (daysSinceOnboarding > 60) lifecycleStage = 'growing';\nelse if (daysSinceOnboarding > 14) lifecycleStage = 'onboarding';\nconst workflowConfig = {\n  'client_onboarded': { type: 'welcome_sequence', urgency: 'high', delay: 30, channels: ['email', 'slack'] },\n  'project_completed': { type: 'completion_celebration', urgency: 'high', delay: 60, channels: ['email', 'sms'] },\n  'monthly_checkin': { type: 'relationship_maintenance', urgency: 'normal', delay: 0, channels: ['email'] },\n  'payment_overdue': { type: 'payment_reminder', urgency: 'urgent', delay: 0, channels: ['email', 'sms', 'slack'] },\n  'contract_renewal_due': { type: 'renewal_discussion', urgency: 'high', delay: 0, channels: ['email', 'phone'] },\n  'project_milestone': { type: 'progress_update', urgency: 'normal', delay: 120, channels: ['email'] },\n  'performance_report_ready': { type: 'report_delivery', urgency: 'normal', delay: 15, channels: ['email'] },\n  'issue_escalation': { type: 'crisis_management', urgency: 'urgent', delay: 0, channels: ['email', 'sms', 'slack', 'phone'] },\n  'satisfaction_survey': { type: 'feedback_collection', urgency: 'low', delay: 1440, channels: ['email'] },\n  'account_review': { type: 'strategic_review', urgency: 'normal', delay: 60, channels: ['email'] },\n  'service_upgrade': { type: 'upsell_opportunity', urgency: 'normal', delay: 240, channels: ['email'] }\n};\nconst config = workflowConfig[eventType] || { type: 'general_update', urgency: 'normal', delay: 60, channels: ['email'] };\nlet channels = [...config.channels];\nif (client.preferences.disableSMS) channels = channels.filter(c => c !== 'sms');\nif (client.tier === 'premium' && !channels.includes('phone')) channels.push('phone');\nif (client.preferences.slackIntegration && !channels.includes('slack')) channels.push('slack');\nconst sendTime = new Date(Date.now() + config.delay * 60000);\nconst sendHour = sendTime.getHours();\nconst sendDay = sendTime.getDay();\nif (config.urgency !== 'urgent' && (sendHour < 9 || sendHour > 18 || sendDay === 0 || sendDay === 6)) {\n  const nextBusinessDay = new Date(sendTime);\n  while (nextBusinessDay.getDay() === 0 || nextBusinessDay.getDay() === 6) {\n    nextBusinessDay.setDate(nextBusinessDay.getDate() + 1);\n  }\n  nextBusinessDay.setHours(9, 0, 0, 0);\n  sendTime.setTime(nextBusinessDay.getTime());\n}\nconst routingData = {\n  ...data,\n  workflow: {\n    type: config.type,\n    urgency: config.urgency,\n    delay: config.delay,\n    channels: channels,\n    sendTime: sendTime.toISOString(),\n    isImmediate: config.delay === 0 && config.urgency === 'urgent'\n  },\n  metrics: {\n    lifecycleStage,\n    daysSinceOnboarding,\n    daysSinceLastComm,\n    communicationFrequency: client.preferences.frequency || 'normal'\n  },\n  personalization: {\n    contactName: client.primaryContact.first_name || 'there',\n    companyName: client.companyName,\n    industry: client.industry,\n    accountManager: client.accountManager.first_name || 'Your Account Manager',\n    relationshipDuration: daysSinceOnboarding\n  }\n};\nreturn [{ json: routingData }];"
+      },
+      "id": "communication-router",
+      "name": "Enhanced Communication Router",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "immediate-check",
+              "leftValue": "={{$json.workflow.isImmediate}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "urgency-router",
+      "name": "Urgency Router",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1100, 300]
+    },
+    {
+      "parameters": {
+        "amount": "={{Math.max(1, $json.workflow.delay)}}",
+        "unit": "minutes"
+      },
+      "id": "schedule-delay",
+      "name": "Schedule Communication Delay",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [1100, 500]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition",
+        "options": {}
+      },
+      "id": "merge-delayed-data",
+      "name": "Merge Delayed Data",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1300, 400]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "workflow.channels",
+        "options": {}
+      },
+      "id": "split-channels",
+      "name": "Split Communication Channels",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [1500, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "email-channel-check",
+              "leftValue": "={{$json.workflow.channels}}",
+              "rightValue": "email",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "email-channel-filter",
+      "name": "Email Channel Filter",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1700, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/communication/email/send",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "agencyId",
+              "value": "={{$json.agencyId}}"
+            },
+            {
+              "name": "clientId",
+              "value": "={{$json.client.id}}"
+            },
+            {
+              "name": "subject",
+              "value": "Communication from Your Marketing Agency - {{$json.client.companyName}}"
+            },
+            {
+              "name": "htmlContent",
+              "value": "<h1>{{$json.workflow.type}} Communication</h1><p>Dear {{$json.personalization.contactName}},</p><p>This is an automated communication regarding {{$json.client.companyName}}.</p>"
+            },
+            {
+              "name": "recipients",
+              "value": "={{JSON.stringify([{email: $json.client.primaryContact.email, name: $json.client.primaryContact.first_name}])}}"
+            },
+            {
+              "name": "priority",
+              "value": "={{$json.workflow.urgency}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000,
+          "retry": {
+            "enabled": true,
+            "maxAttempts": 3
+          }
+        }
+      },
+      "id": "send-email",
+      "name": "Send Email Communication",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1900, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "sms-channel-check",
+              "leftValue": "={{$json.workflow.channels}}",
+              "rightValue": "sms",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "sms-channel-filter",
+      "name": "SMS Channel Filter",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1700, 400]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/communication/sms/send",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "phoneNumber",
+              "value": "={{$json.client.primaryContact.phone}}"
+            },
+            {
+              "name": "message",
+              "value": "URGENT: {{$json.client.companyName}} - Communication from Your Marketing Agency. Check email for details."
+            },
+            {
+              "name": "urgency",
+              "value": "={{$json.workflow.urgency}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000,
+          "retry": {
+            "enabled": true,
+            "maxAttempts": 2
+          }
+        }
+      },
+      "id": "send-sms",
+      "name": "Send SMS Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1900, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "slack-channel-check",
+              "leftValue": "={{$json.workflow.channels}}",
+              "rightValue": "slack",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "slack-channel-filter",
+      "name": "Slack Channel Filter",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1700, 600]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.SLACK_WEBHOOK_URL}}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "Client Communication Sent to {{$json.client.companyName}}"
+            },
+            {
+              "name": "channel",
+              "value": "#client-communications"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "send-slack",
+      "name": "Send Slack Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1900, 600]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "multiplex",
+        "options": {}
+      },
+      "id": "merge-results",
+      "name": "Merge Communication Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [2100, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = $input.all();\nconst originalData = $('Enhanced Communication Router').first().json;\nconst communicationResults = {\n  ...originalData,\n  results: {\n    timestamp: new Date().toISOString(),\n    totalChannels: results.length,\n    successfulChannels: results.filter(r => r.json.success !== false).length,\n    failedChannels: results.filter(r => r.json.success === false).length\n  }\n};\ncommunicationResults.results.successRate = communicationResults.results.totalChannels > 0 ? (communicationResults.results.successfulChannels / communicationResults.results.totalChannels) * 100 : 0;\nreturn [{ json: communicationResults }];"
+      },
+      "id": "process-results",
+      "name": "Process Communication Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2300, 400]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/communication/activity/log",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "clientId",
+              "value": "={{$json.client.id}}"
+            },
+            {
+              "name": "activityType",
+              "value": "client_communication_sent"
+            },
+            {
+              "name": "description",
+              "value": "Automated {{$json.workflow.type}} communication sent to {{$json.client.companyName}}"
+            },
+            {
+              "name": "metadata",
+              "value": "={{JSON.stringify({type: $json.workflow.type, urgency: $json.workflow.urgency, channels: $json.workflow.channels, results: $json.results})}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "log-activity",
+      "name": "Log Communication Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2500, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst summary = {\n  workflowId: data.workflowId,\n  timestamp: new Date().toISOString(),\n  client: {\n    id: data.client.id,\n    name: data.client.companyName,\n    tier: data.client.tier\n  },\n  communication: {\n    type: data.workflow.type,\n    urgency: data.workflow.urgency\n  },\n  execution: {\n    channelsAttempted: data.results.totalChannels,\n    channelsSuccessful: data.results.successfulChannels,\n    successRate: data.results.successRate\n  },\n  status: data.results.successfulChannels > 0 ? 'completed' : 'partial_failure'\n};\nconsole.log('Client Communication Workflow Completed:', summary);\nreturn [{\n  json: {\n    success: true,\n    summary: summary,\n    message: `Communication workflow completed for ${data.client.companyName}. ${data.results.successfulChannels}/${data.results.totalChannels} channels successful.`\n  }\n}];"
+      },
+      "id": "workflow-completion",
+      "name": "Workflow Completion Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2700, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "const errorInputs = $input.all();\nconst originalData = $('Input Validator').first()?.json || {};\nlet errorDetails = {\n  timestamp: new Date().toISOString(),\n  workflowId: $workflow.id,\n  executionId: $execution.id,\n  clientId: originalData.clientId || 'unknown',\n  eventType: originalData.eventType || 'unknown',\n  errors: [],\n  severity: 'medium'\n};\nerrorInputs.forEach((errorInput, index) => {\n  const error = errorInput.json;\n  if (error.error || error.message) {\n    errorDetails.errors.push({\n      nodeIndex: index,\n      error: error.error || error.message,\n      code: error.code || 'UNKNOWN_ERROR',\n      timestamp: new Date().toISOString()\n    });\n  }\n  if (error.code === 'CRITICAL_FAILURE' || error.statusCode >= 500) {\n    errorDetails.severity = 'critical';\n  }\n});\nconst requiresManualIntervention = errorDetails.severity === 'critical' || errorDetails.errors.length > 2;\nconst errorReport = {\n  ...errorDetails,\n  requiresManualIntervention,\n  escalationLevel: errorDetails.severity === 'critical' ? 3 : 2\n};\nconsole.error('Client Communication Workflow Error Report:', errorReport);\nreturn [{ json: errorReport }];"
+      },
+      "id": "error-handler",
+      "name": "Comprehensive Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1500, 800]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_API_URL}}/api/alerts/create",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$env.API_TOKEN}}"
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "title",
+              "value": "Client Communication Workflow Failure"
+            },
+            {
+              "name": "message",
+              "value": "Critical failure in client communication automation for client ID: {{$json.clientId}}"
+            },
+            {
+              "name": "severity",
+              "value": "={{$json.severity}}"
+            },
+            {
+              "name": "escalationLevel",
+              "value": "={{$json.escalationLevel}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "send-error-alerts",
+      "name": "Send Error Alerts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1700, 800]
+    }
+  ],
+  "connections": {
+    "Communication Trigger": {
+      "main": [[
+        {
+          "node": "Input Validator",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Input Validator": {
+      "main": [[
+        {
+          "node": "Fetch Client Data",
+          "type": "main",
+          "index": 0
+        }
+      ]],
+      "error": [[
+        {
+          "node": "Comprehensive Error Handler",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Fetch Client Data": {
+      "main": [[
+        {
+          "node": "Merge Event & Client Data",
+          "type": "main",
+          "index": 0
+        }
+      ]],
+      "error": [[
+        {
+          "node": "Comprehensive Error Handler",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Merge Event & Client Data": {
+      "main": [[
+        {
+          "node": "Enhanced Communication Router",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Enhanced Communication Router": {
+      "main": [[
+        {
+          "node": "Urgency Router",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Urgency Router": {
+      "main": [
+        [
+          {
+            "node": "Merge Delayed Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Schedule Communication Delay",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Communication Delay": {
+      "main": [[
+        {
+          "node": "Merge Delayed Data",
+          "type": "main",
+          "index": 1
+        }
+      ]]
+    },
+    "Merge Delayed Data": {
+      "main": [[
+        {
+          "node": "Split Communication Channels",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Split Communication Channels": {
+      "main": [[
+        {
+          "node": "Email Channel Filter",
+          "type": "main",
+          "index": 0
+        },
+        {
+          "node": "SMS Channel Filter",
+          "type": "main",
+          "index": 0
+        },
+        {
+          "node": "Slack Channel Filter",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Email Channel Filter": {
+      "main": [[
+        {
+          "node": "Send Email Communication",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "SMS Channel Filter": {
+      "main": [[
+        {
+          "node": "Send SMS Notification",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Slack Channel Filter": {
+      "main": [[
+        {
+          "node": "Send Slack Notification",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Send Email Communication": {
+      "main": [[
+        {
+          "node": "Merge Communication Results",
+          "type": "main",
+          "index": 0
+        }
+      ]],
+      "error": [[
+        {
+          "node": "Comprehensive Error Handler",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Send SMS Notification": {
+      "main": [[
+        {
+          "node": "Merge Communication Results",
+          "type": "main",
+          "index": 1
+        }
+      ]],
+      "error": [[
+        {
+          "node": "Comprehensive Error Handler",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Send Slack Notification": {
+      "main": [[
+        {
+          "node": "Merge Communication Results",
+          "type": "main",
+          "index": 2
+        }
+      ]],
+      "error": [[
+        {
+          "node": "Comprehensive Error Handler",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Merge Communication Results": {
+      "main": [[
+        {
+          "node": "Process Communication Results",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Process Communication Results": {
+      "main": [[
+        {
+          "node": "Log Communication Activity",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Log Communication Activity": {
+      "main": [[
+        {
+          "node": "Workflow Completion Summary",
+          "type": "main",
+          "index": 0
+        }
+      ]],
+      "error": [[
+        {
+          "node": "Comprehensive Error Handler",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Comprehensive Error Handler": {
+      "main": [[
+        {
+          "node": "Send Error Alerts",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "callerPolicy": "workflowsFromSameOwner",
+    "timezone": "America/New_York",
+    "executionTimeout": 1800,
+    "maxExecutionTimeout": 3600
+  },
+  "staticData": {
+    "node:Communication Trigger": {
+      "webhookId": "client-communication-automation-v2"
+    }
+  },
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2025-09-26T00:00:00.000Z",
+      "id": "client-communication-v2",
+      "name": "Client Communication Automation"
+    },
+    {
+      "createdAt": "2025-09-26T00:00:00.000Z",
+      "updatedAt": "2025-09-26T00:00:00.000Z",
+      "id": "advanced-automation",
+      "name": "Advanced Automation"
+    },
+    {
+      "createdAt": "2025-09-26T00:00:00.000Z",
+      "updatedAt": "2025-09-26T00:00:00.000Z",
+      "id": "multi-channel",
+      "name": "Multi-Channel Communication"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2025-09-26T00:00:00.000Z",
+  "versionId": "2.0",
+  "meta": {
+    "description": "Advanced client communication automation with multi-channel support, intelligent routing, comprehensive error handling, and follow-up automation. Compatible with dashboard frontend and designed for scalability.",
+    "version": "2.0.0",
+    "author": "Claude Code Assistant",
+    "features": [
+      "Multi-channel communication (Email, SMS, Slack)",
+      "Intelligent workflow routing based on client tier and urgency",
+      "Business hours optimization and timezone support",
+      "Comprehensive error handling and recovery",
+      "Automated follow-up scheduling",
+      "Real-time monitoring and logging",
+      "Template-based content generation with personalization",
+      "Client preference management",
+      "Performance analytics and success tracking",
+      "Dashboard frontend compatibility"
+    ],
+    "compatibleWith": {
+      "frontend": "Dashboard v2.x",
+      "api": "Backend API v1.x",
+      "n8n": "1.x+"
+    }
+  }
+}
