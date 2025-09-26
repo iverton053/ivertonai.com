@@ -18,7 +18,10 @@ import {
   Settings,
   Copy,
   Download,
-  RefreshCw
+  RefreshCw,
+  Shield,
+  Key,
+  Webhook
 } from 'lucide-react';
 import { useClientPortalStore } from '../../stores/clientPortalStore';
 import { useAgencyStore } from '../../stores/agencyStore';
@@ -26,6 +29,9 @@ import { ClientPortal } from '../../types/clientPortal';
 import { format } from 'date-fns';
 import PortalCreationWizard from './PortalCreationWizard';
 import PortalSettingsModal from './PortalSettingsModal';
+import { SSOConfiguration } from './SSOConfiguration';
+import { ComplianceManager } from './ComplianceManager';
+import { WebhookManager } from './WebhookManager';
 
 const PortalManagement: React.FC = () => {
   const {
@@ -47,6 +53,12 @@ const PortalManagement: React.FC = () => {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [selectedPortal, setSelectedPortal] = useState<ClientPortal | null>(null);
   const [actionMenuPortalId, setActionMenuPortalId] = useState<string | null>(null);
+
+  // Enterprise features state
+  const [showEnterpriseMenu, setShowEnterpriseMenu] = useState(false);
+  const [showSSOConfig, setShowSSOConfig] = useState(false);
+  const [showComplianceManager, setShowComplianceManager] = useState(false);
+  const [showWebhookManager, setShowWebhookManager] = useState(false);
 
   useEffect(() => {
     loadPortals();
@@ -103,6 +115,53 @@ const PortalManagement: React.FC = () => {
         </div>
         
         <div className="flex items-center space-x-3">
+          <div className="relative">
+            <button
+              className="flex items-center space-x-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+              onClick={() => setShowEnterpriseMenu(!showEnterpriseMenu)}
+            >
+              <Settings className="w-5 h-5" />
+              <span>Enterprise Features</span>
+            </button>
+
+            {showEnterpriseMenu && (
+              <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-lg shadow-lg border z-50">
+                <div className="p-2">
+                  <button
+                    onClick={() => {
+                      setShowEnterpriseMenu(false);
+                      setShowSSOConfig(true);
+                    }}
+                    className="w-full flex items-center space-x-3 px-3 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+                  >
+                    <Key className="w-4 h-4" />
+                    <span>Single Sign-On (SSO)</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowEnterpriseMenu(false);
+                      setShowComplianceManager(true);
+                    }}
+                    className="w-full flex items-center space-x-3 px-3 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+                  >
+                    <Shield className="w-4 h-4" />
+                    <span>Compliance Manager</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowEnterpriseMenu(false);
+                      setShowWebhookManager(true);
+                    }}
+                    className="w-full flex items-center space-x-3 px-3 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+                  >
+                    <Webhook className="w-4 h-4" />
+                    <span>Webhooks</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
           <button
             onClick={() => {
               // Open client portal demo in new tab
@@ -114,13 +173,34 @@ const PortalManagement: React.FC = () => {
             <Eye className="w-5 h-5" />
             <span>Demo Portal</span>
           </button>
-          
+
           <button
             onClick={() => setShowCreateWizard(true)}
             className="flex items-center space-x-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
           >
             <Plus className="w-5 h-5" />
             <span>Create Portal</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Enterprise Features Banner */}
+      <div className="bg-gradient-to-r from-green-500 to-blue-600 rounded-lg p-4 mb-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
+              <Shield className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h3 className="text-white font-semibold">🎉 Enterprise Features Now Available!</h3>
+              <p className="text-white text-opacity-90 text-sm">Single Sign-On, Compliance Manager, Webhooks & More</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowEnterpriseMenu(true)}
+            className="bg-white bg-opacity-20 text-white px-4 py-2 rounded-lg hover:bg-opacity-30 transition-colors"
+          >
+            Explore Features
           </button>
         </div>
       </div>
@@ -473,6 +553,28 @@ const PortalManagement: React.FC = () => {
           setSelectedPortal(null);
         }}
       />
+
+      {/* Enterprise Feature Modals */}
+      {showSSOConfig && (
+        <SSOConfiguration
+          portalId="global" // Global SSO configuration
+          onClose={() => setShowSSOConfig(false)}
+        />
+      )}
+
+      {showComplianceManager && (
+        <ComplianceManager
+          portalId="global" // Global compliance management
+          onClose={() => setShowComplianceManager(false)}
+        />
+      )}
+
+      {showWebhookManager && (
+        <WebhookManager
+          portalId="global" // Global webhook management
+          onClose={() => setShowWebhookManager(false)}
+        />
+      )}
     </div>
   );
 };

@@ -2,6 +2,9 @@ import mongoose from 'mongoose';
 import Contact, { IContact } from '../models/Contact';
 import { Deal, Pipeline } from '../models/Pipeline';
 import LeadScoringService from './leadScoringService';
+import CRMCacheService from './crmCacheService';
+import WebSocketService from './websocketService';
+import QueryOptimizer from '../utils/queryOptimization';
 import { logger } from '../utils/logger';
 
 export interface ContactFilters {
@@ -29,9 +32,22 @@ export interface ContactSearchOptions {
 export class CRMService {
   private static instance: CRMService;
   private leadScoringService: LeadScoringService;
+  private cacheService?: CRMCacheService;
+  private websocketService?: WebSocketService;
+  private queryOptimizer: QueryOptimizer;
 
   constructor() {
     this.leadScoringService = LeadScoringService.getInstance();
+    this.queryOptimizer = QueryOptimizer.getInstance();
+    // Services will be injected when available
+  }
+
+  setCacheService(cacheService: CRMCacheService): void {
+    this.cacheService = cacheService;
+  }
+
+  setWebSocketService(websocketService: WebSocketService): void {
+    this.websocketService = websocketService;
   }
 
   public static getInstance(): CRMService {
@@ -67,6 +83,11 @@ export class CRMService {
       });
 
       await contact.save();
+
+      // Emit real-time event
+      if (this.websocketService) {
+        this.websocketService.emitContactCreated(userId, contact.toObject());
+      }
 
       // Calculate initial lead score
       if (contactData.company || contactData.jobTitle) {
@@ -138,6 +159,17 @@ export class CRMService {
         }
       }
 
+      // Invalidate cache
+      if (this.cacheService) {
+        await this.cacheService.invalidateContact(userId, contactId);
+        logger.debug(`Invalidated cache for contact: ${contactId}`);
+      }
+
+      // Emit real-time event
+      if (this.websocketService) {
+        this.websocketService.emitContactUpdated(userId, contactId, contact.toObject(), changedFields);
+      }
+
       logger.info(`Contact updated: ${contactId} for user ${userId}`);
       return contact;
     } catch (error) {
@@ -161,6 +193,15 @@ export class CRMService {
         limit = 50,
         offset = 0
       } = options;
+
+      // Try cache first for common queries
+      if (this.cacheService) {
+        const cached = await this.cacheService.getCachedContactList(userId, options);
+        if (cached) {
+          logger.debug(`Cache hit for contact list query`);
+          return cached;
+        }
+      }
 
       // Build query
       const searchQuery: any = {
@@ -201,23 +242,39 @@ export class CRMService {
         if (filters.lastActivityAfter) searchQuery.lastActivityDate.$gte = filters.lastActivityAfter;
       }
 
-      // Execute query
-      const sortDirection = sortOrder === 'desc' ? -1 : 1;
-      const contacts = await Contact.find(searchQuery)
-        .sort({ [sortBy]: sortDirection })
-        .limit(limit)
-        .skip(offset)
-        .populate('contactOwner', 'firstName lastName email')
-        .lean();
+      // Optimize query before execution
+      const { query: optimizedQuery, options: optimizedOptions } = this.queryOptimizer.optimizeQuery(
+        searchQuery,
+        {
+          sort: { [sortBy]: sortOrder === 'desc' ? -1 : 1 },
+          limit,
+          skip: offset,
+          populate: [{ path: 'contactOwner', select: 'firstName lastName email' }]
+        }
+      );
+
+      // Execute optimized query
+      const contacts = await Contact.find(optimizedQuery, null, {
+        ...optimizedOptions,
+        populate: { path: 'contactOwner', select: 'firstName lastName email' }
+      });
 
       const total = await Contact.countDocuments(searchQuery);
 
-      return {
+      const result = {
         contacts,
         total,
         page: Math.floor(offset / limit) + 1,
         limit
       };
+
+      // Cache the result
+      if (this.cacheService) {
+        await this.cacheService.cacheContactList(userId, options, result);
+        logger.debug(`Cached contact list query result`);
+      }
+
+      return result;
     } catch (error) {
       logger.error('Error fetching contacts:', error);
       throw error;
@@ -226,6 +283,15 @@ export class CRMService {
 
   async getContactById(userId: string, contactId: string): Promise<IContact | null> {
     try {
+      // Try cache first
+      if (this.cacheService) {
+        const cached = await this.cacheService.getCachedContact(userId, contactId);
+        if (cached) {
+          logger.debug(`Cache hit for contact: ${contactId}`);
+          return cached;
+        }
+      }
+
       const contact = await Contact.findOne({
         _id: contactId,
         userId: new mongoose.Types.ObjectId(userId),
@@ -234,6 +300,12 @@ export class CRMService {
       .populate('contactOwner', 'firstName lastName email')
       .populate('associatedDeals');
 
+      // Cache the result
+      if (contact && this.cacheService) {
+        await this.cacheService.cacheContact(userId, contact);
+        logger.debug(`Cached contact: ${contactId}`);
+      }
+
       return contact;
     } catch (error) {
       logger.error('Error fetching contact:', error);
@@ -241,7 +313,7 @@ export class CRMService {
     }
   }
 
-  async deleteContact(userId: string, contactId: string): Promise<boolean> {
+  async deleteContact(userId: string, contactId: string, permanent: boolean = false): Promise<boolean> {
     try {
       const contact = await Contact.findOne({
         _id: contactId,
@@ -253,20 +325,67 @@ export class CRMService {
         throw new Error('Contact not found');
       }
 
-      // Soft delete
-      contact.isActive = false;
-      contact.activities.push({
-        type: 'note',
-        content: 'Contact deleted',
-        createdBy: new mongoose.Types.ObjectId(userId),
-        createdAt: new Date()
-      });
-      await contact.save();
+      if (permanent) {
+        // Permanent delete - remove from database
+        await Contact.deleteOne({ _id: contactId });
+        logger.info(`Contact permanently deleted: ${contactId} for user ${userId}`);
+      } else {
+        // Soft delete
+        contact.isActive = false;
+        contact.activities.push({
+          type: 'note',
+          content: 'Contact deleted',
+          createdBy: new mongoose.Types.ObjectId(userId),
+          createdAt: new Date()
+        } as any);
+        await contact.save();
+        logger.info(`Contact soft deleted: ${contactId} for user ${userId}`);
+      }
 
-      logger.info(`Contact deleted: ${contactId} for user ${userId}`);
+      // Invalidate cache
+      if (this.cacheService) {
+        await this.cacheService.invalidateContact(userId, contactId);
+        logger.debug(`Invalidated cache for deleted contact: ${contactId}`);
+      }
+
+      // Emit real-time event
+      if (this.websocketService) {
+        this.websocketService.emitContactDeleted(userId, contactId);
+      }
+
       return true;
     } catch (error) {
       logger.error('Error deleting contact:', error);
+      throw error;
+    }
+  }
+
+  async restoreContact(userId: string, contactId: string): Promise<IContact | null> {
+    try {
+      const contact = await Contact.findOne({
+        _id: contactId,
+        userId: new mongoose.Types.ObjectId(userId),
+        isActive: false
+      });
+
+      if (!contact) {
+        throw new Error('Deleted contact not found');
+      }
+
+      // Restore contact
+      contact.isActive = true;
+      contact.activities.push({
+        type: 'note',
+        content: 'Contact restored',
+        createdBy: new mongoose.Types.ObjectId(userId),
+        createdAt: new Date()
+      } as any);
+      await contact.save();
+
+      logger.info(`Contact restored: ${contactId} for user ${userId}`);
+      return contact;
+    } catch (error) {
+      logger.error('Error restoring contact:', error);
       throw error;
     }
   }

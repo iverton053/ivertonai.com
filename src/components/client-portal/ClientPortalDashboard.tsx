@@ -127,7 +127,7 @@ const ClientPortalDashboard: React.FC<ClientPortalDashboardProps> = ({ user, por
         />
 
         {/* Main Content */}
-        <main className={`flex-1 p-6 ${sidebarOpen ? 'ml-64' : ''} transition-all duration-300`}>
+        <main className={`flex-1 p-4 md:p-6 ${sidebarOpen ? 'md:ml-64' : ''} transition-all duration-300`}>
           {/* Error Banner */}
           {error && (
             <motion.div
@@ -155,30 +155,30 @@ const ClientPortalDashboard: React.FC<ClientPortalDashboardProps> = ({ user, por
             animate={{ opacity: 1, y: 0 }}
             className="mb-8"
           >
-            <div className="bg-white rounded-2xl shadow-sm border p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center space-x-4">
+            <div className="bg-white rounded-2xl shadow-sm border p-4 md:p-6">
+              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-6 space-y-4 lg:space-y-0">
+                <div className="flex flex-col sm:flex-row sm:items-center space-y-4 sm:space-y-0 sm:space-x-4">
                   {portal.branding.logo_url && (
                     <img
                       src={portal.branding.logo_url}
                       alt={portal.branding.company_name}
-                      className="h-12 w-auto"
+                      className="h-10 md:h-12 w-auto"
                     />
                   )}
                   <div>
-                    <h1 className="text-3xl font-bold text-gray-900">
+                    <h1 className="text-xl md:text-2xl lg:text-3xl font-bold text-gray-900">
                       Welcome back, {user.full_name}!
                     </h1>
-                    <p className="text-gray-400">{portal.branding.company_tagline}</p>
+                    <p className="text-sm md:text-base text-gray-400">{portal.branding.company_tagline}</p>
                   </div>
                 </div>
-                
-                <div className="flex items-center space-x-4">
+
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-4">
                   {/* Date Range Selector */}
                   <select
                     value={selectedDateRange}
                     onChange={(e) => setSelectedDateRange(e.target.value)}
-                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full sm:w-auto px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   >
                     <option value="7d">Last 7 days</option>
                     <option value="30d">Last 30 days</option>
@@ -188,11 +188,11 @@ const ClientPortalDashboard: React.FC<ClientPortalDashboardProps> = ({ user, por
 
                   {/* Download Report */}
                   <div className="relative group">
-                    <button className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                    <button className="flex items-center justify-center space-x-2 w-full sm:w-auto px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
                       <Download className="w-4 h-4" />
                       <span>Export</span>
                     </button>
-                    
+
                     <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-lg shadow-lg border opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
                       <div className="py-2">
                         <button
@@ -220,52 +220,52 @@ const ClientPortalDashboard: React.FC<ClientPortalDashboardProps> = ({ user, por
               </div>
 
               {/* Quick Stats */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-gray-50 rounded-lg p-4">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+                <div className="bg-gray-50 rounded-lg p-3 md:p-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm text-gray-400">Total Visits</p>
-                      <p className="text-2xl font-bold text-gray-900">
+                      <p className="text-xs md:text-sm text-gray-400">Total Visits</p>
+                      <p className="text-lg md:text-2xl font-bold text-gray-900">
                         {analytics_summary.total_visits.toLocaleString()}
                       </p>
                     </div>
-                    <Eye className="w-8 h-8 text-blue-600" />
+                    <Eye className="w-6 md:w-8 h-6 md:h-8 text-blue-600" />
                   </div>
                 </div>
 
-                <div className="bg-gray-50 rounded-lg p-4">
+                <div className="bg-gray-50 rounded-lg p-3 md:p-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm text-gray-400">Unique Visitors</p>
-                      <p className="text-2xl font-bold text-gray-900">
+                      <p className="text-xs md:text-sm text-gray-400">Unique Visitors</p>
+                      <p className="text-lg md:text-2xl font-bold text-gray-900">
                         {analytics_summary.unique_visitors.toLocaleString()}
                       </p>
                     </div>
-                    <User className="w-8 h-8 text-green-600" />
+                    <User className="w-6 md:w-8 h-6 md:h-8 text-green-600" />
                   </div>
                 </div>
 
-                <div className="bg-gray-50 rounded-lg p-4">
+                <div className="bg-gray-50 rounded-lg p-3 md:p-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm text-gray-400">Avg. Session</p>
-                      <p className="text-2xl font-bold text-gray-900">
+                      <p className="text-xs md:text-sm text-gray-400">Avg. Session</p>
+                      <p className="text-lg md:text-2xl font-bold text-gray-900">
                         {Math.floor(analytics_summary.average_session_duration / 60)}m {analytics_summary.average_session_duration % 60}s
                       </p>
                     </div>
-                    <Clock className="w-8 h-8 text-orange-600" />
+                    <Clock className="w-6 md:w-8 h-6 md:h-8 text-orange-600" />
                   </div>
                 </div>
 
-                <div className="bg-gray-50 rounded-lg p-4">
+                <div className="bg-gray-50 rounded-lg p-3 md:p-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm text-gray-400">Top Widget</p>
-                      <p className="text-lg font-bold text-gray-900 capitalize">
+                      <p className="text-xs md:text-sm text-gray-400">Top Widget</p>
+                      <p className="text-sm md:text-lg font-bold text-gray-900 capitalize">
                         {analytics_summary.most_viewed_widget.replace('_', ' ')}
                       </p>
                     </div>
-                    <BarChart3 className="w-8 h-8 text-purple-600" />
+                    <BarChart3 className="w-6 md:w-8 h-6 md:h-8 text-purple-600" />
                   </div>
                 </div>
               </div>
@@ -277,7 +277,7 @@ const ClientPortalDashboard: React.FC<ClientPortalDashboardProps> = ({ user, por
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 mb-8"
+            className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6 mb-8"
           >
             {widgets.map((widget, index) => (
               <motion.div

@@ -62,9 +62,68 @@ const NotesBoard: React.FC = () => {
     getPinnedNotes,
     getRecentNotes,
     setError,
+    createNoteFromTemplate,
   } = useNotesStore();
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null); // File input for importing notes
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle shortcuts when not typing in an input/textarea
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      // Ctrl/Cmd shortcuts
+      if (e.ctrlKey || e.metaKey) {
+        switch (e.key) {
+          case 'n':
+            e.preventDefault();
+            handleCreateNote();
+            break;
+          case 'a':
+            e.preventDefault();
+            selectAllNotes();
+            break;
+          case 'f':
+            e.preventDefault();
+            setShowFilters(!showFilters);
+            break;
+          case 'q':
+            e.preventDefault();
+            handleQuickNote();
+            break;
+          default:
+            break;
+        }
+      }
+
+      // Other shortcuts
+      switch (e.key) {
+        case 'Escape':
+          if (selectedNotes.length > 0) {
+            clearSelection();
+          } else if (showFilters) {
+            setShowFilters(false);
+          } else if (showNewNoteMenu) {
+            setShowNewNoteMenu(false);
+          }
+          break;
+        case 'Delete':
+        case 'Backspace':
+          if (selectedNotes.length > 0) {
+            handleBulkAction('delete');
+          }
+          break;
+        default:
+          break;
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [selectedNotes, showFilters, showNewNoteMenu]);
 
   const handleDragEnd = (result: DropResult) => {
     if (!result.destination) return;
@@ -140,6 +199,91 @@ const NotesBoard: React.FC = () => {
     }
   };
 
+  const handleFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const fileContent = await file.text();
+      const fileExtension = file.name.split('.').pop()?.toLowerCase();
+
+      const store = useNotesStore.getState();
+
+      switch (fileExtension) {
+        case 'json':
+          store.importNotes(fileContent, 'json');
+          break;
+        case 'txt':
+          // Convert text file to note
+          createQuickNote(fileContent);
+          break;
+        case 'md':
+          // Parse markdown file to note(s)
+          const lines = fileContent.split('\n');
+          let currentNote = '';
+          let title = '';
+
+          for (const line of lines) {
+            if (line.startsWith('# ')) {
+              if (currentNote) {
+                addNote({
+                  type: 'text',
+                  title: title || 'Imported Note',
+                  content: currentNote.trim(),
+                  category: 'personal',
+                  priority: 'medium',
+                  color: CATEGORY_COLORS.personal,
+                  size: { width: 280, height: 200 },
+                  tags: ['imported'],
+                  isPinned: false,
+                  isArchived: false,
+                  createdBy: 'current_user',
+                  sharedWith: [],
+                  isShared: false,
+                });
+                currentNote = '';
+              }
+              title = line.substring(2).trim();
+            } else if (line.trim() && !line.startsWith('**')) {
+              currentNote += line + '\n';
+            }
+          }
+
+          // Add the last note
+          if (currentNote) {
+            addNote({
+              type: 'text',
+              title: title || 'Imported Note',
+              content: currentNote.trim(),
+              category: 'personal',
+              priority: 'medium',
+              color: CATEGORY_COLORS.personal,
+              size: { width: 280, height: 200 },
+              tags: ['imported'],
+              isPinned: false,
+              isArchived: false,
+              createdBy: 'current_user',
+              sharedWith: [],
+              isShared: false,
+            });
+          }
+          break;
+        default:
+          setError('Unsupported file format. Please use .json, .txt, or .md files.');
+          return;
+      }
+
+      // Clear the file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+
+    } catch (error) {
+      console.error('Error importing file:', error);
+      setError('Failed to import file. Please check the file format and try again.');
+    }
+  };
+
   const handleBulkAction = (action: string) => {
     if (selectedNotes.length === 0) return;
 
@@ -151,10 +295,52 @@ const NotesBoard: React.FC = () => {
         }
         break;
       case 'archive':
-        // TODO: Implement bulk archive
+        selectedNotes.forEach(noteId => {
+          const note = notes.find(n => n.id === noteId);
+          if (note && !note.isArchived) {
+            // Use the store's archiveNote function for each note
+            const store = useNotesStore.getState();
+            store.archiveNote(noteId);
+          }
+        });
+        clearSelection();
+        break;
+      case 'unarchive':
+        selectedNotes.forEach(noteId => {
+          const note = notes.find(n => n.id === noteId);
+          if (note && note.isArchived) {
+            const store = useNotesStore.getState();
+            store.unarchiveNote(noteId);
+          }
+        });
+        clearSelection();
         break;
       case 'pin':
-        // TODO: Implement bulk pin
+        selectedNotes.forEach(noteId => {
+          const note = notes.find(n => n.id === noteId);
+          if (note && !note.isPinned) {
+            const store = useNotesStore.getState();
+            store.pinNote(noteId);
+          }
+        });
+        clearSelection();
+        break;
+      case 'unpin':
+        selectedNotes.forEach(noteId => {
+          const note = notes.find(n => n.id === noteId);
+          if (note && note.isPinned) {
+            const store = useNotesStore.getState();
+            store.unpinNote(noteId);
+          }
+        });
+        clearSelection();
+        break;
+      case 'duplicate':
+        selectedNotes.forEach(noteId => {
+          const store = useNotesStore.getState();
+          store.duplicateNote(noteId);
+        });
+        clearSelection();
         break;
       default:
         break;
@@ -173,25 +359,25 @@ const NotesBoard: React.FC = () => {
   const getLayoutClasses = () => {
     switch (view) {
       case 'grid':
-        return 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4';
+        return 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 auto-rows-max';
       case 'list':
-        return 'space-y-4';
+        return 'flex flex-col space-y-4';
       case 'masonry':
-        return 'columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4 space-y-4';
+        return 'columns-1 sm:columns-2 lg:columns-3 xl:columns-4 2xl:columns-5 gap-4';
       default:
-        return 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4';
+        return 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 auto-rows-max';
     }
   };
 
   return (
-    <div className="h-full bg-gradient-to-br from-gray-900 via-purple-900 to-indigo-900 relative overflow-hidden">
+    <div className="min-h-screen h-full bg-gradient-to-br from-gray-900 via-purple-900 to-indigo-900 relative overflow-hidden">
       {/* Background Effects */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-1/4 -left-1/4 w-[800px] h-[800px] bg-gradient-to-r from-purple-600/15 via-violet-600/10 to-fuchsia-600/12 rounded-full blur-3xl animate-pulse"></div>
         <div className="absolute bottom-1/4 -right-1/4 w-[600px] h-[600px] bg-gradient-to-l from-indigo-600/15 via-purple-600/10 to-violet-600/12 rounded-full blur-3xl animate-pulse delay-1000"></div>
       </div>
 
-      <div className="relative z-10 h-full flex flex-col">
+      <div className="relative z-10 min-h-screen h-full flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-white/10">
           <div className="flex items-center gap-4">
@@ -213,10 +399,39 @@ const NotesBoard: React.FC = () => {
             <button
               onClick={handleQuickNote}
               className="p-2 glass-effect border border-white/20 rounded-xl text-gray-300 hover:text-white hover:border-purple-400/50 transition-all duration-200"
-              title="Quick Note (Ctrl+N)"
+              title="Quick Note (Ctrl+Q)"
             >
               <Zap size={20} />
             </button>
+
+            {/* Import/Export */}
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="p-2 glass-effect border border-white/20 rounded-xl text-gray-300 hover:text-white hover:border-green-400/50 transition-all duration-200"
+              title="Import Notes"
+            >
+              <Upload size={20} />
+            </button>
+
+            {selectedNotes.length > 0 && (
+              <button
+                onClick={() => {
+                  const store = useNotesStore.getState();
+                  const exportData = store.exportNotes(selectedNotes, 'json');
+                  const blob = new Blob([exportData], { type: 'application/json' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `notes-export-${new Date().toISOString().split('T')[0]}.json`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+                className="p-2 glass-effect border border-white/20 rounded-xl text-gray-300 hover:text-white hover:border-blue-400/50 transition-all duration-200"
+                title="Export Selected Notes"
+              >
+                <Download size={20} />
+              </button>
+            )}
 
             {/* Drag Mode Toggle */}
             <button
@@ -325,6 +540,54 @@ const NotesBoard: React.FC = () => {
                           <div className="text-xs text-gray-300">Note with date reminder</div>
                         </div>
                       </button>
+
+                      <div className="w-full h-px bg-white/10 my-2" />
+
+                      <div className="px-3 py-2">
+                        <div className="text-xs font-medium text-gray-400 uppercase tracking-wide">Templates</div>
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          createNoteFromTemplate('meeting-notes');
+                          setShowNewNoteMenu(false);
+                        }}
+                        className="w-full flex items-center gap-3 p-3 text-left text-white hover:bg-white/10 rounded-lg transition-colors"
+                      >
+                        <BookOpen size={16} className="text-indigo-400" />
+                        <div>
+                          <div className="font-medium">Meeting Notes</div>
+                          <div className="text-xs text-gray-300">Structured meeting template</div>
+                        </div>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          createNoteFromTemplate('project-plan');
+                          setShowNewNoteMenu(false);
+                        }}
+                        className="w-full flex items-center gap-3 p-3 text-left text-white hover:bg-white/10 rounded-lg transition-colors"
+                      >
+                        <Target size={16} className="text-blue-400" />
+                        <div>
+                          <div className="font-medium">Project Plan</div>
+                          <div className="text-xs text-gray-300">Task breakdown template</div>
+                        </div>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          createNoteFromTemplate('daily-journal');
+                          setShowNewNoteMenu(false);
+                        }}
+                        className="w-full flex items-center gap-3 p-3 text-left text-white hover:bg-white/10 rounded-lg transition-colors"
+                      >
+                        <BookOpen size={16} className="text-pink-400" />
+                        <div>
+                          <div className="font-medium">Daily Journal</div>
+                          <div className="text-xs text-gray-300">Personal reflection template</div>
+                        </div>
+                      </button>
                     </div>
                   </motion.div>
                 )}
@@ -368,20 +631,37 @@ const NotesBoard: React.FC = () => {
                 </span>
                 <div className="w-px h-4 bg-white/20" />
                 <button
-                  onClick={() => handleBulkAction('delete')}
-                  className="p-1 text-gray-300 hover:text-red-400 transition-colors"
+                  onClick={() => handleBulkAction('pin')}
+                  className="p-1 text-gray-300 hover:text-purple-400 transition-colors"
+                  title="Pin selected notes"
                 >
-                  <Trash2 size={16} />
+                  <Pin size={16} />
                 </button>
                 <button
                   onClick={() => handleBulkAction('archive')}
                   className="p-1 text-gray-300 hover:text-blue-400 transition-colors"
+                  title="Archive selected notes"
                 >
                   <Archive size={16} />
                 </button>
                 <button
+                  onClick={() => handleBulkAction('duplicate')}
+                  className="p-1 text-gray-300 hover:text-green-400 transition-colors"
+                  title="Duplicate selected notes"
+                >
+                  <Copy size={16} />
+                </button>
+                <button
+                  onClick={() => handleBulkAction('delete')}
+                  className="p-1 text-gray-300 hover:text-red-400 transition-colors"
+                  title="Delete selected notes"
+                >
+                  <Trash2 size={16} />
+                </button>
+                <button
                   onClick={clearSelection}
                   className="p-1 text-gray-300 hover:text-white transition-colors"
+                  title="Clear selection"
                 >
                   <X size={16} />
                 </button>
@@ -484,7 +764,7 @@ const NotesBoard: React.FC = () => {
 
         {/* Error Display */}
         {error && (
-          <div className="mx-6 mb-4 p-4 bg-red-900/200/20 border border-red-500/30 rounded-xl">
+          <div className="mx-6 mb-4 p-4 bg-red-900/20 border border-red-500/30 rounded-xl">
             <div className="flex items-center gap-3">
               <div className="text-red-400">⚠️</div>
               <div className="text-red-300">{error}</div>
@@ -499,71 +779,77 @@ const NotesBoard: React.FC = () => {
         )}
 
         {/* Notes Grid */}
-        <div className="flex-1 p-6 overflow-auto">
-          {isLoading ? (
-            <div className="flex items-center justify-center h-64">
-              <div className="flex items-center gap-3 text-gray-300">
-                <div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
-                <span>Loading notes...</span>
-              </div>
-            </div>
-          ) : error ? (
-            <div className="flex items-center justify-center h-64">
-              <div className="text-center">
-                <div className="text-red-400 mb-2">⚠️ Error loading notes</div>
-                <div className="text-gray-400 text-sm">{error}</div>
-              </div>
-            </div>
-          ) : filteredNotes.length === 0 ? (
-            <div className="flex items-center justify-center h-64">
-              <div className="text-center">
-                <div className="text-6xl mb-4">📝</div>
-                <div className="text-xl font-medium text-white mb-2">No notes yet</div>
-                <div className="text-gray-400 mb-4">
-                  {searchQuery || selectedCategory !== 'all' || selectedType !== 'all'
-                    ? 'No notes match your current filters'
-                    : 'Create your first note to get started'}
+        <div className="flex-1 overflow-hidden">
+          <div className="h-full p-6 overflow-y-auto overflow-x-hidden">
+            {isLoading ? (
+              <div className="flex items-center justify-center min-h-[calc(100vh-300px)] h-full">
+                <div className="flex items-center gap-3 text-gray-300">
+                  <div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+                  <span>Loading notes...</span>
                 </div>
-                <button
-                  onClick={() => handleCreateNote()}
-                  className="px-6 py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-xl hover:from-purple-700 hover:to-purple-800 transition-all duration-200 shadow-lg hover:shadow-purple-500/25 font-medium"
-                >
-                  Create Note
-                </button>
               </div>
-            </div>
-          ) : isDragMode ? (
-            <DragDropContext onDragEnd={handleDragEnd}>
-              <DroppableNotesGrid
-                notes={filteredNotes}
-                selectedNotes={selectedNotes}
-                view={view}
-                onSelect={toggleNoteSelection}
-              />
-            </DragDropContext>
-          ) : (
-            <motion.div
-              className={getLayoutClasses()}
-              layout
-            >
-              <AnimatePresence>
-                {filteredNotes.map((note) => (
-                  <motion.div
-                    key={note.id}
-                    layout
-                    className={view === 'masonry' ? 'break-inside-avoid mb-4' : ''}
+            ) : error ? (
+              <div className="flex items-center justify-center min-h-[calc(100vh-300px)] h-full">
+                <div className="text-center">
+                  <div className="text-red-400 mb-2">⚠️ Error loading notes</div>
+                  <div className="text-gray-400 text-sm">{error}</div>
+                </div>
+              </div>
+            ) : filteredNotes.length === 0 ? (
+              <div className="flex items-center justify-center min-h-[calc(100vh-300px)] h-full">
+                <div className="text-center">
+                  <div className="text-6xl mb-4">📝</div>
+                  <div className="text-xl font-medium text-white mb-2">No notes yet</div>
+                  <div className="text-gray-400 mb-4">
+                    {searchQuery || selectedCategory !== 'all' || selectedType !== 'all'
+                      ? 'No notes match your current filters'
+                      : 'Create your first note to get started'}
+                  </div>
+                  <button
+                    onClick={() => handleCreateNote()}
+                    className="px-6 py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-xl hover:from-purple-700 hover:to-purple-800 transition-all duration-200 shadow-lg hover:shadow-purple-500/25 font-medium"
                   >
-                    <StickyNote
-                      note={note}
-                      isSelected={selectedNotes.includes(note.id)}
-                      isDragMode={false}
-                      onSelect={toggleNoteSelection}
-                    />
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-            </motion.div>
-          )}
+                    Create Note
+                  </button>
+                </div>
+              </div>
+            ) : isDragMode ? (
+              <DragDropContext onDragEnd={handleDragEnd}>
+                <DroppableNotesGrid
+                  notes={filteredNotes}
+                  selectedNotes={selectedNotes}
+                  view={view}
+                  onSelect={toggleNoteSelection}
+                />
+              </DragDropContext>
+            ) : (
+              <motion.div
+                className={`${getLayoutClasses()} min-h-[calc(100vh-300px)]`}
+                layout
+              >
+                <AnimatePresence>
+                  {filteredNotes.map((note) => (
+                    <motion.div
+                      key={note.id}
+                      layout
+                      className={`
+                        ${view === 'masonry' ? 'break-inside-avoid mb-4' : ''}
+                        ${view === 'grid' ? 'w-full' : ''}
+                        ${view === 'list' ? 'max-w-full' : ''}
+                      `}
+                    >
+                      <StickyNote
+                        note={note}
+                        isSelected={selectedNotes.includes(note.id)}
+                        isDragMode={false}
+                        onSelect={toggleNoteSelection}
+                      />
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </motion.div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -571,12 +857,9 @@ const NotesBoard: React.FC = () => {
       <input
         ref={fileInputRef}
         type="file"
-        accept=".json"
+        accept=".json,.txt,.md"
         className="hidden"
-        onChange={(e) => {
-          // TODO: Handle file import
-          console.log('Import file:', e.target.files?.[0]);
-        }}
+        onChange={handleFileImport}
       />
     </div>
   );

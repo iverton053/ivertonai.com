@@ -102,7 +102,7 @@ const ClientPortalSidebar: React.FC<ClientPortalSidebarProps> = ({
 
   return (
     <>
-      {/* Overlay */}
+      {/* Mobile Overlay */}
       <AnimatePresence>
         {isOpen && (
           <motion.div
@@ -110,7 +110,7 @@ const ClientPortalSidebar: React.FC<ClientPortalSidebarProps> = ({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+            className="fixed inset-0 bg-black/50 z-40 md:hidden"
           />
         )}
       </AnimatePresence>
@@ -123,7 +123,7 @@ const ClientPortalSidebar: React.FC<ClientPortalSidebarProps> = ({
             animate={{ x: 0 }}
             exit={{ x: -320 }}
             transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-            className="fixed left-0 top-0 h-full w-64 z-50 lg:z-30"
+            className="fixed left-0 top-0 h-full w-64 md:w-72 z-50 md:z-30"
             style={{
               backgroundColor: portal.theme.sidebar_style === 'dark' ? '#1f2937' : 
                                portal.theme.sidebar_style === 'colored' ? portal.theme.primary_color : '#ffffff'

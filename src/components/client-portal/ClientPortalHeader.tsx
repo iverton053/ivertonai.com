@@ -1,6 +1,6 @@
 // Client Portal Header - Top navigation for client portal
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Menu,
@@ -10,9 +10,24 @@ import {
   LogOut,
   Download,
   HelpCircle,
-  ChevronDown
+  ChevronDown,
+  X,
+  Check,
+  ExternalLink,
+  Code,
+  Shield,
+  Webhook,
+  Key,
+  FileText
 } from 'lucide-react';
 import { ClientPortal, ClientPortalUser } from '../../types/clientPortal';
+import { useRealTimeNotifications } from '../../hooks/useRealTimeNotifications';
+import { CustomCodeEditor } from './CustomCodeEditor';
+import { TwoFactorAuth } from './TwoFactorAuth';
+import { WebhookManager } from './WebhookManager';
+import { SSOConfiguration } from './SSOConfiguration';
+import { ComplianceManager } from './ComplianceManager';
+import { format } from 'date-fns';
 
 interface ClientPortalHeaderProps {
   portal: ClientPortal;
@@ -29,32 +44,53 @@ const ClientPortalHeader: React.FC<ClientPortalHeaderProps> = ({
 }) => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showCustomCodeEditor, setShowCustomCodeEditor] = useState(false);
+  const [showTwoFactorAuth, setShowTwoFactorAuth] = useState(false);
+  const [showWebhookManager, setShowWebhookManager] = useState(false);
+  const [showSSOConfig, setShowSSOConfig] = useState(false);
+  const [showComplianceManager, setShowComplianceManager] = useState(false);
 
-  const notifications = [
-    {
-      id: '1',
-      title: 'New Report Available',
-      message: 'Your monthly SEO report is ready for review',
-      time: '2 hours ago',
-      unread: true
-    },
-    {
-      id: '2',
-      title: 'Keyword Ranking Update',
-      message: '5 keywords improved their positions this week',
-      time: '1 day ago',
-      unread: true
-    },
-    {
-      id: '3',
-      title: 'Campaign Performance',
-      message: 'Your latest campaign exceeded target by 15%',
-      time: '3 days ago',
-      unread: false
+  const {
+    notifications,
+    unreadCount,
+    isLoading: notificationsLoading,
+    markAsRead,
+    markAllAsRead,
+    dismissNotification,
+    requestBrowserNotificationPermission
+  } = useRealTimeNotifications({
+    portalId: portal.id,
+    userId: user.id,
+    maxNotifications: 20
+  });
+
+  // Request notification permission on mount
+  useEffect(() => {
+    if (user.preferences.email_notifications) {
+      requestBrowserNotificationPermission();
     }
-  ];
+  }, []);
 
-  const unreadCount = notifications.filter(n => n.unread).length;
+  const getNotificationIcon = (type: string) => {
+    switch (type) {
+      case 'success': return '✅';
+      case 'warning': return '⚠️';
+      case 'error': return '❌';
+      case 'update': return '🔄';
+      default: return 'ℹ️';
+    }
+  };
+
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case 'urgent': return 'text-red-600';
+      case 'high': return 'text-orange-600';
+      case 'medium': return 'text-blue-600';
+      case 'low': return 'text-gray-600';
+      default: return 'text-blue-600';
+    }
+  };
+
 
   return (
     <header 
@@ -252,6 +288,61 @@ const ClientPortalHeader: React.FC<ClientPortalHeaderProps> = ({
                       </button>
 
                       <button
+                        onClick={() => {
+                          setShowUserMenu(false);
+                          setShowTwoFactorAuth(true);
+                        }}
+                        className="w-full flex items-center space-x-3 px-4 py-3 text-gray-300 hover:bg-gray-50 transition-colors"
+                      >
+                        <Shield className="w-5 h-5" />
+                        <span>Two-Factor Auth</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setShowUserMenu(false);
+                          setShowCustomCodeEditor(true);
+                        }}
+                        className="w-full flex items-center space-x-3 px-4 py-3 text-gray-300 hover:bg-gray-50 transition-colors"
+                      >
+                        <Code className="w-5 h-5" />
+                        <span>Custom Code</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setShowUserMenu(false);
+                          setShowWebhookManager(true);
+                        }}
+                        className="w-full flex items-center space-x-3 px-4 py-3 text-gray-300 hover:bg-gray-50 transition-colors"
+                      >
+                        <Webhook className="w-5 h-5" />
+                        <span>Webhooks</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setShowUserMenu(false);
+                          setShowSSOConfig(true);
+                        }}
+                        className="w-full flex items-center space-x-3 px-4 py-3 text-gray-300 hover:bg-gray-50 transition-colors"
+                      >
+                        <Key className="w-5 h-5" />
+                        <span>Single Sign-On</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setShowUserMenu(false);
+                          setShowComplianceManager(true);
+                        }}
+                        className="w-full flex items-center space-x-3 px-4 py-3 text-gray-300 hover:bg-gray-50 transition-colors"
+                      >
+                        <FileText className="w-5 h-5" />
+                        <span>Compliance</span>
+                      </button>
+
+                      <button
                         onClick={() => setShowUserMenu(false)}
                         className="w-full flex items-center space-x-3 px-4 py-3 text-gray-300 hover:bg-gray-50 transition-colors"
                       >
@@ -287,6 +378,51 @@ const ClientPortalHeader: React.FC<ClientPortalHeaderProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Custom Code Editor Modal */}
+      {showCustomCodeEditor && (
+        <CustomCodeEditor
+          portalId={portal.id}
+          onClose={() => setShowCustomCodeEditor(false)}
+        />
+      )}
+
+      {/* Two-Factor Auth Modal */}
+      {showTwoFactorAuth && (
+        <TwoFactorAuth
+          userId={user.id}
+          portalId={portal.id}
+          onClose={() => setShowTwoFactorAuth(false)}
+          onSuccess={() => {
+            setShowTwoFactorAuth(false);
+            // You could show a success toast here
+          }}
+        />
+      )}
+
+      {/* Webhook Manager Modal */}
+      {showWebhookManager && (
+        <WebhookManager
+          portalId={portal.id}
+          onClose={() => setShowWebhookManager(false)}
+        />
+      )}
+
+      {/* SSO Configuration Modal */}
+      {showSSOConfig && (
+        <SSOConfiguration
+          portalId={portal.id}
+          onClose={() => setShowSSOConfig(false)}
+        />
+      )}
+
+      {/* Compliance Manager Modal */}
+      {showComplianceManager && (
+        <ComplianceManager
+          portalId={portal.id}
+          onClose={() => setShowComplianceManager(false)}
+        />
+      )}
     </header>
   );
 };

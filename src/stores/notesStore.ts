@@ -582,8 +582,54 @@ export const useNotesStore = create<NotesState & NotesActions>()(
       },
 
       createNoteFromTemplate: (templateId) => {
-        // TODO: Implement template system
-        console.log('Creating note from template:', templateId);
+        const templates = {
+          'meeting-notes': {
+            type: 'text' as NoteType,
+            title: 'Meeting Notes',
+            content: '# Meeting Notes\n\n**Date:** \n**Attendees:** \n**Agenda:** \n\n## Discussion Points\n\n## Action Items\n- [ ] \n\n## Next Steps\n',
+            category: 'work' as NoteCategory,
+          },
+          'daily-journal': {
+            type: 'text' as NoteType,
+            title: 'Daily Journal',
+            content: '# Daily Journal\n\n**Date:** \n\n## Today I accomplished:\n- \n\n## Challenges:\n- \n\n## Tomorrow I will:\n- \n\n## Gratitude:\n- ',
+            category: 'personal' as NoteCategory,
+          },
+          'project-plan': {
+            type: 'task' as NoteType,
+            title: 'Project Plan',
+            content: 'Project planning and task breakdown',
+            category: 'work' as NoteCategory,
+            tasks: [
+              { id: generateId(), text: 'Define project scope', completed: false, createdAt: new Date() },
+              { id: generateId(), text: 'Create timeline', completed: false, createdAt: new Date() },
+              { id: generateId(), text: 'Assign resources', completed: false, createdAt: new Date() },
+            ],
+          },
+          'brainstorm': {
+            type: 'idea' as NoteType,
+            title: 'Brainstorming Session',
+            content: '💡 Ideas and creative thoughts...',
+            category: 'ideas' as NoteCategory,
+          },
+        };
+
+        const template = templates[templateId as keyof typeof templates];
+        if (template) {
+          const { addNote } = get();
+          addNote({
+            ...template,
+            priority: 'medium',
+            color: CATEGORY_COLORS[template.category],
+            size: { width: 320, height: 240 },
+            tags: ['template', templateId],
+            isPinned: false,
+            isArchived: false,
+            createdBy: 'current_user',
+            sharedWith: [],
+            isShared: false,
+          });
+        }
       },
     }),
     {

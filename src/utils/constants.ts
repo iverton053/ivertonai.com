@@ -153,9 +153,9 @@ export const sidebarSections: SidebarSection[] = [
     label: 'Content Generation',
     icon: 'FileText',
     items: [
-      { id: 'ai-script-generator', label: 'AI Script Generator', icon: 'Bot' },
-      { id: 'blog-post-generator', label: 'Blog Post Generator', icon: 'BookOpen' },
-      { id: 'landing-page-copy-generator', label: 'Landing Page Copy Generator', icon: 'Layout' }
+      { id: 'ai-script-generator', label: 'AI Script Generator', icon: 'FileVideo' },
+      { id: 'blog-post-generator', label: 'Blog Post Generator', icon: 'PenTool' },
+      { id: 'landing-page-copy-generator', label: 'Landing Page Copy Generator', icon: 'MousePointer2' }
     ],
     isCollapsible: true,
     defaultExpanded: false

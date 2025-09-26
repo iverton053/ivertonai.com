@@ -50,93 +50,17 @@ const ClientPortalAuth: React.FC<ClientPortalAuthProps> = ({
   const verifyToken = async (token: string) => {
     setIsLoading(true);
     try {
-      // In real implementation, this would verify the token with the backend
-      // For now, we'll simulate the process
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Mock successful auth - in real app, this would come from token verification
-      const mockUser: ClientPortalUser = {
-        id: 'user_1',
-        client_portal_id: portalId,
-        client_id: 'client_1',
-        email: formData.email || 'user@example.com',
-        full_name: 'Portal User',
-        role: 'viewer',
-        status: 'active',
-        preferences: {
-          email_notifications: true,
-          notification_types: ['performance_alerts'],
-          theme_preference: 'system',
-          timezone: 'America/New_York',
-          date_format: 'US',
-          default_date_range: 30,
-          preferred_metrics: ['traffic', 'rankings'],
-          favorite_widgets: ['overview_stats']
-        },
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        invited_by: 'admin_user'
-      };
+      const response = await clientPortalService.verifyPortalToken(token, portalId);
 
-      const mockPortal: ClientPortal = {
-        id: portalId,
-        agency_id: 'agency_1',
-        client_id: 'client_1',
-        subdomain: 'demo-client',
-        is_active: true,
-        branding: {
-          company_name: branding?.company_name || 'Demo Client',
-          social_links: {}
-        },
-        theme: {
-          primary_color: branding?.primary_color || '#6366f1',
-          secondary_color: '#8b5cf6',
-          accent_color: '#06b6d4',
-          background_type: 'gradient',
-          background_value: branding?.background_value || 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          font_family: 'inter',
-          layout_style: 'modern',
-          sidebar_style: 'dark'
-        },
-        access_settings: {
-          auth_method: 'email_link',
-          require_2fa: false,
-          session_timeout: 480,
-          max_concurrent_sessions: 3,
-          allow_downloads: true,
-          watermark_downloads: false
-        },
-        dashboard_config: {
-          enabled_widgets: ['overview_stats', 'seo_rankings', 'website_traffic'],
-          widget_settings: {},
-          default_layout: {
-            grid_size: { columns: 12, rows: 20 },
-            widget_positions: {},
-            sidebar_collapsed: false
-          },
-          allow_customization: true,
-          data_refresh_interval: 15,
-          historical_data_range: 365,
-          available_exports: ['pdf', 'csv']
-        },
-        communication_settings: {
-          email_notifications: true,
-          notification_frequency: 'daily',
-          enable_chat: true,
-          show_announcements: true,
-          show_changelog: true,
-          support_widget_enabled: true,
-          support_widget_position: 'bottom_right'
-        },
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        created_by: 'admin_user'
-      };
-
-      localStorage.setItem(`portal_token_${portalId}`, token);
-      onAuthSuccess(mockUser, mockPortal, token);
+      if (response.success && response.user && response.portal) {
+        localStorage.setItem(`portal_token_${portalId}`, token);
+        onAuthSuccess(response.user, response.portal, token);
+      } else {
+        setError(response.error || 'Invalid or expired authentication token');
+        localStorage.removeItem(`portal_token_${portalId}`);
+      }
     } catch (err) {
-      setError('Invalid or expired authentication token');
+      setError('Authentication failed. Please try again.');
       localStorage.removeItem(`portal_token_${portalId}`);
     } finally {
       setIsLoading(false);

@@ -7,10 +7,15 @@ import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import { createClient } from 'redis';
 import { RateLimiterRedis } from 'rate-limiter-flexible';
+import { createServer } from 'http';
+import { Server as SocketIOServer } from 'socket.io';
 
 import { logger } from './utils/logger';
 import { errorHandler, notFound } from './middleware/errorMiddleware';
 import { authenticateToken } from './middleware/authMiddleware';
+import { websocketService } from './services/websocketService';
+import { CacheManager } from './config/cache';
+import { DatabaseManager } from './config/database';
 
 // Route imports
 import authRoutes from './routes/authRoutes';
@@ -23,6 +28,7 @@ import webhookRoutes from './routes/webhookRoutes';
 import crmRoutes from './routes/crmRoutes';
 import behavioralWebhooks from './routes/behavioralWebhooks';
 import overviewRoutes from './routes/overviewRoutes';
+import contentApprovalRoutes from './routes/contentApprovalRoutes';
 
 // Queue imports
 import './services/queueService';
@@ -30,6 +36,7 @@ import './services/queueService';
 dotenv.config();
 
 const app = express();
+const server = createServer(app);
 const PORT = process.env.PORT || 3001;
 
 // Redis client for rate limiting
@@ -114,6 +121,7 @@ app.use('/api/creatives', authenticateToken, creativeRoutes);
 app.use('/api/analytics', authenticateToken, analyticsRoutes);
 app.use('/api/automation', authenticateToken, automationRoutes);
 app.use('/api/crm', authenticateToken, crmRoutes);
+app.use('/api/content-approval', authenticateToken, contentApprovalRoutes);
 app.use('/api/overview', overviewRoutes);
 app.use('/api/webhooks', webhookRoutes);
 app.use('/api/behavioral', behavioralWebhooks);
@@ -125,13 +133,17 @@ app.use(errorHandler);
 // Database connections
 const connectDatabases = async () => {
   try {
-    // MongoDB connection
-    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/ad_campaign_manager');
-    logger.info('Connected to MongoDB');
+    // Initialize Database Manager (MongoDB with optimized connection pooling)
+    const dbManager = DatabaseManager.getInstance();
+    await dbManager.connect();
 
-    // Redis connection
+    // Initialize Cache Manager (Redis caching)
+    const cacheManager = CacheManager.getInstance();
+    await cacheManager.initialize();
+
+    // Legacy Redis connection for rate limiting
     await redisClient.connect();
-    logger.info('Connected to Redis');
+    logger.info('Connected to Redis for rate limiting');
 
   } catch (error) {
     logger.error('Database connection error:', error);
@@ -142,11 +154,17 @@ const connectDatabases = async () => {
 // Graceful shutdown
 const gracefulShutdown = async () => {
   logger.info('Starting graceful shutdown...');
-  
+
   try {
-    await mongoose.connection.close();
+    // Shutdown in reverse order of initialization
+    const cacheManager = CacheManager.getInstance();
+    await cacheManager.shutdown();
+
+    const dbManager = DatabaseManager.getInstance();
+    await dbManager.disconnect();
+
     await redisClient.quit();
-    logger.info('Databases disconnected');
+    logger.info('All services disconnected');
     process.exit(0);
   } catch (error) {
     logger.error('Error during shutdown:', error);
@@ -157,14 +175,31 @@ const gracefulShutdown = async () => {
 process.on('SIGTERM', gracefulShutdown);
 process.on('SIGINT', gracefulShutdown);
 
+// Initialize WebSocket service
+const initializeWebSocket = () => {
+  const io = new SocketIOServer(server, {
+    cors: {
+      origin: process.env.NODE_ENV === 'production'
+        ? process.env.ALLOWED_ORIGINS?.split(',')
+        : ['http://localhost:3000', 'http://localhost:3005'],
+      credentials: true
+    }
+  });
+
+  websocketService.initialize(io);
+  logger.info('WebSocket service initialized');
+};
+
 // Start server
 const startServer = async () => {
   try {
     await connectDatabases();
-    
-    app.listen(PORT, () => {
+    initializeWebSocket();
+
+    server.listen(PORT, () => {
       logger.info(`Ad Campaign Manager API running on port ${PORT}`);
       logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+      logger.info('WebSocket server ready for connections');
     });
   } catch (error) {
     logger.error('Failed to start server:', error);

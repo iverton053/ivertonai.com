@@ -1,4 +1,6 @@
 import mongoose, { Schema, Document } from 'mongoose';
+import { AuditService } from '../services/auditService';
+import { CustomFieldValidator } from './CustomField';
 
 export interface IContact extends Document {
   userId: mongoose.Types.ObjectId;
@@ -302,16 +304,127 @@ const contactSchema = new Schema<IContact>({
   }
 });
 
-// Indexes for performance
+// Comprehensive indexes for performance optimization
 contactSchema.index({ userId: 1, email: 1 }, { unique: true });
+contactSchema.index({ userId: 1, isActive: 1 });
 contactSchema.index({ userId: 1, leadScore: -1 });
 contactSchema.index({ userId: 1, lifecycleStage: 1 });
 contactSchema.index({ userId: 1, leadStatus: 1 });
-contactSchema.index({ contactOwner: 1 });
-contactSchema.index({ lastActivityDate: -1 });
+contactSchema.index({ userId: 1, contactOwner: 1 });
+contactSchema.index({ userId: 1, lastActivityDate: -1 });
+contactSchema.index({ userId: 1, createdAt: -1 });
+contactSchema.index({ userId: 1, updatedAt: -1 });
+
+// Text search indexes
+contactSchema.index({
+  firstName: 'text',
+  lastName: 'text',
+  email: 'text',
+  company: 'text',
+  jobTitle: 'text'
+}, {
+  weights: {
+    firstName: 10,
+    lastName: 10,
+    email: 8,
+    company: 6,
+    jobTitle: 4
+  },
+  name: 'contact_text_search'
+});
+
+// Compound indexes for complex queries
+contactSchema.index({ userId: 1, leadScore: -1, lifecycleStage: 1 });
+contactSchema.index({ userId: 1, leadStatus: 1, contactOwner: 1 });
+contactSchema.index({ userId: 1, company: 1, leadScore: -1 });
+contactSchema.index({ userId: 1, lastActivityDate: -1, leadScore: -1 });
+
+// Source and campaign tracking indexes
 contactSchema.index({ 'sourceDetails.utm_campaign': 1 });
+contactSchema.index({ 'sourceDetails.utm_source': 1 });
+contactSchema.index({ originalSource: 1 });
+
+// Array and nested field indexes
 contactSchema.index({ tags: 1 });
-contactSchema.index({ company: 1 });
+contactSchema.index({ associatedDeals: 1 });
+contactSchema.index({ 'activities.type': 1 });
+contactSchema.index({ 'activities.createdAt': -1 });
+
+// Geospatial index for location-based queries
+contactSchema.index({ 'address.country': 1, 'address.state': 1, 'address.city': 1 });
+
+// Data quality and scoring indexes
+contactSchema.index({ 'dataQuality.score': -1 });
+contactSchema.index({ 'dataQuality.completeness': -1 });
+
+// Sparse indexes for optional fields
+contactSchema.index({ phone: 1 }, { sparse: true });
+contactSchema.index({ mergedInto: 1 }, { sparse: true });
+
+// Reference validation middleware
+contactSchema.pre('save', async function(next) {
+  // Validate userId exists
+  if (this.userId && this.isModified('userId')) {
+    const User = mongoose.model('User');
+    const userExists = await User.findById(this.userId);
+    if (!userExists) {
+      const error = new Error('Referenced User does not exist');
+      return next(error);
+    }
+  }
+
+  // Validate contactOwner exists
+  if (this.contactOwner && this.isModified('contactOwner')) {
+    const User = mongoose.model('User');
+    const ownerExists = await User.findById(this.contactOwner);
+    if (!ownerExists) {
+      const error = new Error('Referenced Contact Owner does not exist');
+      return next(error);
+    }
+  }
+
+  // Validate associatedDeals exist
+  if (this.associatedDeals && this.associatedDeals.length > 0 && this.isModified('associatedDeals')) {
+    const Deal = mongoose.model('Deal');
+    for (const dealId of this.associatedDeals) {
+      const dealExists = await Deal.findById(dealId);
+      if (!dealExists) {
+        const error = new Error(`Referenced Deal ${dealId} does not exist`);
+        return next(error);
+      }
+    }
+  }
+
+  // Validate activities.createdBy references
+  if (this.activities && this.isModified('activities')) {
+    const User = mongoose.model('User');
+    for (const activity of this.activities) {
+      if (activity.createdBy) {
+        const userExists = await User.findById(activity.createdBy);
+        if (!userExists) {
+          const error = new Error(`Referenced User ${activity.createdBy} in activity does not exist`);
+          return next(error);
+        }
+      }
+    }
+  }
+
+  // Validate custom fields
+  if (this.customFields && this.customFields.size > 0) {
+    const validation = await CustomFieldValidator.validateCustomFields(
+      this.customFields,
+      this.userId.toString(),
+      'Contact'
+    );
+
+    if (!validation.valid) {
+      const error = new Error(`Custom field validation failed: ${validation.errors.join(', ')}`);
+      return next(error);
+    }
+  }
+
+  next();
+});
 
 // Pre-save middleware to calculate data quality
 contactSchema.pre('save', function(next) {
@@ -343,6 +456,49 @@ contactSchema.pre('save', function(next) {
     this.lastActivityDate = latestActivity.createdAt;
   }
   
+  next();
+});
+
+// Audit logging middleware
+contactSchema.post('save', async function(doc, next) {
+  try {
+    const auditService = AuditService.getInstance();
+
+    if (this.isNew) {
+      // New contact created
+      await auditService.logContactCreate(doc._id.toString(), doc.toObject(), {
+        userId: doc.userId.toString(),
+        source: 'api'
+      });
+    } else {
+      // Contact updated - we would need the original document to track changes
+      // This is a simplified version; in production you'd want to track specific changes
+      const changes = this.getChanges?.() || [];
+      if (changes.length > 0) {
+        await auditService.logAction('UPDATE', 'Contact', doc._id.toString(), changes, {
+          userId: doc.userId.toString(),
+          source: 'api'
+        });
+      }
+    }
+  } catch (error) {
+    // Log error but don't fail the save operation
+    console.error('Audit logging failed:', error);
+  }
+  next();
+});
+
+contactSchema.post('deleteOne', { document: true, query: false }, async function(doc, next) {
+  try {
+    const auditService = AuditService.getInstance();
+    await auditService.logContactDelete(doc._id.toString(), doc.toObject(), {
+      userId: doc.userId.toString(),
+      source: 'api',
+      reason: 'Contact soft deleted'
+    });
+  } catch (error) {
+    console.error('Audit logging failed:', error);
+  }
   next();
 });
 

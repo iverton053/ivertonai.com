@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import ClientPortalRouter from './ClientPortalRouter';
+import { useCustomCode } from '../../hooks/useCustomCode';
 import { AlertCircle } from 'lucide-react';
 
 interface ClientPortalAppProps {
@@ -19,6 +20,12 @@ const ClientPortalApp: React.FC<ClientPortalAppProps> = ({
   const [subdomain, setSubdomain] = useState<string | null>(propSubdomain || null);
   const [customDomain, setCustomDomain] = useState<string | null>(propCustomDomain || null);
   const [error, setError] = useState<string | null>(null);
+
+  // Initialize custom code system for the portal
+  const { applyCustomCodes } = useCustomCode({
+    portalId: portalId || '',
+    enabled: !!portalId
+  });
 
   useEffect(() => {
     // Try to determine portal from URL if not provided as props

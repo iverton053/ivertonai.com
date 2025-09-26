@@ -20,13 +20,13 @@ const DroppableNotesGrid: React.FC<DroppableNotesGridProps> = ({
   const getLayoutClasses = () => {
     switch (view) {
       case 'grid':
-        return 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4';
+        return 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 auto-rows-max min-h-[calc(100vh-300px)]';
       case 'list':
-        return 'space-y-4';
+        return 'flex flex-col space-y-4 min-h-[calc(100vh-300px)]';
       case 'masonry':
-        return 'columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4';
+        return 'columns-1 sm:columns-2 lg:columns-3 xl:columns-4 2xl:columns-5 gap-4 min-h-[calc(100vh-300px)]';
       default:
-        return 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4';
+        return 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 auto-rows-max min-h-[calc(100vh-300px)]';
     }
   };
 

@@ -48,9 +48,11 @@ const StickyNote: React.FC<StickyNoteProps> = ({
   const [editTitle, setEditTitle] = useState(note.title || '');
   const [newTaskText, setNewTaskText] = useState('');
   const [hasStartedTyping, setHasStartedTyping] = useState(false);
-  
+  const [showDropdown, setShowDropdown] = useState(false);
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const noteRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const {
     updateNote,
@@ -140,7 +142,7 @@ const StickyNote: React.FC<StickyNoteProps> = ({
   useEffect(() => {
     if (isEditing && textareaRef.current) {
       textareaRef.current.focus();
-      
+
       // If it's default text, select all so it gets replaced when user types
       if (note.content === 'New note' || note.content === 'New task list') {
         setTimeout(() => {
@@ -155,11 +157,29 @@ const StickyNote: React.FC<StickyNoteProps> = ({
     }
   }, [isEditing]);
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+
+    if (showDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showDropdown]);
+
   const noteStyle = {
     backgroundColor: `${note.color}15`,
     borderColor: `${note.color}40`,
-    width: note.size.width,
-    minHeight: note.size.height,
+    // Remove fixed width to make notes responsive
+    // width: note.size.width,
+    minHeight: Math.min(note.size.height, 300), // Cap max height to prevent overflow
   };
 
   return (
@@ -167,8 +187,9 @@ const StickyNote: React.FC<StickyNoteProps> = ({
       ref={noteRef}
       layout
       className={`
-        relative group glass-effect border-2 rounded-2xl shadow-lg hover:shadow-xl 
-        transition-all duration-300 cursor-pointer overflow-hidden
+        relative group glass-effect border-2 rounded-2xl shadow-lg hover:shadow-xl
+        transition-all duration-300 cursor-pointer overflow-hidden flex flex-col
+        w-full h-auto max-h-[500px]
         ${isSelected ? 'ring-2 ring-purple-500 ring-opacity-60' : ''}
         ${getPriorityColor()}
         ${isDragMode ? 'cursor-grab active:cursor-grabbing' : ''}
@@ -231,15 +252,84 @@ const StickyNote: React.FC<StickyNoteProps> = ({
                 <Edit3 size={14} />
               </button>
 
-              <div className="relative">
+              <div className="relative" ref={dropdownRef}>
                 <button
-                  onClick={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowDropdown(!showDropdown);
+                  }}
                   className="p-1 rounded-lg text-gray-400 hover:text-gray-400 hover:bg-gray-800/50 dark:hover:bg-gray-800 transition-colors"
                 >
                   <MoreVertical size={14} />
                 </button>
 
-                {/* Dropdown menu would go here */}
+                {/* Dropdown menu */}
+                <AnimatePresence>
+                  {showDropdown && (
+                    <motion.div
+                      className="absolute top-full right-0 mt-2 w-48 glass-effect border border-white/20 rounded-xl shadow-xl z-50 overflow-hidden"
+                      initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                    >
+                      <div className="p-1">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            duplicateNote(note.id);
+                            setShowDropdown(false);
+                          }}
+                          className="w-full flex items-center gap-3 p-2 text-left text-white hover:bg-white/10 rounded-lg transition-colors"
+                        >
+                          <Copy size={14} />
+                          <span className="text-sm">Duplicate</span>
+                        </button>
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            archiveNote(note.id);
+                            setShowDropdown(false);
+                          }}
+                          className="w-full flex items-center gap-3 p-2 text-left text-white hover:bg-white/10 rounded-lg transition-colors"
+                        >
+                          <Archive size={14} />
+                          <span className="text-sm">
+                            {note.isArchived ? 'Unarchive' : 'Archive'}
+                          </span>
+                        </button>
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // TODO: Implement share functionality
+                            setShowDropdown(false);
+                          }}
+                          className="w-full flex items-center gap-3 p-2 text-left text-white hover:bg-white/10 rounded-lg transition-colors"
+                        >
+                          <Share size={14} />
+                          <span className="text-sm">Share</span>
+                        </button>
+
+                        <div className="w-full h-px bg-white/10 my-1" />
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (confirm('Delete this note?')) {
+                              deleteNote(note.id);
+                            }
+                            setShowDropdown(false);
+                          }}
+                          className="w-full flex items-center gap-3 p-2 text-left text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                        >
+                          <X size={14} />
+                          <span className="text-sm">Delete</span>
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
 
               <button
@@ -278,21 +368,21 @@ const StickyNote: React.FC<StickyNoteProps> = ({
       )}
 
       {/* Content */}
-      <div className="px-4 pb-4">
+      <div className="px-4 pb-4 flex-1 min-h-0">
         {isEditing ? (
-          <div className="space-y-3">
+          <div className="space-y-3 h-full flex flex-col">
             <textarea
               ref={textareaRef}
               value={editContent}
               onChange={handleContentChange}
               placeholder="Write your note..."
-              className="w-full h-32 bg-transparent border-none outline-none resize-none text-white placeholder-gray-400 text-sm leading-relaxed"
+              className="flex-1 w-full min-h-[120px] max-h-[200px] bg-transparent border-none outline-none resize-none text-white placeholder-gray-400 text-sm leading-relaxed overflow-y-auto"
               onKeyDown={handleKeyDown}
               maxLength={5000}
             />
-            
+
             {/* Character Counter */}
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-shrink-0">
               <div className="text-xs text-gray-400">
                 {editContent.length}/5000 characters
                 {editContent.length > 4500 && (
@@ -301,7 +391,7 @@ const StickyNote: React.FC<StickyNoteProps> = ({
                   </span>
                 )}
               </div>
-              
+
               <div className="flex gap-2">
                 <button
                   onClick={handleCancel}
@@ -320,21 +410,23 @@ const StickyNote: React.FC<StickyNoteProps> = ({
             </div>
           </div>
         ) : (
-          <div className="space-y-3">
-            <p className="text-sm text-gray-100 leading-relaxed">
-              {note.content.length > 150 && !isExpanded 
-                ? `${note.content.substring(0, 150)}...`
-                : note.content
-              }
-            </p>
-            
+          <div className="space-y-3 h-full flex flex-col">
+            <div className="flex-1 overflow-y-auto">
+              <p className="text-sm text-gray-100 leading-relaxed break-words">
+                {note.content.length > 150 && !isExpanded
+                  ? `${note.content.substring(0, 150)}...`
+                  : note.content
+                }
+              </p>
+            </div>
+
             {note.content.length > 150 && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   setIsExpanded(!isExpanded);
                 }}
-                className="text-xs text-purple-500 hover:text-purple-600 font-medium"
+                className="text-xs text-purple-500 hover:text-purple-600 font-medium flex-shrink-0"
               >
                 {isExpanded ? 'Show less' : 'Show more'}
               </button>
@@ -345,7 +437,7 @@ const StickyNote: React.FC<StickyNoteProps> = ({
 
       {/* Tasks */}
       {note.type === 'task' && note.tasks && (
-        <div className="px-4 pb-4 space-y-2">
+        <div className="px-4 pb-4 space-y-2 flex-shrink-0">
           <div className="space-y-2 max-h-32 overflow-y-auto">
             {note.tasks.map((task) => (
               <div key={task.id} className="flex items-center gap-2 group/task">
@@ -354,13 +446,13 @@ const StickyNote: React.FC<StickyNoteProps> = ({
                     e.stopPropagation();
                     toggleTask(note.id, task.id);
                   }}
-                  className="text-gray-400 hover:text-purple-500 transition-colors"
+                  className="text-gray-400 hover:text-purple-500 transition-colors flex-shrink-0"
                 >
                   {task.completed ? <CheckSquare size={14} /> : <Square size={14} />}
                 </button>
-                <span className={`text-xs flex-1 ${
-                  task.completed 
-                    ? 'text-gray-400 line-through' 
+                <span className={`text-xs flex-1 break-words ${
+                  task.completed
+                    ? 'text-gray-400 line-through'
                     : 'text-gray-200'
                 }`}>
                   {task.text}
@@ -370,7 +462,7 @@ const StickyNote: React.FC<StickyNoteProps> = ({
                     e.stopPropagation();
                     deleteTask(note.id, task.id);
                   }}
-                  className="opacity-0 group-hover/task:opacity-100 text-gray-400 hover:text-red-500 transition-all"
+                  className="opacity-0 group-hover/task:opacity-100 text-gray-400 hover:text-red-500 transition-all flex-shrink-0"
                 >
                   <X size={12} />
                 </button>
@@ -385,7 +477,7 @@ const StickyNote: React.FC<StickyNoteProps> = ({
                 value={newTaskText}
                 onChange={(e) => setNewTaskText(e.target.value)}
                 placeholder="Add task..."
-                className="flex-1 text-xs bg-transparent border border-gray-300 dark:border-gray-600 rounded px-2 py-1 outline-none focus:border-purple-500"
+                className="flex-1 text-xs bg-transparent border border-gray-300 dark:border-gray-600 rounded px-2 py-1 outline-none focus:border-purple-500 min-w-0"
                 maxLength={200}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
@@ -395,7 +487,7 @@ const StickyNote: React.FC<StickyNoteProps> = ({
               />
               <button
                 onClick={handleAddTask}
-                className="p-1 text-gray-400 hover:text-purple-500 transition-colors"
+                className="p-1 text-gray-400 hover:text-purple-500 transition-colors flex-shrink-0"
               >
                 <Plus size={14} />
               </button>
@@ -406,19 +498,20 @@ const StickyNote: React.FC<StickyNoteProps> = ({
 
       {/* Tags */}
       {note.tags.length > 0 && (
-        <div className="px-4 pb-4">
+        <div className="px-4 pb-4 flex-shrink-0">
           <div className="flex flex-wrap gap-1">
             {note.tags.slice(0, 3).map((tag, index) => (
               <span
                 key={index}
-                className="px-2 py-1 text-xs bg-white/20 text-gray-200 rounded-full"
+                className="px-2 py-1 text-xs bg-white/20 text-gray-200 rounded-full truncate max-w-20"
+                title={`#${tag}`}
               >
                 #{tag}
               </span>
             ))}
             {note.tags.length > 3 && (
-              <span className="px-2 py-1 text-xs text-gray-400">
-                +{note.tags.length - 3} more
+              <span className="px-2 py-1 text-xs text-gray-400 flex-shrink-0">
+                +{note.tags.length - 3}
               </span>
             )}
           </div>
@@ -426,12 +519,12 @@ const StickyNote: React.FC<StickyNoteProps> = ({
       )}
 
       {/* Footer */}
-      <div className="px-4 pb-4 flex items-center justify-between text-xs text-gray-400">
-        <span>
+      <div className="px-4 pb-4 flex items-center justify-between text-xs text-gray-400 flex-shrink-0 mt-auto">
+        <span className="truncate">
           {new Date(note.updatedAt).toLocaleDateString()}
         </span>
-        
-        <div className="flex items-center gap-1">
+
+        <div className="flex items-center gap-1 flex-shrink-0">
           {note.reminderDate && (
             <Calendar size={12} className="text-orange-500" />
           )}
@@ -439,7 +532,7 @@ const StickyNote: React.FC<StickyNoteProps> = ({
             <Share size={12} className="text-blue-500" />
           )}
           {note.metadata.wordCount && note.metadata.wordCount > 0 && (
-            <span>{note.metadata.wordCount} words</span>
+            <span className="hidden sm:inline">{note.metadata.wordCount}w</span>
           )}
         </div>
       </div>
